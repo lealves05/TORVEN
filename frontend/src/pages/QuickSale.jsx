@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Printer } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, appPath } from '../lib/api';
 import { money } from '../lib/format';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Textarea, Modal, useAction, FAIL } from '../components/ui';
@@ -58,7 +58,7 @@ export default function QuickSale() {
         <Modal open onClose={() => setDone(null)} size="sm" title={`Venda nº ${done.order.number} concluída`}
           footer={<>
             <button className="btn-ghost" onClick={() => nav(`/os/${done.order.id}`)}>Ver venda</button>
-            <a className="btn-outline" href={`/imprimir/os/${done.order.id}?recibo=1`} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /> Recibo</a>
+            <a className="btn-outline" href={appPath(`/imprimir/os/${done.order.id}?recibo=1`)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /> Recibo</a>
             <button className="btn-primary" onClick={() => { setDone(null); toast('Pronto para a próxima venda'); }}>Nova venda</button>
           </>}>
           <div className="space-y-2 text-center">

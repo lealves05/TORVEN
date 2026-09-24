@@ -1,0 +1,53 @@
+name: Publicar teste (GitHub Pages + Supabase)
+
+# Site no GitHub Pages e código da API publicado junto (edge/torven-api.js),
+# carregado pela Edge Function "torven-api" do Supabase.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: ${{ vars.API_URL || 'https://dwfbxrfniarhufltmlhb.supabase.co/functions/v1/torven-api' }}
+      VITE_BASE: /${{ github.event.repository.name }}/
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: API (bundle para Edge Function)
+        working-directory: backend
+        run: npm ci && node scripts/build-edge.mjs
+      - name: Site
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Montar publicação
+        run: |
+          cp frontend/dist/index.html frontend/dist/404.html
+          mkdir -p frontend/dist/edge
+          cp backend/dist-edge/index.js frontend/dist/edge/torven-api.js
+          touch frontend/dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

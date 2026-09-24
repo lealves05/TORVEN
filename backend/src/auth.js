@@ -2,19 +2,19 @@ import jwt from 'jsonwebtoken';
 import { one } from './db.js';
 import { HttpError, permissionsFor, withDefaults } from './util.js';
 
-const SECRET = process.env.JWT_SECRET || 'torven-dev-secret-troque-em-producao';
+const secret = () => process.env.JWT_SECRET || 'torven-dev-secret-troque-em-producao';
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
   console.warn('[auth] ATENÇÃO: defina JWT_SECRET em produção.');
 }
 
 export const signToken = (user) =>
-  jwt.sign({ uid: user.id, cid: user.company_id }, SECRET, { expiresIn: '7d' });
+  jwt.sign({ uid: user.id, cid: user.company_id }, secret(), { expiresIn: '7d' });
 
 export function verifyToken(req) {
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if (!token) return null;
-  try { return jwt.verify(token, SECRET); } catch { return null; }
+  try { return jwt.verify(token, secret()); } catch { return null; }
 }
 
 /** true para permissão booleana ligada ou escopo 'all'/'own'. */

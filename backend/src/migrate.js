@@ -3,7 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from './db.js';
 
-const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
+/** Lista de migrações: embutida no build da Edge Function ou lida da pasta. */
+function listMigrations() {
+  const embedded = globalThis.__TORVEN_MIGRATIONS__;
+  if (embedded) return embedded;
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
+  return fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+    .map((name) => ({ name, sql: fs.readFileSync(path.join(dir, name), 'utf8') }));
+}
 
 export async function migrate() {
   const client = await pool.connect();
@@ -13,10 +20,8 @@ export async function migrate() {
     await client.query('alter table _migrations enable row level security');
     const { rows } = await client.query('select name from _migrations');
     const done = new Set(rows.map((r) => r.name));
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
-    for (const file of files) {
+    for (const { name: file, sql } of listMigrations()) {
       if (done.has(file)) continue;
-      const sql = fs.readFileSync(path.join(dir, file), 'utf8');
       await client.query('BEGIN');
       try {
         await client.query(sql);

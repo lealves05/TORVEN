@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Receipt, RefreshCw, ExternalLink, FileCode2, XCircle, Trash2, Plus, Settings2, Printer } from 'lucide-react';
-import { api, qs } from '../lib/api';
+import { api, qs, appPath } from '../lib/api';
 import { money, fmt, fmtDateTime, INVOICE_STATUS, downloadCSV } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
@@ -91,7 +91,7 @@ export default function Invoices() {
                     <td className="w-40 whitespace-nowrap text-right">
                       {i.provider === 'focus' && ['processando', 'erro'].includes(i.status) && <button className="btn-ghost btn-icon h-8" title="Consultar situação" disabled={busy} onClick={() => refresh(i)}><RefreshCw className="h-4 w-4" /></button>}
                       {i.pdf_url && <a className="btn-ghost btn-icon h-8" title="DANFE / PDF" href={i.pdf_url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a>}
-                      {i.provider !== 'focus' && i.status === 'interna' && <a className="btn-ghost btn-icon h-8" title="Imprimir" href={`/imprimir/os/${i.order_id}?recibo=1`} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /></a>}
+                      {i.provider !== 'focus' && i.status === 'interna' && <a className="btn-ghost btn-icon h-8" title="Imprimir" href={appPath(`/imprimir/os/${i.order_id}?recibo=1`)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /></a>}
                       {i.xml_url && <a className="btn-ghost btn-icon h-8" title="XML" href={i.xml_url} target="_blank" rel="noreferrer"><FileCode2 className="h-4 w-4" /></a>}
                       {can('invoices_cancel') && ['autorizada', 'interna'].includes(i.status) && <button className="btn-ghost btn-icon h-8 text-red-600" title="Cancelar" onClick={() => setCancel(i)}><XCircle className="h-4 w-4" /></button>}
                       {can('invoices_issue') && i.status === 'erro' && <button className="btn-ghost btn-icon h-8 text-red-600" title="Descartar" onClick={() => discard(i)}><Trash2 className="h-4 w-4" /></button>}

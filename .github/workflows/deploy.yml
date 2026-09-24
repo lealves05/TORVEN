@@ -2,9 +2,8 @@ name: Deploy (Vercel)
 
 # Publica a API (backend/) e o site (frontend/) na Vercel a cada push na main.
 # Segredos necessários no repositório: VERCEL_TOKEN, DATABASE_URL (ou SUPABASE_REF + DB_PASSWORD), JWT_SECRET.
+# Desligado no push: o ambiente de teste usa pages.yml. Rode manualmente quando tiver os segredos da Vercel.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:

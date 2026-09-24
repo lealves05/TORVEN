@@ -1,4 +1,8 @@
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+/** URL absoluta de uma rota do app (respeita o subcaminho, ex.: GitHub Pages). */
+export const appUrl = (path) => `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`;
+export const appPath = (path) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`;
+
 const TOKEN_KEY = 'torven.token';
 
 export const getToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };

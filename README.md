@@ -81,6 +81,18 @@ Teste automático da API (com a API rodando): `cd backend && npm test`.
 Para testar também as notas fiscais contra um simulador da Focus NFe, rode a API com
 `FOCUS_URL_HOMOLOGACAO=http://localhost:4999` e o teste com `MOCK_FOCUS=4999 npm test`.
 
+## Ambiente de teste publicado
+
+| Parte | Onde | Endereço |
+|---|---|---|
+| Site | GitHub Pages (workflow `pages.yml`, a cada push na `main`) | https://lealves05.github.io/TORVEN/ |
+| API | Supabase Edge Function `torven-api` (projeto TORVEN, São Paulo) | https://dwfbxrfniarhufltmlhb.supabase.co/functions/v1/torven-api |
+| Banco | Supabase PostgreSQL (mesmo projeto) | migrações automáticas na primeira requisição |
+
+A Edge Function é só uma "carregadora" (`backend/dist-edge/loader.ts`, gerada por `node scripts/build-edge.mjs`):
+ela declara os pacotes npm e importa o código da API publicado junto com o site em `/edge/torven-api.js`.
+Assim, cada `git push` atualiza site **e** API. O segredo do login (JWT) é gerado e guardado no próprio banco.
+
 ## Publicar (igual ao ORBI)
 
 | Parte | Serviço | Observação |

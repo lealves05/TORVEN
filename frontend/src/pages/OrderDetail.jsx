@@ -4,7 +4,7 @@ import {
   Printer, MessageCircle, Wallet, PackageCheck, XCircle, RotateCcw, Receipt, Link2, Copy, Phone, Mail, Undo2,
   ShoppingCart, MapPin, Send, Lock, Globe, FileText, ExternalLink,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, appUrl } from '../lib/api';
 import {
   money, fmt, fmtDateTime, ORDER_STATUS, OPEN_STATUSES, PRIORITY, INVOICE_STATUS, methodName, fillTemplate, waLink, toLocalInput,
 } from '../lib/format';
@@ -29,7 +29,7 @@ const toForm = (o) => ({
   items: o.items.map((i) => ({ ...i, qty: Number(i.qty), unit_price: i.unit_price == null ? null : Number(i.unit_price), discount: Number(i.discount) || 0, _savedQty: i.kind === 'material' ? Number(i.qty) : 0 })),
 });
 
-export const publicUrl = (path) => `${window.location.origin}${path}`;
+export const publicUrl = appUrl;
 
 export default function OrderDetail() {
   const { id } = useParams();

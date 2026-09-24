@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, XCircle, Phone, Clock, ShieldCheck, Printer, Circle } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, appPath } from '../lib/api';
 import { money, fmt, fmtDateTime, qty, ORDER_STATUS, QUOTE_STATUS, OPEN_STATUSES, waLink } from '../lib/format';
 import { applyTheme } from '../lib/theme';
 import { Loading, Input, Textarea, Modal, useAction, FAIL, cx } from '../components/ui';
@@ -109,7 +109,7 @@ export function PublicQuote() {
         <div className={cx('card p-4 text-center text-sm', ['aprovado', 'convertido'].includes(q.status) ? 'text-emerald-700' : 'text-ink-soft')}>
           {['aprovado', 'convertido'].includes(q.status) ? `Orçamento aprovado${q.approved_at ? ` em ${fmtDateTime(q.approved_at)}` : ''}. Obrigado!`
             : q.status === 'recusado' ? 'Orçamento recusado.' : 'Este orçamento expirou. Fale com a empresa para atualizá-lo.'}
-          {q.order_token && <a href={`/p/os/${q.order_token}`} className="mt-2 block font-medium text-primary">Acompanhar o serviço</a>}
+          {q.order_token && <a href={appPath(`/p/os/${q.order_token}`)} className="mt-2 block font-medium text-primary">Acompanhar o serviço</a>}
         </div>
       )}
       <button className="btn-ghost mx-auto flex" onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimir</button>
