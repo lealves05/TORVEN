@@ -7,6 +7,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { ROLES } from '../lib/format';
 import { cx, Avatar } from './ui';
+import DemoBanner from './DemoBanner';
+import { PRESET_COLORS } from '../lib/theme';
 
 export function Mark({ className = 'h-5 w-5' }) {
   return (
@@ -131,6 +133,17 @@ function UserMenu({ light, up }) {
           <button className="flex w-full items-center gap-2 rounded-app-sm px-3 py-2 hover:bg-muted" onClick={() => savePrefs({ theme: dark ? 'light' : 'dark' })}>
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />} Tema {dark ? 'claro' : 'escuro'}
           </button>
+          <div className="px-3 pb-1 pt-2">
+            <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-faint">Minha cor</div>
+            <div className="grid grid-cols-6 gap-1.5">
+              {PRESET_COLORS.slice(0, 11).map((c) => (
+                <button key={c} title={c} onClick={() => savePrefs({ primaryColor: c })}
+                  className={cx('h-6 w-6 rounded-full ring-offset-2 ring-offset-surface', user.preferences?.primaryColor === c && 'ring-2 ring-ink')} style={{ background: c }} />
+              ))}
+              <button title="Cor da empresa" onClick={() => savePrefs({ primaryColor: null })}
+                className={cx('grid h-6 w-6 place-items-center rounded-full border border-dashed border-line text-[9px] text-ink-faint', !user.preferences?.primaryColor && 'ring-2 ring-ink ring-offset-2 ring-offset-surface')}>A</button>
+            </div>
+          </div>
           <button className="flex w-full items-center gap-2 rounded-app-sm px-3 py-2 text-red-600 hover:bg-muted" onClick={logout}>
             <LogOut className="h-4 w-4" /> Sair
           </button>
@@ -213,6 +226,7 @@ function TopLayout() {
         </div>
       </header>
       {open && <MobileDrawer nav={nav} onClose={() => setOpen(false)} />}
+      <DemoBanner />
       <main key={loc.pathname} className="flex-1 overflow-y-auto">
         <div className={cx('mx-auto w-full p-4 animate-fade sm:p-6', wide ? 'max-w-none lg:px-6' : 'max-w-[1400px] lg:p-8')}><Outlet /></div>
       </main>
@@ -251,6 +265,7 @@ function SideLayout() {
           <Logo company={company} />
           <div className="ml-auto"><QuickActions /></div>
         </header>
+        <DemoBanner />
         <main key={loc.pathname} className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1400px] p-4 animate-fade sm:p-6 lg:p-8"><Outlet /></div>
         </main>

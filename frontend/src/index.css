@@ -68,3 +68,38 @@ body {
 .animate-pop { animation: pop .16s ease-out; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 .animate-fade { animation: fade .15s ease-out; }
+
+/* ---------- Mobile: tabelas viram cards ---------- */
+@media (max-width: 767px) {
+  :is(.table-clean, .table-stack) thead { display: none; }
+  :is(.table-clean, .table-stack), :is(.table-clean, .table-stack) tbody { display: block; width: 100%; }
+  :is(.table-clean, .table-stack) tbody tr {
+    display: block; margin: 0 0 .75rem; padding: .6rem .85rem;
+    background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgb(0 0 0 / .04);
+  }
+  .table-clean tbody tr:hover { background: rgb(var(--surface)); }
+  :is(.table-clean, .table-stack) td:not(.hidden) {
+    display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+    padding: .3rem 0; border: 0; text-align: right; min-height: 1.9rem;
+  }
+  :is(.table-clean, .table-stack) td::before {
+    content: attr(data-label); flex-shrink: 0; text-align: left;
+    font-size: .68rem; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: rgb(var(--ink-faint));
+  }
+  :is(.table-clean, .table-stack) td[data-label=""]::before { display: none; }
+  /* primeira coluna = título do card */
+  :is(.table-clean, .table-stack) td:first-child:not(.hidden) {
+    display: block; text-align: left; font-weight: 500; padding-bottom: .45rem; margin-bottom: .2rem;
+    border-bottom: 1px solid rgb(var(--line) / .7);
+  }
+  :is(.table-clean, .table-stack) td:first-child::before { display: none; }
+  :is(.table-clean, .table-stack) td[data-label=""]:last-child { justify-content: flex-end; padding-top: .4rem; }
+  :is(.table-clean, .table-stack) td > * { max-width: 100%; }
+  :is(.table-clean, .table-stack) td .truncate { max-width: 62vw; }
+  /* sem moldura dupla: o card externo some e cada linha vira um card */
+  .card:has(> .overflow-x-auto > :is(.table-clean, .table-stack)),
+  .card:has(> :is(.table-clean, .table-stack)),
+  .overflow-x-auto:has(> .table-stack) { background: transparent; border: 0; box-shadow: none; }
+  .overflow-x-auto:has(> :is(.table-clean, .table-stack)) { overflow: visible; }
+}

@@ -101,8 +101,8 @@ export default function ItemsEditor({ items, onChange, discount = 0, onDiscount,
       {items.length === 0 ? (
         <div className="rounded-app-sm border border-dashed border-line px-4 py-6 text-center text-sm text-ink-faint">Nenhum item lançado.</div>
       ) : (
-        <div className="overflow-x-auto rounded-app-sm border border-line">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-app-sm border border-line max-md:border-0">
+          <table className="table-stack w-full text-sm">
             <thead className="bg-muted/50 text-xs text-ink-faint">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Item</th>

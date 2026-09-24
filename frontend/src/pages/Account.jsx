@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon, Monitor, Check, Plus, RotateCcw } from 'lucide-react';
+import { COLOR_THEMES, PRESET_COLORS } from '../lib/theme';
 import { api } from '../lib/api';
 import { ROLES } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, Input, Avatar, useAction, FAIL, cx } from '../components/ui';
 
 export default function Account() {
-  const { user, savePrefs, refresh } = useAuth();
+  const { user, savePrefs, refresh, company } = useAuth();
+  const mine = user.preferences?.primaryColor;
   const [run, busy] = useAction();
   const [name, setName] = useState(user.name);
   const [pw, setPw] = useState({ currentPassword: '', newPassword: '', confirm: '' });
@@ -36,6 +38,33 @@ export default function Account() {
           {[['comfortable', 'Confortável'], ['compact', 'Compacta']].map(([k, l]) => (
             <button key={k} onClick={() => savePrefs({ density: k })} className={cx('btn border', (user.preferences?.density || 'comfortable') === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
           ))}
+        </div>
+      </div>
+      <div className="card space-y-4 p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Cor do sistema</h3>
+            <p className="text-sm text-ink-faint">Vale só para você. {mine ? 'Você está usando uma cor própria.' : 'Você está usando a cor da empresa.'}</p>
+          </div>
+          {mine && <button className="btn-ghost h-8 text-xs" onClick={() => savePrefs({ primaryColor: null })}><RotateCcw className="h-3.5 w-3.5" /> Usar cor da empresa</button>}
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {COLOR_THEMES.map(([name, c]) => (
+            <button key={c} onClick={() => savePrefs({ primaryColor: c })}
+              className={cx('flex items-center gap-2.5 rounded-app-sm border p-2 text-left text-sm transition', mine === c ? 'border-primary bg-primary/10' : 'border-line hover:bg-muted')}>
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full" style={{ background: c }}>{mine === c && <Check className="h-4 w-4 text-white" />}</span>
+              {name}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {PRESET_COLORS.map((c) => (
+            <button key={c} title={c} onClick={() => savePrefs({ primaryColor: c })} className={cx('h-7 w-7 rounded-full ring-offset-2 ring-offset-surface', mine === c && 'ring-2 ring-ink')} style={{ background: c }} />
+          ))}
+          <label className="relative grid h-7 w-7 cursor-pointer place-items-center overflow-hidden rounded-full border border-dashed border-line" title="Cor personalizada">
+            <input type="color" value={mine || company?.settings?.primaryColor || '#ea580c'} onChange={(e) => savePrefs({ primaryColor: e.target.value })} className="absolute -inset-2 h-12 w-12 cursor-pointer opacity-0" />
+            <Plus className="h-3.5 w-3.5 text-ink-faint" />
+          </label>
         </div>
       </div>
       <div className="card space-y-4 p-6">

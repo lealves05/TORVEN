@@ -1,21 +1,22 @@
 name: Deploy (Vercel)
 
-# Publica a API (backend/) e o site (frontend/) na Vercel a cada push na main.
-# Segredos necessários no repositório: VERCEL_TOKEN, DATABASE_URL (ou SUPABASE_REF + DB_PASSWORD), JWT_SECRET.
-# Desligado no push: o ambiente de teste usa pages.yml. Rode manualmente quando tiver os segredos da Vercel.
+# Publica o site (frontend/) na Vercel a cada push na main.
+# A API continua na Supabase Edge Function "torven-api"; o vercel.json encaminha /api/* para ela.
+# Segredo necessário no repositório: VERCEL_TOKEN.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: deploy
-  cancel-in-progress: false
+  group: deploy-vercel
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      API_PROJECT: torven-api
       WEB_PROJECT: torven
     steps:
       - uses: actions/checkout@v5
@@ -26,105 +27,52 @@ jobs:
       - name: Instalar Vercel CLI
         run: npm i -g vercel@latest
 
-      - name: Descobrir conexão do banco (Supabase pooler)
-        id: db
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SUPABASE_REF: ${{ secrets.SUPABASE_REF }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      - name: Descobrir conta/time da Vercel
         run: |
-          if [ -n "$DATABASE_URL" ]; then echo "url=$DATABASE_URL" >> "$GITHUB_OUTPUT"; echo "::add-mask::$DATABASE_URL"; exit 0; fi
-          for h in aws-0-us-east-1 aws-1-us-east-1 aws-0-us-east-2 aws-1-us-east-2; do
-            URL="postgresql://${DB_USER}.${SUPABASE_REF}:${DB_PASSWORD}@${h}.pooler.supabase.com:6543/postgres"
-            if psql "$URL?sslmode=require" -Atc "select 1" >/dev/null 2>&1; then
-              echo "Pooler encontrado: $h"; echo "::add-mask::$URL"; echo "url=$URL" >> "$GITHUB_OUTPUT"; exit 0
-            fi
-          done
-          echo "Não foi possível conectar ao Supabase"; exit 1
+          [ -n "$VERCEL_TOKEN" ] || { echo "::error title=VERCEL_TOKEN::segredo não configurado"; exit 1; }
+          curl -s "https://api.vercel.com/v2/user" -H "Authorization: Bearer $VERCEL_TOKEN" > /tmp/u.json
+          TEAM=$(node -p "const u=JSON.parse(require('fs').readFileSync('/tmp/u.json')).user||{}; u.defaultTeamId||''")
+          USERNAME=$(node -p "(JSON.parse(require('fs').readFileSync('/tmp/u.json')).user||{}).username||''")
+          [ -n "$USERNAME" ] || { echo "::error title=Vercel::token inválido — $(head -c 300 /tmp/u.json)"; exit 1; }
+          if [ -n "$TEAM" ]; then
+            SLUG=$(curl -s "https://api.vercel.com/v2/teams/$TEAM" -H "Authorization: Bearer $VERCEL_TOKEN" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).slug||''))")
+            echo "TEAMQ=?teamId=$TEAM" >> "$GITHUB_ENV"; echo "SCOPE=$SLUG" >> "$GITHUB_ENV"
+          else
+            echo "TEAMQ=" >> "$GITHUB_ENV"; echo "SCOPE=$USERNAME" >> "$GITHUB_ENV"
+          fi
+          echo "Conta: $USERNAME · time: ${TEAM:-pessoal}"
 
-      - name: Descobrir time da Vercel
+      - name: Criar projeto na Vercel (se não existir)
         run: |
-          curl -s "https://api.vercel.com/v9/projects?limit=1" -H "Authorization: Bearer $VERCEL_TOKEN" > /tmp/p.json
-          TEAM=$(node -p "(JSON.parse(require('fs').readFileSync('/tmp/p.json')).projects||[])[0]?.accountId||''")
-          SLUG=$TEAM
-          echo "Time: $SLUG ($TEAM)"
-          [ -n "$TEAM" ] || { echo "::error title=Vercel::não foi possível identificar a conta/time"; exit 1; }
-          echo "TEAM=$TEAM" >> "$GITHUB_ENV"; echo "SCOPE=$SLUG" >> "$GITHUB_ENV"
-
-      - name: Criar projetos na Vercel (se ainda não existirem)
-        run: |
-          for p in "$API_PROJECT:null" "$WEB_PROJECT:\"vite\""; do
-            name=${p%%:*}; fw=${p#*:}
-            code=$(curl -s -o /tmp/p.json -w '%{http_code}' -X POST "https://api.vercel.com/v11/projects?teamId=$TEAM" \
-              -H "Authorization: Bearer $VERCEL_TOKEN" -H 'Content-Type: application/json' \
-              -d "{\"name\":\"$name\",\"framework\":$fw}")
-            echo "$name -> $code"; [ "$code" = "200" ] || [ "$code" = "409" ] || { echo "::error title=Vercel $name $code::$(tr -d '\n' < /tmp/p.json)"; exit 1; }
-          done
-
-      - name: Deploy da API
-        id: api
-        working-directory: backend
-        env:
-          DB_URL: ${{ steps.db.outputs.url }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-        run: |
-          vercel link --yes --project "$API_PROJECT" --token "$VERCEL_TOKEN" --scope "$SCOPE" 2>/tmp/err || { echo "::error title=vercel link::$(tail -c 900 /tmp/err | tr '\n' ' ')"; exit 1; }
-          for k in DATABASE_URL JWT_SECRET; do vercel env rm "$k" production --yes --token "$VERCEL_TOKEN" --scope "$SCOPE" >/dev/null 2>&1 || true; done
-          printf '%s' "$DB_URL"     | vercel env add DATABASE_URL production --token "$VERCEL_TOKEN" --scope "$SCOPE"
-          printf '%s' "$JWT_SECRET" | vercel env add JWT_SECRET production --token "$VERCEL_TOKEN" --scope "$SCOPE"
-          vercel deploy --prod --yes --token "$VERCEL_TOKEN" --scope "$SCOPE" > ../api-url.txt 2>/tmp/err || { echo "::error title=vercel deploy::$(tail -c 900 /tmp/err | tr '\n' ' ')"; exit 1; }
-          PID=$(node -p "require('./.vercel/project.json').projectId")
-          ORG=$(node -p "require('./.vercel/project.json').orgId")
-          # desliga a proteção por login da Vercel para a API ser pública
-          curl -fsS -X PATCH "https://api.vercel.com/v9/projects/$PID?teamId=$ORG" -H "Authorization: Bearer $VERCEL_TOKEN" \
-            -H 'Content-Type: application/json' -d '{"ssoProtection":null}' >/dev/null || true
-          DOMAIN=$(curl -fsS "https://api.vercel.com/v9/projects/$PID/domains?teamId=$ORG" -H "Authorization: Bearer $VERCEL_TOKEN" \
-            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const d=JSON.parse(s).domains||[];console.log((d.find(x=>x.name.endsWith('.vercel.app'))||d[0]).name)})")
-          echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
-          echo "::notice title=API publicada::https://$DOMAIN"
-
-      - name: Teste da API
-        run: |
-          for i in 1 2 3 4 5; do
-            code=$(curl -s -o /tmp/r -w '%{http_code}' "https://${{ steps.api.outputs.domain }}/api/public/__ping__" || true)
-            echo "tentativa $i: $code $(cat /tmp/r)"; [ "$code" = "404" ] && exit 0; sleep 5
-          done
-          echo "::error title=Teste da API::$code $(head -c 500 /tmp/r)"; exit 1
+          code=$(curl -s -o /tmp/p.json -w '%{http_code}' -X POST "https://api.vercel.com/v11/projects$TEAMQ" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" -H 'Content-Type: application/json' \
+            -d "{\"name\":\"$WEB_PROJECT\",\"framework\":\"vite\",\"rootDirectory\":null}")
+          echo "projeto -> $code"
+          [ "$code" = "200" ] || [ "$code" = "409" ] || { echo "::error title=Vercel projeto $code::$(tr -d '\n' < /tmp/p.json | head -c 600)"; exit 1; }
 
       - name: Deploy do site
         id: web
         working-directory: frontend
         run: |
-          sed -i "s#https://torven-api.vercel.app#https://${{ steps.api.outputs.domain }}#" vercel.json
           vercel link --yes --project "$WEB_PROJECT" --token "$VERCEL_TOKEN" --scope "$SCOPE" 2>/tmp/err || { echo "::error title=vercel link::$(tail -c 900 /tmp/err | tr '\n' ' ')"; exit 1; }
-          vercel deploy --prod --yes --token "$VERCEL_TOKEN" --scope "$SCOPE" 2>/tmp/err || { echo "::error title=vercel deploy::$(tail -c 900 /tmp/err | tr '\n' ' ')"; exit 1; }
+          vercel deploy --prod --yes --token "$VERCEL_TOKEN" --scope "$SCOPE" > /tmp/url.txt 2>/tmp/err || { echo "::error title=vercel deploy::$(tail -c 900 /tmp/err | tr '\n' ' ')"; exit 1; }
           PID=$(node -p "require('./.vercel/project.json').projectId")
           ORG=$(node -p "require('./.vercel/project.json').orgId")
+          # site público (sem a proteção por login da Vercel)
           curl -fsS -X PATCH "https://api.vercel.com/v9/projects/$PID?teamId=$ORG" -H "Authorization: Bearer $VERCEL_TOKEN" \
             -H 'Content-Type: application/json' -d '{"ssoProtection":null}' >/dev/null || true
           DOMAIN=$(curl -fsS "https://api.vercel.com/v9/projects/$PID/domains?teamId=$ORG" -H "Authorization: Bearer $VERCEL_TOKEN" \
-            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const d=JSON.parse(s).domains||[];console.log((d.find(x=>x.name.endsWith('.vercel.app'))||d[0]).name)})")
-          echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
-          [ -n "$DOMAIN" ] || DOMAIN=$(curl -fsS "https://api.vercel.com/v9/projects/$PID?teamId=$ORG" -H "Authorization: Bearer $VERCEL_TOKEN" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const p=JSON.parse(s);console.log((p.alias||[]).map(a=>a.domain).find(d=>d.endsWith('.vercel.app'))||(p.targets?.production?.alias||[])[0]||'')})")
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const d=JSON.parse(s).domains||[];console.log((d.find(x=>x.name.endsWith('.vercel.app'))||d[0]||{}).name||'')})")
           echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
           echo "::notice title=Site publicado::https://$DOMAIN"
-          {
-            echo "## TORVEN publicado"
-            echo "- Site: https://$DOMAIN"
-            echo "- API: https://${{ steps.api.outputs.domain }}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          { echo "## TORVEN na Vercel"; echo "- Site: https://$DOMAIN"; echo "- Deploy: $(cat /tmp/url.txt)"; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verificação em produção
-        env:
-          DB_URL: ${{ steps.db.outputs.url }}
         run: |
           SITE="https://${{ steps.web.outputs.domain }}"
+          sleep 5
           c1=$(curl -s -o /dev/null -w '%{http_code}' "$SITE/")
-          c2=$(curl -s -o /dev/null -w '%{http_code}' "$SITE/os")
+          c2=$(curl -s -o /dev/null -w '%{http_code}' "$SITE/entrar")
           c3=$(curl -s -o /tmp/h -w '%{http_code}' "$SITE/api/health")
-          echo "::notice title=Verificação site::$SITE → / $c1 · /os $c2 · /api/health via site $c3 $(head -c 120 /tmp/h)"
-          cd backend && API="$SITE" node scripts/smoke.mjs > /tmp/smoke.txt 2>&1; rc=$?
-          echo "::notice title=Teste ponta a ponta (rc=$rc)::$(tail -n 30 /tmp/smoke.txt | tr '\n' ' ' | head -c 1500)"
-          psql "$DB_URL?sslmode=require" -Atc "delete from companies where email like 'teste%@torven.app'" || true
-          exit $rc
+          echo "::notice title=Verificação::$SITE → / $c1 · /entrar $c2 · /api/health $c3 $(head -c 120 /tmp/h)"
+          [ "$c1" = "200" ] && [ "$c3" = "200" ]

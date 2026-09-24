@@ -169,7 +169,7 @@ export function PurchaseEditor() {
             )}
             {!f.items.length ? <div className="rounded-app-sm border border-dashed border-line px-4 py-6 text-center text-sm text-ink-faint">Adicione os itens da nota.</div> : (
               <div className="overflow-x-auto rounded-app-sm border border-line">
-                <table className="w-full text-sm">
+                <table className="table-stack w-full text-sm">
                   <thead className="bg-muted/50 text-xs text-ink-faint"><tr><th className="px-3 py-2 text-left font-medium">Material</th><th className="w-24 px-2 py-2 text-right font-medium">Qtd.</th><th className="w-32 px-2 py-2 text-right font-medium">Custo unit.</th><th className="hidden w-32 px-2 py-2 text-right font-medium md:table-cell">Novo preço venda</th><th className="w-28 px-3 py-2 text-right font-medium">Total</th>{!readOnly && <th className="w-10" />}</tr></thead>
                   <tbody className="divide-y divide-line">
                     {f.items.map((i, k) => (

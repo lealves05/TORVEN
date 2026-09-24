@@ -45,6 +45,16 @@ export function AuthProvider({ children }) {
       setToken(s.token);
       setState({ loading: false, ...s });
     },
+    async demo() {
+      const s = await api.post('/auth/demo', {});
+      setToken(s.token);
+      setState({ loading: false, ...s });
+    },
+    async activate(data) {
+      const s = await api.post('/auth/activate', data);
+      setToken(s.token);
+      setState({ loading: false, ...s });
+    },
     logout() {
       setToken(null);
       setState({ loading: false, user: null, company: null });

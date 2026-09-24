@@ -5,6 +5,9 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import { UIProvider } from './context/UIContext';
 import './index.css';
+import { startMobileTables } from './lib/mobileTables';
+
+startMobileTables();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
