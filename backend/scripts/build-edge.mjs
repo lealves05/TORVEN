@@ -39,8 +39,10 @@ await build({
   define: { 'globalThis.__TORVEN_MIGRATIONS__': JSON.stringify(migrations) },
   banner: {
     js: [
-      "import process from 'node:process';",
+      "import nodeProcess from 'node:process';",
       "import { Buffer } from 'node:buffer';",
+      '// o Edge Runtime não permite alterar variáveis de ambiente: a API usa uma cópia local',
+      'const process = { argv: nodeProcess.argv, env: { ...(globalThis.Deno?.env?.toObject?.() ?? nodeProcess.env) } };',
       'process.env.DATABASE_URL ??= process.env.SUPABASE_DB_URL;',
       "process.env.DB_POOL_MAX ??= '3';",
       "process.env.NODE_ENV ??= 'production';",
@@ -50,8 +52,16 @@ await build({
   logLevel: 'info',
 });
 
-// Função "carregadora" publicada no Supabase: declara os pacotes npm e importa o bundle publicado no GitHub Pages.
+// Função "carregadora" publicada no Supabase: declara os pacotes npm e, a cada inicialização,
+// baixa o bundle publicado no GitHub Pages e o executa (import de data: URL).
 const bundleUrl = process.env.EDGE_BUNDLE_URL || 'https://lealves05.github.io/TORVEN/edge/torven-api.js';
-fs.writeFileSync(path.join(root, 'dist-edge/loader.ts'),
-  `// Gerado por scripts/build-edge.mjs — publique como Edge Function "torven-api" (verify_jwt: false)\n${
-    [...used].sort().map((s) => `import '${s}';`).join('\n')}\nawait import('${bundleUrl}');\n`);
+fs.writeFileSync(path.join(root, 'dist-edge/loader.ts'), `// TORVEN API — carregadora (gerada por backend/scripts/build-edge.mjs).
+// Publique como Edge Function "torven-api" com verify_jwt = false (a API faz a própria autenticação).
+${[...used].sort().map((s) => `import '${s}';`).join('\n')}
+
+const BUNDLE = '${bundleUrl}';
+const res = await fetch(\`\${BUNDLE}?t=\${Date.now()}\`);
+if (!res.ok) throw new Error(\`Não foi possível baixar a API (\${res.status})\`);
+const code = await res.text();
+await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(code));
+`);

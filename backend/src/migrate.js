@@ -38,7 +38,7 @@ export async function migrate() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.url.startsWith('file:') && process.argv[1] === fileURLToPath(import.meta.url)) {
   migrate()
     .then(() => { console.log('[migrate] ok'); return pool.end(); })
     .catch((e) => { console.error(e); process.exit(1); });
