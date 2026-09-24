@@ -1,0 +1,409 @@
+import { Fragment, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Upload, Trash2, Plus, Check, Sun, Moon, Monitor, ShieldCheck, ExternalLink } from 'lucide-react';
+import { api } from '../lib/api';
+import { ROLES, maskPhone, maskDoc, maskCep, lookupCep } from '../lib/format';
+import { applyTheme, PRESET_COLORS, RADIUS, FONTS } from '../lib/theme';
+import { useAuth } from '../context/AuthContext';
+import { useCatalog } from '../context/CatalogContext';
+import FiscalSetup from '../components/FiscalSetup';
+import { useUI } from '../context/UIContext';
+import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, Loading, useAction, FAIL, cx } from '../components/ui';
+
+export default function Settings() {
+  const { company, setCompany, user, can } = useAuth();
+  const full = can('settings');
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') || (full ? 'empresa' : can('fiscal_settings') ? 'fiscal' : 'perfis');
+  const setTab = (t) => setParams({ tab: t });
+  const [f, setF] = useState(() => structuredClone(company));
+  const [run, busy] = useAction();
+  const s = f.settings;
+  const setS = (patch) => setF((x) => ({ ...x, settings: { ...x.settings, ...patch } }));
+  const dirty = JSON.stringify(f) !== JSON.stringify(company);
+
+  useEffect(() => { applyTheme(f.settings, user.preferences); }, [f.settings, user.preferences]);
+  useEffect(() => () => applyTheme(company.settings, user.preferences), []); // eslint-disable-line
+
+  const save = async () => {
+    const fields = ['name', 'trade_name', 'document', 'state_registration', 'municipal_registration', 'phone', 'email', 'cep', 'street', 'number',
+      'complement', 'district', 'city', 'uf', 'city_code', 'logo_url'];
+    const body = full
+      ? { ...Object.fromEntries(fields.map((k) => [k, f[k] ?? null])), settings: can('users') ? f.settings : (({ permissions, ...rest }) => rest)(f.settings) }
+      : { settings: { permissions: f.settings.permissions } };
+    const r = await run(() => api.put('/company', body), 'Configurações salvas');
+    if (r !== FAIL) { setCompany(r); setF(structuredClone(r)); }
+  };
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const cep = async (v) => {
+    const m = maskCep(v);
+    setF((x) => ({ ...x, cep: m }));
+    if (m.length === 9) { const a = await lookupCep(m); if (a) setF((x) => ({ ...x, ...a, street: a.street || x.street, district: a.district || x.district })); }
+  };
+  const o = s.orders;
+  const setO = (patch) => setS({ orders: { ...o, ...patch } });
+
+  return (
+    <div className="pb-20">
+      <PageHeader title="Configurações" subtitle="Dados da empresa, aparência, regras das OS, financeiro, fiscal e acessos" />
+      <Tabs value={tab} onChange={setTab} tabs={[
+        ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' },
+          { value: 'financeiro', label: 'Financeiro' }, { value: 'categorias', label: 'Categorias' }] : []),
+        ...(can('fiscal_settings') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
+        ...(full ? [{ value: 'modulos', label: 'Módulos' }] : []),
+        ...(can('users') ? [{ value: 'perfis', label: 'Perfis de acesso' }, { value: 'equipe', label: 'Usuários' }] : []),
+      ]} />
+
+      {tab === 'empresa' && (
+        <div className="card grid max-w-4xl gap-4 p-6 sm:grid-cols-6">
+          <div className="flex items-center gap-4 sm:col-span-6">
+            {f.logo_url ? <img src={f.logo_url} alt="" className="h-16 w-16 rounded-app object-cover" /> : <div className="grid h-16 w-16 place-items-center rounded-app bg-muted text-xs text-ink-faint">logo</div>}
+            <label className="btn-outline cursor-pointer"><Upload className="h-4 w-4" /> Enviar logo
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (file) setF({ ...f, logo_url: await resizeImage(file, 256) }); }} />
+            </label>
+            {f.logo_url && <button className="btn-ghost text-red-600" onClick={() => setF({ ...f, logo_url: null })}><Trash2 className="h-4 w-4" /></button>}
+            <p className="text-xs text-ink-faint">Aparece no sistema, nas OS e orçamentos impressos e nos links do cliente.</p>
+          </div>
+          <Input label="Razão social" value={f.name} onChange={set('name')} className="sm:col-span-3" />
+          <Input label="Nome fantasia" value={f.trade_name} onChange={set('trade_name')} className="sm:col-span-3" />
+          <Input label="CNPJ / CPF" value={f.document} onChange={(e) => setF({ ...f, document: maskDoc(e.target.value) })} className="sm:col-span-2" />
+          <Input label="Inscrição estadual" value={f.state_registration} onChange={set('state_registration')} className="sm:col-span-2" />
+          <Input label="Inscrição municipal" value={f.municipal_registration} onChange={set('municipal_registration')} className="sm:col-span-2" />
+          <Input label="Telefone / WhatsApp" value={f.phone} onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} className="sm:col-span-3" />
+          <Input label="E-mail" value={f.email} onChange={set('email')} className="sm:col-span-3" />
+          <Input label="CEP" value={f.cep} onChange={(e) => cep(e.target.value)} className="sm:col-span-2" />
+          <Input label="Endereço" value={f.street} onChange={set('street')} className="sm:col-span-3" />
+          <Input label="Número" value={f.number} onChange={set('number')} className="sm:col-span-1" />
+          <Input label="Complemento" value={f.complement} onChange={set('complement')} className="sm:col-span-2" />
+          <Input label="Bairro" value={f.district} onChange={set('district')} className="sm:col-span-2" />
+          <Input label="Cidade" value={f.city} onChange={set('city')} className="sm:col-span-2" />
+          <Input label="UF" value={f.uf} maxLength={2} onChange={(e) => setF({ ...f, uf: e.target.value.toUpperCase() })} className="sm:col-span-1" />
+          <Input label="Código IBGE do município" value={f.city_code} onChange={set('city_code')} className="sm:col-span-2" hint="Preenchido pelo CEP. Necessário para NFS-e." />
+          <Select label="Fuso horário" value={s.timezone} onChange={(e) => setS({ timezone: e.target.value })} className="sm:col-span-3">
+            {['America/Sao_Paulo', 'America/Manaus', 'America/Cuiaba', 'America/Belem', 'America/Fortaleza', 'America/Recife', 'America/Bahia', 'America/Porto_Velho', 'America/Rio_Branco', 'America/Noronha'].map((z) => <option key={z}>{z}</option>)}
+          </Select>
+        </div>
+      )}
+
+      {tab === 'os' && (
+        <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+          <div className="card space-y-4 p-6">
+            <h3 className="font-semibold">Padrões das ordens de serviço</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Garantia padrão (dias)" type="number" min={0} value={o.defaultWarrantyDays} onChange={(e) => setO({ defaultWarrantyDays: +e.target.value })} />
+              <Input label="Prazo padrão de entrega (dias)" type="number" min={0} value={o.defaultPromiseDays} onChange={(e) => setO({ defaultPromiseDays: +e.target.value })} />
+              <Input label="Validade dos orçamentos (dias)" type="number" min={1} value={o.quoteValidityDays} onChange={(e) => setO({ quoteValidityDays: +e.target.value })} />
+            </div>
+            <Toggle checked={o.allowNegativeStock} onChange={(v) => setO({ allowNegativeStock: v })} label="Permitir lançar material sem saldo em estoque" hint="Útil quando a entrada da nota do fornecedor ainda não foi registrada." />
+            <Toggle checked={o.requirePaymentToDeliver} onChange={(v) => setO({ requirePaymentToDeliver: v })} label="Exigir pagamento (ou parcelas lançadas) para entregar" />
+            <Textarea label="Termos impressos na OS" rows={4} value={o.termsOrder} onChange={(e) => setO({ termsOrder: e.target.value })} />
+            <Textarea label="Termos padrão dos orçamentos" rows={4} value={o.termsQuote} onChange={(e) => setO({ termsQuote: e.target.value })} />
+          </div>
+          <div className="card space-y-4 p-6">
+            <h3 className="font-semibold">Mensagens de WhatsApp</h3>
+            <Textarea label="Envio de orçamento" rows={3} value={s.whatsapp.quote} onChange={(e) => setS({ whatsapp: { ...s.whatsapp, quote: e.target.value } })} />
+            <Textarea label="OS pronta para retirada" rows={3} value={s.whatsapp.ready} onChange={(e) => setS({ whatsapp: { ...s.whatsapp, ready: e.target.value } })} />
+            <Textarea label="Atualização de andamento" rows={3} value={s.whatsapp.status} onChange={(e) => setS({ whatsapp: { ...s.whatsapp, status: e.target.value } })} />
+            <p className="text-xs text-ink-faint">Variáveis: {'{cliente} {numero} {empresa} {equipamento} {total} {status} {link}'}</p>
+          </div>
+        </div>
+      )}
+
+      {tab === 'aparencia' && (
+        <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+          <div className="card space-y-6 p-6">
+            <div>
+              <span className="label">Cor principal</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {PRESET_COLORS.map((c) => (
+                  <button key={c} onClick={() => setS({ primaryColor: c })} className={cx('grid h-9 w-9 place-items-center rounded-full ring-offset-2 ring-offset-surface transition', s.primaryColor === c && 'ring-2 ring-ink')} style={{ background: c }}>
+                    {s.primaryColor === c && <Check className="h-4 w-4 text-white" />}
+                  </button>
+                ))}
+                <label className="relative h-9 w-9 cursor-pointer overflow-hidden rounded-full border border-dashed border-line" title="Cor personalizada">
+                  <input type="color" value={s.primaryColor} onChange={(e) => setS({ primaryColor: e.target.value })} className="absolute -inset-2 h-14 w-14 cursor-pointer opacity-0" />
+                  <Plus className="m-auto mt-2 h-4 w-4 text-ink-faint" />
+                </label>
+              </div>
+            </div>
+            <div>
+              <span className="label">Tema padrão</span>
+              <div className="grid grid-cols-3 gap-2">
+                {[['light', 'Claro', Sun], ['dark', 'Escuro', Moon], ['system', 'Automático', Monitor]].map(([k, l, I]) => (
+                  <button key={k} onClick={() => setS({ theme: k })} className={cx('btn border', s.theme === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}><I className="h-4 w-4" />{l}</button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-ink-faint">Cada usuário pode trocar o próprio tema no menu da conta.</p>
+            </div>
+            <div>
+              <span className="label">Cantos</span>
+              <div className="grid grid-cols-4 gap-2">
+                {Object.entries({ none: 'Retos', md: 'Suaves', lg: 'Padrão', xl: 'Redondos' }).map(([k, l]) => (
+                  <button key={k} onClick={() => setS({ radius: k })} className={cx('btn border', s.radius === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}
+                    style={{ borderRadius: RADIUS[k] }}>{l}</button>
+                ))}
+              </div>
+            </div>
+            <Select label="Fonte" value={s.font || 'Inter'} onChange={(e) => setS({ font: e.target.value })}>
+              {Object.keys(FONTS).map((k) => <option key={k} value={k}>{k}</option>)}
+            </Select>
+            <Select label="Densidade" value={s.density || 'comfortable'} onChange={(e) => setS({ density: e.target.value })}>
+              <option value="comfortable">Confortável</option><option value="compact">Compacta</option>
+            </Select>
+            <div>
+              <span className="label">Menu</span>
+              <div className="grid grid-cols-2 gap-2">
+                {[['top', 'Barra superior'], ['side', 'Menu lateral']].map(([k, l]) => (
+                  <button key={k} onClick={() => setS({ layout: k })} className={cx('btn h-auto flex-col gap-2 border py-3', (s.layout || 'top') === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>
+                    <span className="flex h-10 w-16 overflow-hidden rounded border border-current/30">
+                      {k === 'top'
+                        ? <span className="flex w-full flex-col"><span className="h-2.5 w-full bg-current opacity-70" /><span className="flex-1" /></span>
+                        : <span className="flex w-full"><span className="h-full w-3.5 bg-current opacity-70" /><span className="flex-1" /></span>}
+                    </span>{l}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-ink-faint">Salve para aplicar o novo menu.</p>
+            </div>
+          </div>
+          <div className="card p-6">
+            <span className="label">Pré-visualização</span>
+            <div className="mt-2 space-y-4 rounded-app border border-line bg-bg p-5">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-app-sm bg-primary font-semibold text-primary-fg">{(f.trade_name || f.name)?.[0]}</div>
+                <div><div className="font-semibold">{f.trade_name || f.name}</div><div className="text-xs text-ink-faint">Assim ficará o seu sistema</div></div>
+              </div>
+              <div className="card p-4">
+                <div className="text-xs text-ink-faint">OS entregues no mês</div>
+                <div className="text-2xl font-semibold">R$ 48.920,00</div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full w-2/3 rounded-full bg-primary" /></div>
+              </div>
+              <div className="flex gap-2"><button className="btn-primary">Nova OS</button><button className="btn-outline">Cancelar</button></div>
+              <input className="input" placeholder="Campo de texto" />
+              <div className="flex gap-2"><span className="chip bg-primary/10 text-primary">Em execução</span><span className="chip bg-muted">Solda TIG</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'financeiro' && (
+        <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+          <div className="card p-6">
+            <h3 className="mb-3 font-semibold">Formas de pagamento</h3>
+            <div className="space-y-2">
+              {s.paymentMethods.map((m, i) => {
+                const setM = (patch) => setS({ paymentMethods: s.paymentMethods.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+                return (
+                  <div key={m.id} className="flex items-center gap-2">
+                    <input type="checkbox" checked={m.active !== false} onChange={(e) => setM({ active: e.target.checked })} title="Ativa" />
+                    <input className="input" value={m.name} onChange={(e) => setM({ name: e.target.value })} />
+                    <div className="relative w-28 shrink-0">
+                      <input className="input pr-14 tabular-nums" type="number" step="0.01" min={0} value={m.fee} onChange={(e) => setM({ fee: +e.target.value })} />
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-ink-faint">% taxa</span>
+                    </div>
+                    {m.id !== 'dinheiro' && <button className="btn-ghost btn-icon" onClick={() => setS({ paymentMethods: s.paymentMethods.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></button>}
+                  </div>
+                );
+              })}
+            </div>
+            <button className="btn-ghost mt-2 text-primary" onClick={() => setS({ paymentMethods: [...s.paymentMethods, { id: `m${Date.now().toString(36)}`, name: 'Nova forma', fee: 0, active: true }] })}>
+              <Plus className="h-4 w-4" /> Adicionar forma
+            </button>
+            <div className="mt-5 space-y-3 border-t border-line pt-5">
+              <Toggle checked={s.cardFeesAsExpense} onChange={(v) => setS({ cardFeesAsExpense: v })} label="Lançar taxas de cartão automaticamente como despesa" />
+              <Toggle checked={s.requireOpenCash} onChange={(v) => setS({ requireOpenCash: v })} label="Exigir caixa aberto para receber" />
+            </div>
+          </div>
+          <div className="card space-y-5 p-6">
+            <TagList label="Categorias de receita" value={s.incomeCategories} onChange={(v) => setS({ incomeCategories: v })} />
+            <TagList label="Categorias de despesa" value={s.expenseCategories} onChange={(v) => setS({ expenseCategories: v })} />
+          </div>
+        </div>
+      )}
+
+      {tab === 'categorias' && (
+        <div className="grid max-w-5xl gap-6 lg:grid-cols-3">
+          <div className="card p-6"><TagList label="Tipos de serviço" value={s.serviceCategories} onChange={(v) => setS({ serviceCategories: v })} /></div>
+          <div className="card p-6"><TagList label="Categorias de materiais" value={s.materialCategories} onChange={(v) => setS({ materialCategories: v })} /></div>
+          <div className="card p-6"><TagList label="Tipos de equipamento / peça" value={s.equipmentCategories} onChange={(v) => setS({ equipmentCategories: v })} /></div>
+        </div>
+      )}
+
+      {tab === 'fiscal' && <FiscalSetup />}
+      {tab === 'perfis' && <PermissionsTab s={s} setS={setS} />}
+
+      {tab === 'modulos' && (
+        <div className="card max-w-2xl space-y-3 p-6">
+          <p className="text-sm text-ink-faint">Ative apenas o que faz sentido para a sua oficina. Os itens desativados somem do menu.</p>
+          <Toggle checked={s.modules.purchases} onChange={(v) => setS({ modules: { ...s.modules, purchases: v } })} label="Entrada de materiais" hint="Registro de notas de fornecedor com contas a pagar." />
+          <Toggle checked={s.modules.invoices} onChange={(v) => setS({ modules: { ...s.modules, invoices: v } })} label="Notas fiscais" hint="Emissão de NFS-e e NF-e a partir das OS." />
+          <Toggle checked={s.modules.commissions} onChange={(v) => setS({ modules: { ...s.modules, commissions: v } })} label="Comissões" hint="Técnicos podem ver as próprias comissões." />
+          <Toggle checked={s.modules.publicLinks} onChange={(v) => setS({ modules: { ...s.modules, publicLinks: v } })} label="Links para o cliente" hint="Aprovação de orçamento e acompanhamento da OS pela internet." />
+        </div>
+      )}
+
+      {tab === 'equipe' && <Team />}
+
+      {dirty && !['equipe', 'fiscal'].includes(tab) && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur">
+          <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
+            <span className="mr-auto text-sm text-ink-soft">Você tem alterações não salvas.</span>
+            <button className="btn-ghost" onClick={() => setF(structuredClone(company))}>Descartar</button>
+            <button className="btn-primary" disabled={busy} onClick={save}>Salvar alterações</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagList({ label, value = [], onChange }) {
+  const [text, setText] = useState('');
+  const add = () => { const t = text.trim(); if (t && !value.includes(t)) onChange([...value, t]); setText(''); };
+  return (
+    <div>
+      <span className="label">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {value.map((v) => (
+          <span key={v} className="chip bg-muted py-1 text-ink-soft">{v}
+            <button onClick={() => onChange(value.filter((x) => x !== v))} className="text-ink-faint hover:text-red-600">×</button></span>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input className="input" placeholder="Nova categoria" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+        <button className="btn-outline" onClick={add}>Adicionar</button>
+      </div>
+    </div>
+  );
+}
+
+function Team() {
+  const { user } = useAuth();
+  const { technicians } = useCatalog();
+  const { confirm } = useUI();
+  const [run, busy] = useAction();
+  const [list, setList] = useState([]);
+  const [edit, setEdit] = useState(null);
+  const load = () => api.get('/users').then(setList);
+  useEffect(() => { load(); }, []);
+  const save = async () => {
+    const body = { name: edit.name, email: edit.email, role: edit.role, technician_id: edit.technician_id || null, active: edit.active ?? true, password: edit.password || undefined };
+    const r = await run(() => (edit.id ? api.put(`/users/${edit.id}`, body) : api.post('/users', body)), 'Usuário salvo');
+    if (r !== FAIL) { setEdit(null); load(); }
+  };
+  const remove = async (u) => {
+    if (!(await confirm({ title: `Remover acesso de ${u.name}?`, confirmText: 'Remover' }))) return;
+    if ((await run(() => api.del(`/users/${u.id}`), 'Acesso removido')) !== FAIL) load();
+  };
+  return (
+    <div className="max-w-4xl space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-ink-faint">Atendimento abre OS, orçamentos e recebe. Técnicos veem só as próprias OS, sem valores (ajustável em Perfis de acesso).</p>
+        <button className="btn-primary" onClick={() => setEdit({ role: 'attendant', active: true })}><Plus className="h-4 w-4" /> Novo acesso</button>
+      </div>
+      <div className="card divide-y divide-line">
+        {list.map((u) => (
+          <div key={u.id} className={cx('flex items-center gap-3 px-5 py-3', !u.active && 'opacity-50')}>
+            <Avatar name={u.name} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium">{u.name} {u.id === user.id && <span className="text-xs text-ink-faint">(você)</span>}</div>
+              <div className="truncate text-xs text-ink-faint">{u.email}</div>
+            </div>
+            <span className="chip bg-muted text-ink-soft">{ROLES[u.role]}</span>
+            {u.role !== 'owner' && <>
+              <button className="btn-ghost h-8 text-xs" onClick={() => setEdit({ ...u, password: '' })}>Editar</button>
+              {u.id !== user.id && <button className="btn-ghost btn-icon h-8 text-red-600" onClick={() => remove(u)}><Trash2 className="h-4 w-4" /></button>}
+            </>}
+          </div>
+        ))}
+      </div>
+      {edit && (
+        <Modal open onClose={() => setEdit(null)} title={edit.id ? 'Editar acesso' : 'Novo acesso'}
+          footer={<><button className="btn-ghost" onClick={() => setEdit(null)}>Cancelar</button><button className="btn-primary" disabled={busy} onClick={save}>Salvar</button></>}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Nome" value={edit.name || ''} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+            <Input label="E-mail (login)" type="email" value={edit.email || ''} onChange={(e) => setEdit({ ...edit, email: e.target.value })} />
+            <Select label="Perfil" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>
+              <option value="admin">Administrador</option><option value="attendant">Atendimento</option><option value="technician">Técnico</option>
+            </Select>
+            {edit.role !== 'admin' && (
+              <Select label="Vincular ao técnico" value={edit.technician_id || ''} onChange={(e) => setEdit({ ...edit, technician_id: e.target.value })}>
+                <option value="">{edit.role === 'technician' ? 'Selecione…' : 'Nenhum'}</option>{technicians.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+            )}
+            <Input label={edit.id ? 'Nova senha (opcional)' : 'Senha'} type="password" value={edit.password || ''} onChange={(e) => setEdit({ ...edit, password: e.target.value })} />
+            {edit.id && <div className="sm:col-span-2"><Toggle checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Acesso ativo" /></div>}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function resizeImage(file, max) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/png'));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+const ROLE_COLS = [['admin', 'Administrador'], ['attendant', 'Atendimento'], ['technician', 'Técnico']];
+const SCOPE_OPTS = {
+  orders_view: [['all', 'Todas'], ['own', 'Só as próprias'], ['none', 'Nenhuma']],
+  commissions: [['all', 'Todas'], ['own', 'Só as próprias'], ['none', 'Nenhuma']],
+};
+
+function PermissionsTab({ s, setS }) {
+  const { permissionCatalog } = useAuth();
+  const perms = s.permissions || {};
+  const groups = permissionCatalog.reduce((g, p) => ({ ...g, [p.group]: [...(g[p.group] || []), p] }), {});
+  const set = (role, key, v) => setS({ permissions: { ...perms, [role]: { ...perms[role], [key]: v } } });
+  return (
+    <div className="max-w-5xl space-y-4">
+      <p className="text-sm text-ink-faint">
+        Defina o que cada perfil pode ver e fazer. O <b>Proprietário</b> sempre tem acesso total. As regras valem para o sistema e para a API — não só para o menu.
+      </p>
+      <div className="card overflow-x-auto">
+        <table className="table-clean">
+          <thead>
+            <tr><th className="w-[45%]">Permissão</th>{ROLE_COLS.map(([k, l]) => <th key={k} className="text-center">{l}</th>)}</tr>
+          </thead>
+          <tbody>
+            {Object.entries(groups).map(([g, items]) => (
+              <Fragment key={g}>
+                <tr className="bg-muted/50 hover:bg-muted/50"><td colSpan={4} className="py-2 text-xs font-semibold uppercase tracking-wider text-ink-soft">{g}</td></tr>
+                {items.map((p) => (
+                  <tr key={p.key}>
+                    <td>{p.label}</td>
+                    {ROLE_COLS.map(([role]) => (
+                      <td key={role} className="text-center">
+                        {p.type === 'scope' ? (
+                          <select className="input mx-auto h-8 w-36 text-xs" value={perms[role]?.[p.key] || 'none'} onChange={(e) => set(role, p.key, e.target.value)}>
+                            {SCOPE_OPTS[p.key].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                          </select>
+                        ) : (
+                          <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--primary))]" checked={!!perms[role]?.[p.key]} onChange={(e) => set(role, p.key, e.target.checked)} />
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-ink-faint">Dica: para que um técnico veja “só as próprias OS”, vincule o usuário dele ao cadastro do técnico em Usuários.</p>
+    </div>
+  );
+}
+

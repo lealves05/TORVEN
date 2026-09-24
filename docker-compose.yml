@@ -1,0 +1,13 @@
+# Banco local para desenvolvimento:  docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: torven
+    ports:
+      - "5432:5432"
+    volumes:
+      - torven-data:/var/lib/postgresql/data
+volumes:
+  torven-data:
