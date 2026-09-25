@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { startOfMonth, endOfMonth, format } from 'date-fns';
+import { startOfMonth, endOfMonth } from 'date-fns';
 import {
   Lock, Unlock, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Plus, Check, Trash2, Pencil, Download, Wallet, Search, Undo2,
 } from 'lucide-react';

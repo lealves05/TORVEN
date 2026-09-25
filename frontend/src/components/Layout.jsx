@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   LayoutDashboard, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
   LogOut, Menu, X, Sun, Moon, BadgePercent, ChevronDown, Plus, ShoppingCart, Truck, PackagePlus, Receipt, HardHat,
-  Inbox, Headset, Boxes, Landmark, FileSpreadsheet, ShieldCheck, Building2, ChevronsLeft, ChevronsRight, ChevronRight, Home,
+  Inbox, Headset, Boxes, CalendarDays, Timer, ShieldAlert, Landmark, FileSpreadsheet, ShieldCheck, Building2, ChevronsLeft, ChevronsRight, ChevronRight, Home,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
 import { useAuth } from '../context/AuthContext';
@@ -56,6 +56,11 @@ export function useNav() {
     { label: 'Ordens de serviço', icon: ClipboardList, children: [
       can('orders_view', 'orders_create') && { to: '/os', label: 'Ordens de serviço', icon: ClipboardList },
       can('orders_create') && can('checkout') && { to: '/venda', label: 'Venda de balcão', icon: ShoppingCart },
+    ] },
+    { label: 'Agenda e produção', icon: CalendarDays, children: [
+      can('schedule_view', 'schedule_manage') && { to: '/agenda', label: 'Agenda', icon: CalendarDays },
+      can('schedule_view', 'time_log') && { to: '/producao', label: 'Painel de produção', icon: Timer },
+      can('warranty_manage') && { to: '/garantias', label: 'Garantias', icon: ShieldAlert },
     ] },
     { label: 'Materiais', icon: Boxes, children: [
       can('materials_manage', 'purchases') && { to: '/estoque', label: 'Materiais e estoque', icon: Package, end: true },
@@ -127,6 +132,7 @@ function QuickActions({ light, collapsed }) {
     can('quotes') && { label: 'Novo orçamento', icon: FileText, to: '/orcamentos/novo', key: 'Alt+Q' },
     can('orders_create') && can('checkout') && { label: 'Venda de balcão', icon: ShoppingCart, to: '/venda' },
     can('purchases') && { label: 'Entrada de materiais', icon: PackagePlus, to: '/estoque/entradas/nova' },
+    can('schedule_manage') && { label: 'Agenda', icon: CalendarDays, to: '/agenda' },
   ].filter(Boolean);
   if (!items.length) return null;
   return (

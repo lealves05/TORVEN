@@ -5,7 +5,7 @@ import { q, tx } from '../db.js';
 import { need, can } from '../auth.js';
 import { parse, notFound, bad, round2, publicToken, OPEN_STATUSES, HttpError } from '../util.js';
 import {
-  nextNumber, itemSchema, prepareItems, insertItems, syncOrderStock, logEvent, orderFinance, STATUS_LABEL,
+  nextNumber, itemSchema, prepareItems, insertItems, syncOrderStock, logEvent, orderFinance, STATUS_LABEL, refreshLabor,
 } from '../domain.js';
 
 const r = Router();
@@ -49,7 +49,8 @@ export function scopeWhere(req, params, alias = 'o') {
 
 const stripValues = (req) => (o) => {
   if (can(req, 'orders_values')) return o;
-  const x = { ...o, subtotal: null, discount: null, total: null, paid: null, receivable: null, balance: null };
+  const x = { ...o, subtotal: null, discount: null, total: null, paid: null, receivable: null, balance: null, labor_cost: null };
+  if (x.time_logs) x.time_logs = x.time_logs.map((l) => ({ ...l, cost: null, hourly_cost: null }));
   if (x.items) x.items = x.items.map((i) => ({ ...i, unit_price: null, unit_cost: null, total: null, discount: null, commission_value: null }));
   delete x.payments;
   return x;
@@ -79,7 +80,8 @@ async function loadOrder(req, id, db = null) {
        left join quotes qt on qt.id = o.quote_id
       where o.id = $1 and o.company_id = $2 ${scope}`, params);
   if (!o) throw notFound('OS não encontrada');
-  const [{ rows: items }, { rows: events }, { rows: payments }, { rows: invoices }] = await seq([
+  const [{ rows: items }, { rows: events }, { rows: payments }, { rows: invoices }, { rows: schedule }, { rows: timeLogs }, { rows: inspections },
+    { rows: warranties }, { rows: [warrantyOf] }] = await seq([
     () => run(`select i.*, t.name as technician_name, p.stock as product_stock
            from order_items i left join technicians t on t.id = i.technician_id left join products p on p.id = i.product_id
           where i.order_id = $1 order by i.position`, [id]),
@@ -89,11 +91,23 @@ async function loadOrder(req, id, db = null) {
            from transactions where order_id = $1 order by created_at`, [id]),
     () => run(`select id, kind, status, number, series, amount, provider, pdf_url, created_at
            from invoices where order_id = $1 order by created_at desc`, [id]),
+    () => run(`select se.id, se.kind, se.title, se.starts_at, se.ends_at, se.status, se.technician_id, t.name as technician_name, se.location
+           from schedule_entries se left join technicians t on t.id = se.technician_id where se.order_id = $1 order by se.starts_at`, [id]),
+    () => run(`select l.id, l.technician_id, t.name as technician_name, l.activity, l.started_at, l.ended_at, l.minutes, l.cost, l.hourly_cost,
+                      l.manual, l.notes, l.created_at, u.name as user_name
+           from order_time_logs l join technicians t on t.id = l.technician_id left join users u on u.id = l.user_id
+          where l.order_id = $1 order by l.started_at desc`, [id]),
+    () => run(`select i.*, u.name as inspector_name from order_inspections i left join users u on u.id = i.inspector_id
+          where i.order_id = $1 order by i.created_at desc`, [id]),
+    () => run(`select id, number, status, within_warranty, description, opened_at, rework_order_id from warranty_claims
+          where order_id = $1 order by opened_at desc`, [id]),
+    () => run('select id, number from orders where id = $1', [o.warranty_of]),
   ]);
   const fin = await orderFinance(db || { query: q }, id);
   const paid = round2(Number(fin.paid) - Number(fin.refunded));
   return {
-    ...o, items, events, payments, invoices,
+    ...o, items, events, payments, invoices, schedule, inspections, warranties, warranty_of_number: warrantyOf?.number || null,
+    time_logs: timeLogs, open_logs: timeLogs.filter((l) => !l.ended_at),
     paid, receivable: Number(fin.receivable), balance: round2(o.total - paid - Number(fin.receivable)),
   };
 }
@@ -265,6 +279,13 @@ r.post('/:id/status', need('orders_edit'), async (req, res) => {
     await loadOrder(req, cur.id, db);
     if (['entregue', 'cancelada'].includes(cur.status)) throw bad('OS entregue ou cancelada. Use "Reabrir".');
     if (cur.status === d.status) return;
+    if (d.status === 'pronta') {
+      if (req.settings.orders.requireInspection && !['aprovado', 'aprovado_ressalva'].includes(cur.inspection_result)) {
+        throw bad('Registre a inspeção final aprovada antes de marcar como pronta.');
+      }
+      const { rows: [open] } = await db.query('select count(*)::int as n from order_time_logs where order_id = $1 and ended_at is null', [cur.id]);
+      if (open.n) throw bad('Há apontamento de horas em andamento nesta OS. Encerre o cronômetro antes.');
+    }
     await db.query(
       `update orders set status = $2, updated_at = now(),
               started_at = case when $2 = 'em_execucao' then coalesce(started_at, now()) else started_at end,
@@ -367,11 +388,18 @@ r.delete('/:id/payments/:tid', need('checkout'), async (req, res) => {
 
 // ---------- entrega / cancelamento / reabertura ----------
 r.post('/:id/deliver', need('orders_deliver'), async (req, res) => {
-  const d = parse(paySchema.extend({ message: opt }), req.body);
+  const d = parse(paySchema.extend({ message: opt, received_by: opt, received_document: opt }), req.body);
   await tx(async (db) => {
     const { rows: [o] } = await db.query('select * from orders where id = $1 and company_id = $2 for update', [req.params.id, req.companyId]);
     if (!o) throw notFound();
     if (['entregue', 'cancelada'].includes(o.status)) throw bad('OS já entregue ou cancelada.');
+    const cfgO = req.settings.orders;
+    if (o.kind === 'os' && cfgO.requireInspection && !['aprovado', 'aprovado_ressalva'].includes(o.inspection_result)) {
+      throw bad('Registre a inspeção final aprovada antes de entregar.');
+    }
+    if (o.kind === 'os' && cfgO.requireReceiver && !d.received_by) throw bad('Informe quem recebeu o serviço.');
+    const { rows: [openLogs] } = await db.query('select count(*)::int as n from order_time_logs where order_id = $1 and ended_at is null', [o.id]);
+    if (openLogs.n) throw bad('Há apontamento de horas em andamento nesta OS. Encerre o cronômetro antes de entregar.');
     if (d.payments.length || d.installments.length) {
       if (!can(req, 'checkout')) throw new HttpError(403, 'Seu perfil não permite receber pagamentos.');
       await registerPayments(db, req, o, d);
@@ -383,9 +411,11 @@ r.post('/:id/deliver', need('orders_deliver'), async (req, res) => {
     }
     await db.query(
       `update orders set status='entregue', delivered_at=now(), finished_at=coalesce(finished_at, now()), updated_at=now(),
-              warranty_until = case when warranty_days > 0 then (now() at time zone $2)::date + warranty_days end
-        where id = $1`, [o.id, req.settings.timezone]);
-    await logEvent(db, o.id, { type: 'status', from: o.status, to: 'entregue', message: d.message || null, isPublic: true, userId: req.user.id });
+              warranty_until = case when warranty_days > 0 then (now() at time zone $2)::date + warranty_days end,
+              delivered_to = $3, delivered_document = $4
+        where id = $1`, [o.id, req.settings.timezone, d.received_by || null, d.received_document || null]);
+    await db.query("update schedule_entries set status = 'concluido', updated_at = now() where order_id = $1 and kind in ('entrega','retirada') and status in ('agendado','em_andamento')", [o.id]);
+    await logEvent(db, o.id, { type: 'status', from: o.status, to: 'entregue', message: [d.received_by && `Recebido por ${d.received_by}${d.received_document ? ` (${d.received_document})` : ''}`, d.message].filter(Boolean).join(' — ') || null, isPublic: true, userId: req.user.id });
   });
   res.json(await loadOrder(req, req.params.id));
 });
@@ -410,6 +440,10 @@ r.post('/:id/cancel', need('orders_cancel'), async (req, res) => {
     const { rows: [upd] } = await db.query(
       "update orders set status='cancelada', cancelled_at=now(), updated_at=now() where id=$1 returning *", [o.id]);
     await syncOrderStock(db, upd, req.user.id, req.settings);
+    await db.query(`update order_time_logs set ended_at = now(), minutes = round(extract(epoch from now() - started_at) / 60.0, 2),
+                           cost = round(extract(epoch from now() - started_at) / 3600.0 * hourly_cost, 2) where order_id = $1 and ended_at is null`, [o.id]);
+    await refreshLabor(db, o.id);
+    await db.query("update schedule_entries set status = 'cancelado', updated_at = now() where order_id = $1 and status = 'agendado'", [o.id]);
     await logEvent(db, o.id, { type: 'status', from: o.status, to: 'cancelada', message: d.reason, isPublic: true, userId: req.user.id });
   });
   res.json(await loadOrder(req, req.params.id));

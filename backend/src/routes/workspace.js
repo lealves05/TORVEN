@@ -116,6 +116,24 @@ r.get('/notifications', async (req, res) => {
           and o.status not in ('entregue','cancelada','pronta') and o.promised_at < now()${scope}`, params).then((x) =>
       push({ id: 'orders_late', level: 'danger', title: 'OS atrasadas', detail: 'Prazo prometido já passou', count: x.late, link: '/os' })));
   }
+  if (can(req, 'schedule_view') || can(req, 'schedule_manage')) {
+    const own = !can(req, 'schedule_manage') && req.user.role !== 'owner' && req.ownTechnician;
+    jobs.push(one(
+      `select count(*) filter (where status = 'agendado' and (starts_at at time zone 'America/Sao_Paulo')::date = (now() at time zone 'America/Sao_Paulo')::date)::int as today,
+              count(*) filter (where status = 'agendado' and ends_at < now() - interval '2 hours')::int as late
+         from schedule_entries where company_id = $1 ${own ? 'and technician_id = $2' : ''}`, own ? [cid, req.ownTechnician] : [cid]).then((x) => {
+      push({ id: 'schedule_today', level: 'info', title: 'Compromissos hoje', detail: 'Visitas, execuções e entregas agendadas', count: x.today, link: '/agenda' });
+      push({ id: 'schedule_late', level: 'warning', title: 'Agenda sem baixa', detail: 'Compromissos passados ainda como "agendado"', count: x.late, link: '/agenda' });
+    }));
+  }
+  if (can(req, 'time_log')) {
+    jobs.push(one(`select count(*)::int as n from order_time_logs where company_id = $1 and ended_at is null and started_at < now() - interval '10 hours'`, [cid])
+      .then((x) => push({ id: 'timers_long', level: 'warning', title: 'Cronômetros esquecidos', detail: 'Apontamentos abertos há mais de 10 horas', count: x.n, link: '/producao' })));
+  }
+  if (can(req, 'warranty_manage')) {
+    jobs.push(one("select count(*)::int as n from warranty_claims where company_id = $1 and status in ('aberta','em_analise')", [cid])
+      .then((x) => push({ id: 'warranty_open', level: 'warning', title: 'Garantias em aberto', detail: 'Aguardando análise', count: x.n, link: '/garantias' })));
+  }
   if (can(req, 'materials_manage') || can(req, 'purchases')) {
     jobs.push(one('select count(*)::int as n from products where company_id = $1 and active and min_stock > 0 and stock <= min_stock', [cid])
       .then((x) => push({ id: 'stock_low', level: 'warning', title: 'Materiais no estoque mínimo', detail: 'Programe a reposição', count: x.n, link: '/estoque' })));

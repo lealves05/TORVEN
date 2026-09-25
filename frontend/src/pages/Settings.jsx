@@ -96,6 +96,9 @@ export default function Settings() {
             </div>
             <Toggle checked={o.allowNegativeStock} onChange={(v) => setO({ allowNegativeStock: v })} label="Permitir lançar material sem saldo em estoque" hint="Útil quando a entrada da nota do fornecedor ainda não foi registrada." />
             <Toggle checked={o.requirePaymentToDeliver} onChange={(v) => setO({ requirePaymentToDeliver: v })} label="Exigir pagamento (ou parcelas lançadas) para entregar" />
+            <Toggle checked={!!o.requireInspection} onChange={(v) => setO({ requireInspection: v })} label="Exigir inspeção final aprovada" hint="A OS só pode ficar pronta e ser entregue com checklist de inspeção aprovado." />
+            <Toggle checked={!!o.requireReceiver} onChange={(v) => setO({ requireReceiver: v })} label="Exigir nome de quem recebeu na entrega" />
+            <Input label="Duração padrão da visita técnica (min)" type="number" min={15} step={15} value={o.defaultVisitMinutes ?? 60} onChange={(e) => setO({ defaultVisitMinutes: +e.target.value })} />
             <Textarea label="Termos impressos na OS" rows={4} value={o.termsOrder} onChange={(e) => setO({ termsOrder: e.target.value })} />
             <Textarea label="Termos padrão dos orçamentos" rows={4} value={o.termsQuote} onChange={(e) => setO({ termsQuote: e.target.value })} />
           </div>
@@ -105,6 +108,7 @@ export default function Settings() {
             <Textarea label="Premissas padrão" rows={2} value={s.quotes?.assumptions || ''} onChange={(e) => setS({ quotes: { ...s.quotes, assumptions: e.target.value } })} />
             <Textarea label="Exclusões padrão" rows={2} value={s.quotes?.exclusions || ''} onChange={(e) => setS({ quotes: { ...s.quotes, exclusions: e.target.value } })} />
           </div>
+          <ChecklistTemplates />
           <div className="card space-y-4 p-6">
             <h3 className="font-semibold">Numeração dos documentos</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -425,3 +429,46 @@ function PermissionsTab({ s, setS }) {
   );
 }
 
+
+const CHECK_KIND = { recebimento: 'Recebimento', inspecao: 'Inspeção final', entrega: 'Entrega' };
+
+function ChecklistTemplates() {
+  const [run, busy] = useAction();
+  const [list, setList] = useState([]);
+  const [edit, setEdit] = useState(null);
+  const load = () => api.get('/quality/templates?all=1').then(setList).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const save = async () => {
+    const body = { name: edit.name, kind: edit.kind, items: edit.text.split('\n').map((x) => x.trim()).filter(Boolean), active: edit.active !== false };
+    const r = await run(() => (edit.id ? api.put(`/quality/templates/${edit.id}`, body) : api.post('/quality/templates', body)), 'Checklist salvo');
+    if (r !== FAIL) { setEdit(null); load(); }
+  };
+  return (
+    <div className="card space-y-3 p-6">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">Checklists de qualidade</h3>
+        <button className="btn-ghost h-8 text-xs text-primary" onClick={() => setEdit({ name: '', kind: 'inspecao', text: '', active: true })}><Plus className="h-3.5 w-3.5" /> Novo</button>
+      </div>
+      <ul className="divide-y divide-line text-sm">
+        {list.map((t) => (
+          <li key={t.id} className={cx('flex items-center gap-2 py-2', !t.active && 'opacity-50')}>
+            <span className="chip bg-muted text-ink-soft">{CHECK_KIND[t.kind]}</span>
+            <span className="flex-1">{t.name} <span className="text-xs text-ink-faint">· {t.items.length} itens</span></span>
+            <button className="btn-ghost h-8 text-xs" onClick={() => setEdit({ ...t, text: t.items.join('\n') })}>Editar</button>
+          </li>
+        ))}
+      </ul>
+      {edit && (
+        <Modal open onClose={() => setEdit(null)} title={edit.id ? 'Editar checklist' : 'Novo checklist'}
+          footer={<><button className="btn-ghost" onClick={() => setEdit(null)}>Voltar</button><button className="btn-primary" disabled={busy || edit.name.trim().length < 2 || !edit.text.trim()} onClick={save}>Salvar</button></>}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Nome" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+            <Select label="Uso" value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>{Object.entries(CHECK_KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
+            <Textarea label="Itens (um por linha)" rows={8} value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} className="sm:col-span-2" />
+            <div className="sm:col-span-2"><Toggle checked={edit.active !== false} onChange={(v) => setEdit({ ...edit, active: v })} label="Ativo" /></div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}

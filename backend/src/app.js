@@ -26,6 +26,10 @@ import requestRoutes from './routes/requests.js';
 import attachmentRoutes from './routes/attachments.js';
 import auditRoutes from './routes/audit.js';
 import workspaceRoutes from './routes/workspace.js';
+import scheduleRoutes from './routes/schedule.js';
+import productionRoutes from './routes/production.js';
+import qualityRoutes from './routes/quality.js';
+import warrantyRoutes from './routes/warranty.js';
 
 export function createApp() {
   const app = express();
@@ -74,6 +78,10 @@ export function createApp() {
   api.use('/requests', requestRoutes);
   api.use('/attachments', attachmentRoutes);
   api.use('/audit', auditRoutes);
+  api.use('/schedule', scheduleRoutes);
+  api.use('/production', productionRoutes);
+  api.use('/quality', qualityRoutes);
+  api.use('/warranty', warrantyRoutes);
   api.use('/', workspaceRoutes);
   app.use('/api', api);
 

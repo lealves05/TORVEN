@@ -148,3 +148,30 @@ export const STATUS_LABEL = {
   aprovada: 'Aprovada', aguardando_material: 'Aguardando material', em_execucao: 'Em execução',
   pronta: 'Pronta para entrega', entregue: 'Entregue', cancelada: 'Cancelada',
 };
+
+export const DEFAULT_CHECKLISTS = [
+  { name: 'Inspeção final de solda', kind: 'inspecao', items: [
+    'Inspeção visual do cordão (trincas, porosidade, mordedura)', 'Dimensões conferidas com o pedido', 'Alinhamento e esquadro',
+    'Rebarbas removidas / acabamento', 'Teste funcional (quando aplicável)', 'Limpeza da peça'] },
+  { name: 'Entrega ao cliente', kind: 'entrega', items: [
+    'Serviço demonstrado ao cliente', 'Peças substituídas devolvidas/descartadas conforme combinado', 'Garantia explicada', 'Acessórios devolvidos'] },
+];
+
+/** Estrutura mínima de uma empresa nova: unidade principal e checklists padrão. */
+export async function ensureCompanyDefaults(db, companyId) {
+  await db.query(`insert into units (company_id, name, is_default) select $1, 'Matriz', true
+                   where not exists (select 1 from units where company_id = $1)`, [companyId]);
+  for (const t of DEFAULT_CHECKLISTS) {
+    await db.query(`insert into checklist_templates (company_id, name, kind, items) select $1, $2, $3, $4
+                     where not exists (select 1 from checklist_templates where company_id = $1 and kind = $3)`,
+    [companyId, t.name, t.kind, JSON.stringify(t.items)]);
+  }
+}
+
+/** Recalcula minutos e custo real de mão de obra da OS a partir dos apontamentos. */
+export async function refreshLabor(db, orderId) {
+  await db.query(
+    `update orders set labor_minutes = coalesce((select sum(minutes) from order_time_logs where order_id = $1 and ended_at is not null), 0),
+                       labor_cost = coalesce((select sum(cost) from order_time_logs where order_id = $1 and ended_at is not null), 0)
+      where id = $1`, [orderId]);
+}

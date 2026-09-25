@@ -17,6 +17,7 @@ import PaymentModal from '../components/PaymentModal';
 import InvoiceModal from '../components/InvoiceModal';
 import { EquipmentPicker } from '../components/CustomerPicker';
 import { StatusBadge } from './Dashboard';
+import { StateChips, ExecutionCard, QualityCard, ScheduleCard, WarrantyCard } from '../components/OrderOperation';
 
 const EDITABLE = ['customer_id', 'equipment_id', 'technician_id', 'priority', 'service_location', 'service_address', 'promised_at',
   'problem', 'diagnosis', 'solution', 'accessories', 'condition', 'discount', 'warranty_days', 'notes', 'internal_notes'];
@@ -106,6 +107,7 @@ export default function OrderDetail() {
             Aberta em {fmtDateTime(o.received_at)} por {o.created_by_name || '—'}
             {o.quote_number && <> · <Link to={`/orcamentos/${o.quote_id}`} className="text-primary">orçamento nº {o.quote_number}</Link></>}
           </p>
+          <StateChips o={o} />
         </div>
         <div className="flex flex-wrap gap-2">
           <Link to={`/imprimir/os/${o.id}`} target="_blank" className="btn-outline"><Printer className="h-4 w-4" /> Imprimir</Link>
@@ -162,7 +164,7 @@ export default function OrderDetail() {
                       newEquipment={f.equipment} onNewEquipment={(e) => setF((x) => ({ ...x, equipment: e }))} />
                   ) : (
                     <>
-                      <div className="label">Equipamento / peça</div>
+                      <div className="label">Objeto de serviço</div>
                       <div className="font-medium">{o.equipment_description || '—'}</div>
                       <div className="text-sm text-ink-soft">{[o.equipment_brand, o.equipment_model, o.equipment_serial && `nº ${o.equipment_serial}`].filter(Boolean).join(' · ')}</div>
                     </>
@@ -191,6 +193,8 @@ export default function OrderDetail() {
               showTechnician={o.kind === 'os'} hideValues={!values} readOnly={!editable} />
           </section>
 
+          {o.kind === 'os' && (can('time_log') || o.time_logs?.length > 0) && <ExecutionCard o={o} onChanged={load} />}
+          {o.kind === 'os' && <QualityCard o={o} onChanged={load} />}
           <Timeline o={o} onAdded={apply} />
         </div>
 
@@ -227,6 +231,8 @@ export default function OrderDetail() {
             <Textarea label="Anotações internas" rows={2} value={f.internal_notes} onChange={set('internal_notes')} disabled={!editable} />
           </section>
 
+          {o.kind === 'os' && (can('schedule_view', 'schedule_manage')) && <ScheduleCard o={o} onChanged={load} />}
+          {o.kind === 'os' && <WarrantyCard o={o} onChanged={load} />}
           {values && (
             <section className="card p-5">
               <h2 className="mb-3 font-semibold">Financeiro</h2>
@@ -366,12 +372,26 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
   const { can } = useAuth();
   const settings = useSettings();
   const [run, busy] = useAction();
+  const [rec, setRec] = useState({ received_by: o.customer_name || '', received_document: '' });
   const values = can('orders_values');
+  const needInspection = o.kind === 'os' && settings.orders?.requireInspection && !['aprovado', 'aprovado_ressalva'].includes(o.inspection_result);
   const deliver = async (body = {}) => {
-    const r = await run(() => api.post(`/orders/${o.id}/deliver`, body), `${o.kind === 'venda' ? 'Venda' : 'OS'} entregue`);
+    const r = await run(() => api.post(`/orders/${o.id}/deliver`, { ...body, received_by: rec.received_by || null, received_document: rec.received_document || null }), `${o.kind === 'venda' ? 'Venda' : 'OS'} entregue`);
     if (r !== FAIL) onDone(r);
   };
-  const warn = dirty && <div className="rounded-app-sm bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">Há alterações não salvas nesta OS. Salve antes de entregar.</div>;
+  const warn = (
+    <>
+      {dirty && <div className="rounded-app-sm bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">Há alterações não salvas nesta OS. Salve antes de entregar.</div>}
+      {needInspection && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">A empresa exige inspeção final aprovada antes da entrega.</div>}
+      {o.open_logs?.length > 0 && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">Há cronômetro em andamento nesta OS: encerre antes de entregar.</div>}
+      {o.kind === 'os' && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input label={`Quem recebeu${settings.orders?.requireReceiver ? '' : ' (opcional)'}`} value={rec.received_by} onChange={(e) => setRec({ ...rec, received_by: e.target.value })} />
+          <Input label="Documento (opcional)" value={rec.received_document} onChange={(e) => setRec({ ...rec, received_document: e.target.value })} />
+        </div>
+      )}
+    </>
+  );
   if (values && can('checkout') && o.balance > 0.009) {
     return (
       <PaymentModal open onClose={onClose} balance={o.balance} title="Entregar ao cliente" subtitle={`Receba o saldo de ${money(o.balance)} ou lance como a receber`}
@@ -382,7 +402,7 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
   }
   return (
     <Modal open onClose={onClose} size="sm" title="Confirmar entrega"
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || dirty} onClick={() => deliver()}>Confirmar entrega</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || dirty || needInspection || (settings.orders?.requireReceiver && o.kind === 'os' && !rec.received_by.trim())} onClick={() => deliver()}>Confirmar entrega</button></>}>
       <div className="space-y-3 text-sm">
         {warn}
         <p>O equipamento será marcado como entregue ao cliente{o.warranty_days > 0 && <> e a garantia de <b>{o.warranty_days} dias</b> começa a contar hoje</>}.</p>

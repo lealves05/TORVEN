@@ -6,6 +6,7 @@ import { need, can } from '../auth.js';
 import { parse, notFound, bad, publicToken, HttpError } from '../util.js';
 import { nextNumber, logEvent } from '../domain.js';
 import { audit } from '../audit.js';
+import { conflicts } from './schedule.js';
 
 const r = Router();
 r.use(need('requests_view', 'requests_manage'));
@@ -190,6 +191,9 @@ async function changeStatus(db, req, cur, to, message, extra = {}) {
   for (const [k, v] of Object.entries(extra)) { vals.push(v); sets.push(`${k} = $${vals.length}`); }
   await db.query(`update service_requests set ${sets.join(', ')} where id = $1`, vals);
   await addEvent(db, cur.id, req.user.id, { from: cur.status, to, message });
+  if (['perdida', 'cancelada'].includes(to)) {
+    await db.query("update schedule_entries set status = 'cancelado', updated_at = now() where request_id = $1 and status = 'agendado'", [cur.id]);
+  }
   await audit(db, req, { entity: 'request', entityId: cur.id, action: 'status', summary: `Solicitação nº ${cur.number}: ${REQUEST_STATUS[cur.status]} → ${REQUEST_STATUS[to]}${message ? ` — ${message}` : ''}` });
 }
 
@@ -215,6 +219,7 @@ r.post('/:id/visit', need('requests_manage'), async (req, res) => {
   const d = parse(z.object({
     visit_at: z.string().min(10, 'informe data e hora da visita'),
     visit_technician_id: uuidOpt, visit_notes: opt,
+    minutes: z.coerce.number().int().min(15).max(24 * 60).optional(), force: z.boolean().optional(),
   }), req.body);
   const when = new Date(d.visit_at);
   if (Number.isNaN(when.getTime())) throw bad('Data da visita inválida.');
@@ -224,8 +229,24 @@ r.post('/:id/visit', need('requests_manage'), async (req, res) => {
       const { rows: [t] } = await db.query('select id from technicians where id = $1 and company_id = $2', [d.visit_technician_id, req.companyId]);
       if (!t) throw notFound('Técnico não encontrado');
     }
+    const end = new Date(when.getTime() + (d.minutes || req.settings.orders.defaultVisitMinutes || 60) * 60000);
+    const { rows: [entry] } = await db.query("select id from schedule_entries where request_id = $1 and kind = 'visita' and status in ('agendado','em_andamento')", [cur.id]);
+    const clash = await conflicts(db, req.companyId, d.visit_technician_id || null, when.toISOString(), end.toISOString(), entry?.id || null);
+    if (clash.length && !d.force) {
+      throw new HttpError(409, `Conflito de agenda: o técnico já tem ${clash.map((c) => `"${c.title}"`).join(', ')} nesse horário. Confirme para agendar mesmo assim.`, { conflicts: clash });
+    }
     await changeStatus(db, req, cur, 'visita_agendada', `Visita/triagem agendada para ${when.toLocaleString('pt-BR', { timeZone: req.settings.timezone || 'America/Sao_Paulo' })}`,
       { visit_at: when.toISOString(), visit_technician_id: d.visit_technician_id || null, visit_notes: d.visit_notes || null });
+    if (entry) {
+      await db.query('update schedule_entries set starts_at = $2, ends_at = $3, technician_id = $4, notes = $5, updated_at = now() where id = $1',
+        [entry.id, when.toISOString(), end.toISOString(), d.visit_technician_id || null, d.visit_notes || null]);
+    } else {
+      await db.query(
+        `insert into schedule_entries (company_id, unit_id, kind, title, request_id, technician_id, starts_at, ends_at, location, notes, created_by)
+         values ($1,$2,'visita',$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [req.companyId, cur.unit_id, `Visita — ${cur.title}`, cur.id, d.visit_technician_id || null, when.toISOString(), end.toISOString(),
+          cur.service_location === 'externo' ? cur.address : null, d.visit_notes || null, req.user.id]);
+    }
   });
   res.json(await loadRequest(req.params.id, req.companyId));
 });

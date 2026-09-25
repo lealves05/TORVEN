@@ -1,8 +1,14 @@
 // Dados de exemplo para explorar o sistema (opcional no cadastro).
+import { ensureCompanyDefaults, refreshLabor } from './domain.js';
 import { DEFAULT_SETTINGS, publicToken, round2 } from './util.js';
 import { prepareItems, insertItems, syncOrderStock, logEvent, moveStock } from './domain.js';
 
 const DAY = 86400000;
+/** Data/hora no fuso de São Paulo (dias a partir de hoje). */
+const brAt = (days, h, m = 0) => {
+  const d = new Date(Date.now() + days * DAY).toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+  return new Date(`${d}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`);
+};
 const ago = (d, h = 10) => { const x = new Date(Date.now() - d * DAY); x.setHours(h, 0, 0, 0); return x; };
 
 export async function seedDemo(db, companyId, userId) {
@@ -240,8 +246,56 @@ export async function seedDemo(db, companyId, userId) {
   await request(1, { c: marcos, channel: 'whatsapp', title: 'Portão basculante novo para garagem', status: 'orcada', quote: qPortao, location: 'externo',
     address: 'Endereço do cliente', diagnosis: 'Vão de 3,0 x 2,4 m; estrutura existente aproveitável.', hoursAgo: 30 });
   await request(2, { c: fazenda, channel: 'telefone', title: 'Implemento com chassi trincado', status: 'visita_agendada', location: 'externo', tech: joao,
-    visit: new Date(Date.now() + 26 * 3600000).toISOString(), description: 'Trinca na longarina da plantadeira; precisa avaliar no local.', priority: 'alta', hoursAgo: 5 });
+    visit: brAt(1, 14).toISOString(), description: 'Trinca na longarina da plantadeira; precisa avaliar no local.', priority: 'alta', hoursAgo: 5 });
   await request(3, { contact: 'Cláudio Moreira', phone: '(19) 99876-1122', channel: 'presencial', title: 'Soldar suporte de ar-condicionado', status: 'nova', hoursAgo: 2 });
+
+  // Operação técnica: agenda, apontamentos, inspeção e garantia
+  await ensureCompanyDefaults(db, companyId);
+  const byStatus = async (st) => (await db.query('select * from orders where company_id = $1 and status = $2 and kind = $3 order by number', [companyId, st, 'os'])).rows;
+  const hourAt = brAt;
+  const sched = (kind, title, o, tech, start, hours, status = 'agendado', extra = {}) => db.query(
+    `insert into schedule_entries (company_id, unit_id, kind, title, order_id, request_id, technician_id, starts_at, ends_at, location, status, created_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [companyId, unitId, kind, title, o?.id || null, extra.request_id || null, tech?.id || null, start, new Date(start.getTime() + hours * 3600000),
+      extra.location || null, status, userId]);
+  const tlog = (o, tech, startsAt, minutes, activity = 'execucao', open = false) => db.query(
+    `insert into order_time_logs (company_id, order_id, technician_id, user_id, activity, started_at, ended_at, minutes, hourly_cost, cost)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [companyId, o.id, tech.id, userId, activity, startsAt, open ? null : new Date(startsAt.getTime() + minutes * 60000), open ? null : minutes,
+      tech.hourly_cost || 45, open ? null : round2(minutes / 60 * Number(tech.hourly_cost || 45))]);
+  const [emExec] = await byStatus('em_execucao');
+  const [pronta] = await byStatus('pronta');
+  const [aprovadaMat] = await byStatus('aguardando_material');
+  const entregues = await byStatus('entregue');
+  const visitReq = (await db.query("select * from service_requests where company_id = $1 and status = 'visita_agendada' limit 1", [companyId])).rows[0];
+  if (visitReq) await sched('visita', `Visita — ${visitReq.title}`, null, joao, new Date(visitReq.visit_at), 1, 'agendado', { request_id: visitReq.id, location: visitReq.address });
+  if (emExec) {
+    const tech = techs.find((t) => t.id === emExec.technician_id) || carlos;
+    await sched('execucao', `Execução OS nº ${emExec.number}`, emExec, tech, hourAt(0, 8), 8, 'em_andamento');
+    await tlog(emExec, tech, hourAt(-1, 13), 150);
+    await tlog(emExec, tech, new Date(Date.now() - 40 * 60000), 0, 'execucao', true);
+    await refreshLabor(db, emExec.id);
+  }
+  if (pronta) {
+    const tech = techs.find((t) => t.id === pronta.technician_id) || rafael;
+    await tlog(pronta, tech, hourAt(-2, 8), 210);
+    await refreshLabor(db, pronta.id);
+    const tpl = (await db.query("select * from checklist_templates where company_id = $1 and kind = 'inspecao' limit 1", [companyId])).rows[0];
+    if (tpl) {
+      await db.query(
+        `insert into order_inspections (company_id, order_id, kind, template_id, items, result, notes, inspector_id) values ($1,$2,'inspecao',$3,$4,'aprovado',null,$5)`,
+        [companyId, pronta.id, tpl.id, JSON.stringify(tpl.items.map((label) => ({ label, result: 'ok' }))), userId]);
+      await db.query("update orders set inspection_result = 'aprovado' where id = $1", [pronta.id]);
+    }
+    await sched('entrega', `Entrega OS nº ${pronta.number}`, pronta, tech, hourAt(1, 10), 1);
+  }
+  if (aprovadaMat) await sched('execucao', `Execução OS nº ${aprovadaMat.number} (após chegada do material)`, aprovadaMat, joao, hourAt(2, 8), 6);
+  if (entregues[0]) {
+    await db.query(
+      `insert into warranty_claims (company_id, number, order_id, customer_id, within_warranty, description, opened_by)
+       values ($1, 1, $2, $3, true, 'Cliente relata que a máquina voltou a desarmar após 2 semanas de uso.', $4)`,
+      [companyId, entregues[0].id, entregues[0].customer_id, userId]);
+  }
 
   // Entrada de materiais recebida
   const pu = await ins(

@@ -9,7 +9,7 @@ r.use(need('audit_view'));
 export const AUDIT_ENTITIES = {
   request: 'Solicitação', quote: 'Orçamento', order: 'Ordem de serviço', customer: 'Cliente', invoice: 'Documento fiscal',
   user: 'Usuário', unit: 'Unidade', settings: 'Configurações', permissions: 'Perfis de acesso', fiscal: 'Integração fiscal',
-  stock: 'Estoque', cash: 'Caixa', payment: 'Pagamento', price: 'Preço', attachment: 'Anexo',
+  stock: 'Estoque', cash: 'Caixa', payment: 'Pagamento', price: 'Preço', attachment: 'Anexo', schedule: 'Agenda', time: 'Apontamento de horas', inspection: 'Inspeção', warranty: 'Garantia',
 };
 
 r.get('/', async (req, res) => {

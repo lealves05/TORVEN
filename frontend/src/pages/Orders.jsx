@@ -5,7 +5,7 @@ import { api, qs } from '../lib/api';
 import { money, fmt, ORDER_STATUS, OPEN_STATUSES, PRIORITY, downloadCSV } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
-import { PageHeader, Select, Loading, Empty, useAction, FAIL, cx } from '../components/ui';
+import { PageHeader, Loading, Empty, useAction, FAIL, cx } from '../components/ui';
 import { StatusBadge } from './Dashboard';
 
 export default function Orders() {

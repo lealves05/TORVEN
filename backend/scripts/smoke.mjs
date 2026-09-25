@@ -415,6 +415,87 @@ try {
   await call('POST', '/users', { name: 'x', email: `own${Date.now()}@x.com`, password: '123456', role: 'owner' }, [400]);
   ok(true, 'não cria segundo proprietário');
 
+  // ================= FASE 2 — operação técnica =================
+  const tpls = await call('GET', '/quality/templates');
+  ok(tpls.some((t) => t.kind === 'inspecao') && tpls.some((t) => t.kind === 'entrega'), 'checklists padrão criados');
+  ok((await call('GET', '/schedule?kind=visita')).length >= 1, 'visita da solicitação aparece na agenda');
+  const tomorrow = (h) => { const d = new Date(Date.now() + 86400000); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+  const ag = await call('POST', '/schedule', { kind: 'execucao', title: `Execução OS ${os3.number}`, order_id: os3.id, technician_id: techs[0].id, starts_at: tomorrow(8), ends_at: tomorrow(12) });
+  const clash = await call('POST', '/schedule', { kind: 'entrega', title: 'Outra', technician_id: techs[0].id, starts_at: tomorrow(10), ends_at: tomorrow(11) }, [409]);
+  ok(ag.technician_name && clash.conflicts?.length === 1, 'agenda com verificação de conflito por técnico');
+  const forced = await call('POST', '/schedule', { kind: 'entrega', title: 'Outra', technician_id: techs[0].id, starts_at: tomorrow(10), ends_at: tomorrow(11), force: true });
+  await call('DELETE', `/schedule/${forced.id}`);
+  await call('POST', '/schedule', { kind: 'outro', title: 'x', starts_at: tomorrow(10), ends_at: tomorrow(9) }, [400]);
+  ok(true, 'conflito confirmado grava; intervalo inválido bloqueado');
+
+  let tl = await call('POST', `/production/orders/${os3.id}/time/start`, { technician_id: techs[0].id });
+  let x3 = await call('GET', `/orders/${os3.id}`);
+  ok(tl.id && x3.status === 'em_execucao' && x3.open_logs.length === 1, 'cronômetro iniciado e OS passa a "em execução"');
+  await call('POST', `/orders/${os3.id}/status`, { status: 'pronta' }, [400]);
+  ok(true, 'não marca pronta com cronômetro aberto');
+  tl = await call('POST', `/production/time/${tl.id}/stop`, { notes: 'Soldagem das dobradiças' });
+  ok(tl.ended_at && tl.minutes >= 1, `cronômetro encerrado (${tl.minutes} min)`);
+  const y = (h) => { const d = new Date(Date.now() - 86400000); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+  await call('POST', `/production/orders/${os3.id}/time`, { technician_id: techs[0].id, started_at: y(8), ended_at: y(10), notes: 'Esqueci o cronômetro' });
+  await call('POST', `/production/orders/${os3.id}/time`, { technician_id: techs[0].id, started_at: y(9), ended_at: y(11), notes: 'Sobreposto' }, [400]);
+  await call('POST', `/production/orders/${os3.id}/time`, { technician_id: techs[0].id, started_at: tomorrow(8), ended_at: tomorrow(9), notes: 'Futuro' }, [400]);
+  x3 = await call('GET', `/orders/${os3.id}`);
+  ok(x3.labor_minutes >= 121 && x3.labor_cost > 0 && x3.time_logs.length === 2, `mão de obra real: ${x3.labor_minutes} min / R$ ${x3.labor_cost}`);
+  ok(true, 'apontamento manual justificado; sobreposição e futuro bloqueados');
+
+  const co = await call('GET', '/company');
+  await call('PUT', '/company', { settings: { orders: { ...co.settings.orders, requireInspection: true, requireReceiver: true } } });
+  await call('POST', `/orders/${os3.id}/status`, { status: 'pronta' }, [400]);
+  ok(true, 'com inspeção obrigatória, não marca pronta sem inspeção aprovada');
+  const tpl = tpls.find((t) => t.kind === 'inspecao');
+  const itemsOk = tpl.items.map((label) => ({ label, result: 'ok' }));
+  const itemsNok = tpl.items.map((label, i) => ({ label, result: i === 0 ? 'nok' : 'ok', note: i === 0 ? 'Porosidade no cordão' : null }));
+  await call('POST', `/quality/orders/${os3.id}/inspections`, { kind: 'inspecao', template_id: tpl.id, items: itemsNok, result: 'aprovado' }, [400]);
+  await call('POST', `/quality/orders/${os3.id}/inspections`, { kind: 'inspecao', template_id: tpl.id, items: itemsNok, result: 'reprovado' });
+  x3 = await call('GET', `/orders/${os3.id}`);
+  ok(x3.inspection_result === 'reprovado' && x3.inspections.length === 1, 'inspeção reprovada registrada');
+  await call('POST', `/quality/orders/${os3.id}/inspections`, { kind: 'inspecao', template_id: tpl.id, items: itemsOk, result: 'aprovado' });
+  x3 = await call('POST', `/orders/${os3.id}/status`, { status: 'pronta' });
+  ok(x3.status === 'pronta', 'aprovada na inspeção → pronta');
+  await call('POST', `/quality/orders/${os3.id}/inspections`, { kind: 'inspecao', items: itemsNok, result: 'reprovado', notes: 'Cliente apontou rebarba' });
+  x3 = await call('GET', `/orders/${os3.id}`);
+  ok(x3.status === 'em_execucao', 'reprovação após "pronta" devolve a OS para execução');
+  await call('POST', `/quality/orders/${os3.id}/inspections`, { kind: 'inspecao', items: itemsOk, result: 'aprovado' });
+  await call('POST', `/orders/${os3.id}/status`, { status: 'pronta' });
+  await call('POST', `/orders/${os3.id}/deliver`, {}, [400]);
+  ok(true, 'entrega exige quem recebeu (quando configurado)');
+  x3 = await call('POST', `/orders/${os3.id}/deliver`, { received_by: 'João Compras', received_document: 'RG 12.345.678-9' });
+  ok(x3.status === 'entregue' && x3.delivered_to === 'João Compras' && x3.warranty_until, 'entrega com recebedor e garantia calculada');
+  await call('PUT', '/company', { settings: { orders: { ...co.settings.orders, requireInspection: false, requireReceiver: false } } });
+
+  const wc = await call('POST', '/warranty', { order_id: os3.id, description: 'Dobradiça voltou a trincar' });
+  ok(wc.within_warranty && wc.status === 'aberta', `garantia nº ${wc.number} aberta dentro do prazo`);
+  await call('POST', '/warranty', { order_id: os3.id, description: 'Duplicada aqui' }, [400]);
+  await call('POST', `/warranty/${wc.id}/status`, { status: 'improcedente' }, [400]);
+  ok(true, 'garantia duplicada e parecer sem análise bloqueados');
+  const rw = await call('POST', `/warranty/${wc.id}/rework`);
+  const rwo = await call('GET', `/orders/${rw.order_id}`);
+  ok(rwo.warranty_of === os3.id && rwo.total === 0 && rwo.priority === 'alta', `OS de retrabalho nº ${rw.number} sem custo ao cliente`);
+  await call('POST', `/warranty/${wc.id}/status`, { status: 'concluida', resolution: 'Refeito' }, [400]);
+  ok(true, 'garantia só conclui depois da entrega do retrabalho');
+  const board = await call('GET', '/production/board');
+  ok(board.technicians.length >= 3 && board.queue.length > 0 && Array.isArray(board.today), 'painel de produção (técnicos, fila e agenda do dia)');
+  const ts = await call('GET', `/production/timesheet?from=${new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10)}`);
+  ok(ts.totals.some((t) => t.technician_id === techs[0].id && t.minutes >= 121 && t.manual === 1), 'folha de horas por técnico');
+  const aud2 = await call('GET', '/audit?entity=time,inspection,warranty,schedule');
+  ok(['time', 'inspection', 'warranty', 'schedule'].every((e) => aud2.rows.some((x) => x.entity === e)), 'auditoria de agenda, apontamentos, inspeções e garantias');
+
+  // técnico: só as próprias horas e a própria agenda
+  const tecUser = await call('POST', '/users', { name: 'Téc 2', email: `tec2${Date.now()}@torven.app`, password: '123456', role: 'technician', technician_id: techs[1].id });
+  const tecTok = (await call('POST', '/auth/login', { email: tecUser.email, password: '123456' })).token;
+  token = tecTok;
+  await call('POST', `/production/orders/${rw.order_id}/time/start`, { technician_id: techs[0].id }, [403, 404]);
+  const tb = await call('GET', '/production/board');
+  ok(tb.technicians.length === 1 && tb.technicians[0].id === techs[1].id, 'técnico vê só o próprio painel e não aponta por outro');
+  await call('POST', '/schedule', { kind: 'outro', title: 'x', starts_at: tomorrow(14), ends_at: tomorrow(15) }, [403]);
+  ok((await call('GET', '/schedule')).every((e) => e.technician_id === techs[1].id), 'técnico vê só a própria agenda e não programa');
+  token = ownerTok;
+
   // isolamento entre empresas
   const other = await call('POST', '/auth/register', { companyName: 'Outra Serralheria', name: 'Outro', email: `outro${Date.now()}@torven.app`, password: '123456' });
   token = other.token;
@@ -425,6 +506,10 @@ try {
   await call('POST', '/attachments', { entity: 'equipment', entity_id: eq2.id, filename: 'a.png', mime: 'image/png', data: png }, [404]);
   await call('POST', '/requests', { customer_id: c.id, title: 'Invasão' }, [404]);
   await call('POST', '/quotes', { customer_id: c.id, title: 'Invasão', items: [{ kind: 'avulso', description: 'X', qty: 1, unit_price: 1 }] }, [404]);
+  await call('GET', `/warranty/${wc.id}`, null, [404]);
+  await call('POST', `/production/orders/${os3.id}/time/start`, {}, [400, 404]);
+  await call('POST', `/quality/orders/${os3.id}/inspections`, { kind: 'inspecao', items: [{ label: 'x', result: 'ok' }], result: 'aprovado' }, [404]);
+  ok((await call('GET', '/schedule')).every((e) => e.order_id !== os3.id), 'isolamento: garantia, apontamento, inspeção e agenda de outra empresa');
   const srch = await call('GET', `/search?q=${encodeURIComponent('Cliente Novo')}`);
   ok(srch.length === 0 && (await call('GET', '/audit')).rows.every((x) => !x.summary?.includes('Cliente Novo')), 'isolamento entre empresas (leitura, escrita, busca e auditoria)');
   token = ownerTok;

@@ -22,14 +22,18 @@ Estados técnicos (OS), comerciais (solicitação/orçamento), fiscais (document
 | **Clientes e objetos de serviço** | Pessoa física/jurídica, várias pessoas de contato, endereços de cobrança/execução/entrega, objetos (equipamento, peça, estrutura, veículo) com material, dimensões, quantidade, placa, patrimônio e condição de recebimento; fotos autorizadas (reduzidas no navegador) e PDFs |
 | **Solicitações** | Entrada por telefone/WhatsApp/e-mail/balcão/site/indicação, triagem, agendamento de visita técnica, diagnóstico, perda/cancelamento com motivo, histórico, geração de orçamento ou OS direta |
 | **Orçamentos** | Mão de obra, materiais, consumíveis, deslocamento, terceiros e outras despesas; itens opcionais/alternativos com grupos; escopo, premissas e exclusões; desconto, acréscimos, tributos estimados, custo e margem; **revisões versionadas** a cada envio; registro de aprovação total/parcial ou recusa (quem, como, quando); link público com escolha de opcionais; conversão em OS só com os itens aprovados |
-| **Ordens de serviço** | Quadro kanban e lista, etapas, técnico por serviço, materiais que baixam estoque, pagamentos parciais, entrega, garantia, link de acompanhamento, impressão |
+| **Ordens de serviço** | Quadro kanban e lista, etapas, técnico por serviço, materiais que baixam estoque, pagamentos parciais, link de acompanhamento, impressão; estados separados na OS (técnico, qualidade, entrega, financeiro, fiscal) |
+| **Agenda e programação** | Visitas, execuções, entregas e retiradas por técnico em visão semanal; conflito de horário detectado (confirmação explícita para sobrepor); visitas das solicitações entram na agenda automaticamente; baixa (concluído / não realizado com motivo) |
+| **Execução e horas** | Cronômetro por técnico (um aberto por vez), lançamento manual justificado e auditado, bloqueio de sobreposição e de horas futuras; custo real de mão de obra na OS (hora do técnico); painel de produção e folha de horas com CSV |
+| **Qualidade e entrega** | Checklists editáveis (recebimento, inspeção final, entrega); inspeção reprovada devolve a OS para execução; opções para exigir inspeção aprovada e nome de quem recebeu; entrega registra recebedor e documento |
+| **Garantias** | Chamado aberto a partir da OS entregue (indica se está no prazo), análise técnica, parecer procedente/improcedente, OS de retrabalho sem custo vinculada à original, conclusão só após o retrabalho entregue |
 | **Materiais e compras** | Estoque, entrada de nota do fornecedor com custo médio e contas a pagar, ajustes e inventário, fornecedores |
 | **Financeiro** | Caixa (abertura/fechamento), contas a pagar/receber, comissões, relatórios gerenciais |
 | **Fiscal** | Focus NFe (NFS-e nacional/municipal e NF-e) com cadastro guiado dentro do sistema. **Sem provedor configurado nada é emitido**: o sistema mostra *“Emissão indisponível: integração fiscal não configurada”* e só permite preparar o documento para conferência (sem número, protocolo ou valor fiscal) |
 | **Auditoria** | Registro permanente de preços, aprovações, estoque, caixa, pagamentos, documentos fiscais, usuários, perfis, unidades e configurações (sem gravar senhas, tokens ou certificados) |
 
-Ainda **não** fazem parte da plataforma (fases seguintes): agenda/programação da produção, apontamento de horas, inspeção/qualidade,
-compras com cotação, conciliação bancária, DRE completa, relacionamento/pós-venda e Torven Pay. Nenhum desses itens aparece no menu até estar funcionando.
+Ainda **não** fazem parte da plataforma (fases seguintes): requisição de materiais para a OS, compras com cotação, conciliação bancária,
+DRE completa, relacionamento/pós-venda e Torven Pay. Nenhum desses itens aparece no menu até estar funcionando.
 
 > Mensagens externas: o TORVEN **não envia** WhatsApp/e-mail sozinho. O usuário escolhe o canal, confirma e a mensagem abre no aparelho dele; o sistema registra o envio.
 
@@ -91,15 +95,18 @@ Tokens da Focus NFe **não** vão em variável de ambiente: são cadastrados por
 - `004_fase1_comercial.sql` (Fase 1): unidades, perfis ampliados, auditoria, contatos/endereços, objetos de serviço, anexos,
   solicitações, orçamentos v2 (revisões e aprovações) e documentos fiscais “preparados” (os antigos “internos” perdem o número simulado).
 
-**Reversão (rollback)** — cada migração nova tem um script manual em `backend/src/migrations/rollback/`:
+- `005_fase2_operacao.sql` (Fase 2): agenda, apontamentos de horas, checklists/inspeções, garantias, campos de entrega e custo real na OS.
+
+**Reversão (rollback)** — cada migração nova tem um script manual em `backend/src/migrations/rollback/` (reverta da mais nova para a mais antiga):
 
 ```bash
 pg_dump "$DATABASE_URL" > antes-do-rollback.sql          # sempre faça backup antes
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/src/migrations/rollback/004_fase1_comercial.down.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/src/migrations/rollback/005_fase2_operacao.down.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/src/migrations/rollback/004_fase1_comercial.down.sql   # só se for voltar também a Fase 1
 # publique a versão anterior do código; se a versão nova subir de novo, a migração é reaplicada
 ```
 
-O script 004 apaga solicitações, contatos, endereços, anexos, revisões/aprovações e auditoria, e reconverte perfis e estados novos para os antigos.
+O script 005 apaga agenda, apontamentos, inspeções e garantias. O 004 apaga solicitações, contatos, endereços, anexos, revisões/aprovações e auditoria, e reconverte perfis e estados novos para os antigos.
 
 ## Testes
 
@@ -111,10 +118,11 @@ FOCUS_URL_HOMOLOGACAO=http://localhost:4999 FOCUS_URL_PRODUCAO=http://localhost:
 MOCK_FOCUS=4999 npm test
 ```
 
-O teste (`scripts/smoke.mjs`, 100+ verificações) cobre cadastro, OS, estoque, pagamentos, fiscal (preparar sem provedor, emitir,
+O teste (`scripts/smoke.mjs`, 130 verificações) cobre cadastro, OS, estoque, pagamentos, fiscal (preparar sem provedor, emitir,
 consultar, cancelar, cadastro da empresa na Focus), relatórios, demonstração e toda a Fase 1: unidades, contatos, endereços,
 anexos, solicitação → visita → diagnóstico → orçamento → revisões → aprovação parcial → OS, busca global, notificações,
-auditoria, permissões por perfil e **isolamento entre empresas**. Build do site: `cd frontend && npm run build`.
+auditoria, permissões por perfil e **isolamento entre empresas**; e a Fase 2: agenda com conflito, cronômetro e lançamento manual,
+custo real, inspeção obrigatória/reprovação, entrega com recebedor, garantia com retrabalho e restrições do perfil técnico. Build do site: `cd frontend && npm run build`.
 
 ## Backup e restauração
 
@@ -162,7 +170,8 @@ O sistema avisa no painel e na tela de notas quando o certificado estiver a 30 d
 ```
 TORVEN/
 ├── backend/
-│   ├── src/routes/        auth, empresa, unidades, usuários, clientes, solicitações, orçamentos, OS, materiais,
+│   ├── src/routes/        auth, empresa, unidades, usuários, clientes, solicitações, orçamentos, OS, agenda, produção,
+│   │                      qualidade, garantias, materiais,
 │   │                      compras, caixa, notas, anexos, auditoria, busca/notificações, relatórios, público
 │   ├── src/domain.js      numeração, itens, estoque e financeiro da OS
 │   ├── src/audit.js       trilha de auditoria (explícita + automática para operações sensíveis)
@@ -171,7 +180,7 @@ TORVEN/
 │   └── scripts/           smoke.mjs (teste ponta a ponta), build-edge.mjs (bundle da Edge Function)
 ├── frontend/src/
 │   ├── components/        Layout (menu, trilha), Workspace (busca, notificações, atalhos), Table, ItemsEditor, Attachments…
-│   └── pages/             Início, Solicitações, Orçamentos, OS, Venda, Clientes, Estoque, Entradas, Financeiro,
+│   └── pages/             Início, Solicitações, Orçamentos, OS, Venda, Agenda, Produção, Garantias, Clientes, Estoque, Entradas, Financeiro,
 │                          Notas, Relatórios, Unidades, Auditoria, Configurações, Impressão, páginas públicas
 └── docker-compose.yml
 ```

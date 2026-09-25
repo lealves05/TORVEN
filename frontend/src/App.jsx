@@ -22,6 +22,9 @@ import Account from './pages/Account';
 import Requests, { RequestNew, RequestDetail } from './pages/Requests';
 import Audit from './pages/Audit';
 import Units from './pages/Units';
+import Agenda from './pages/Agenda';
+import Production from './pages/Production';
+import Warranty from './pages/Warranty';
 import { PrintOrder, PrintQuote } from './pages/Print';
 import { PublicQuote, PublicOrder } from './pages/Public';
 
@@ -76,6 +79,9 @@ export default function App() {
             <Route path="comissoes" element={<Guard perms={['commissions']}><Commissions /></Guard>} />
             <Route path="configuracoes" element={<Guard perms={['settings', 'users', 'fiscal_settings']}><Settings /></Guard>} />
             <Route path="configuracoes/unidades" element={<Guard perms={['units_manage', 'settings']}><Units /></Guard>} />
+            <Route path="agenda" element={<Guard perms={['schedule_view', 'schedule_manage']}><Agenda /></Guard>} />
+            <Route path="producao" element={<Guard perms={['schedule_view', 'time_log']}><Production /></Guard>} />
+            <Route path="garantias" element={<Guard perms={['warranty_manage']}><Warranty /></Guard>} />
             <Route path="auditoria" element={<Guard perms={['audit_view']}><Audit /></Guard>} />
             <Route path="conta" element={<Account />} />
             <Route path="*" element={<Navigate to="/" replace />} />
