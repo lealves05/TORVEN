@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Search, Trash2, Wrench, Package, PenLine, AlertTriangle } from 'lucide-react';
+import { Search, Trash2, Wrench, Package, PenLine, AlertTriangle, ChevronDown, CheckCircle2, XCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import { money, qty as fqty, ITEM_KIND } from '../lib/format';
 import { useCatalog } from '../context/CatalogContext';
@@ -8,30 +8,51 @@ import { MoneyInput, cx } from './ui';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 export const itemTotal = (i) => round2((Number(i.qty) || 0) * (Number(i.unit_price) || 0) - (Number(i.discount) || 0));
-export const itemsSubtotal = (items) => round2(items.reduce((a, i) => a + itemTotal(i), 0));
+/** Opcionais/alternativos não entram no total. */
+export const itemsSubtotal = (items) => round2(items.filter((i) => !i.optional).reduce((a, i) => a + itemTotal(i), 0));
+export const itemsCost = (items) => round2(items.filter((i) => !i.optional).reduce((a, i) => a + (Number(i.qty) || 0) * (Number(i.unit_cost) || 0), 0));
+
+const KIND_CLS = {
+  servico: 'bg-primary/10 text-primary', material: 'bg-sky-500/10 text-sky-700 dark:text-sky-300',
+  consumivel: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300', deslocamento: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  terceiro: 'bg-violet-500/10 text-violet-700 dark:text-violet-300', outro: 'bg-muted text-ink-soft', avulso: 'bg-muted text-ink-soft',
+};
+const FREE_KINDS = [
+  ['servico', 'Mão de obra (avulsa)', 'h'], ['consumivel', 'Consumível', 'un'], ['deslocamento', 'Deslocamento', 'km'],
+  ['terceiro', 'Serviço de terceiros', 'un'], ['outro', 'Outras despesas', 'un'], ['avulso', 'Item avulso', 'un'],
+];
 
 /** Limpa os itens para envio à API. */
 export const cleanItems = (items) => items.map((i) => ({
   kind: i.kind, service_id: i.service_id || null, product_id: i.product_id || null, technician_id: i.technician_id || null,
   description: i.description, unit: i.unit || null, qty: Number(i.qty) || 0, unit_price: Number(i.unit_price) || 0,
-  discount: Number(i.discount) || 0,
+  discount: Number(i.discount) || 0, optional: !!i.optional, group_label: i.group_label || null, notes: i.notes || null,
+  ...(i.unit_cost != null && i.unit_cost !== '' && !i.service_id && !i.product_id ? { unit_cost: Number(i.unit_cost) || 0 } : {}),
 }));
 
 /**
  * Editor de itens (serviços, materiais e avulsos) com busca no catálogo.
  * hideValues: perfil sem acesso a valores (preço vem do catálogo no servidor).
  */
-export default function ItemsEditor({ items, onChange, discount = 0, onDiscount, showTechnician, hideValues, readOnly, allowDiscount = true }) {
+export default function ItemsEditor({
+  items, onChange, discount = 0, onDiscount, showTechnician, hideValues, readOnly, allowDiscount = true,
+  quoteMode, surcharge = 0, onSurcharge, taxRate = 0, showCost,
+}) {
   const { services, technicians } = useCatalog();
   const { can } = useAuth();
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('servico');
+  const [freeOpen, setFreeOpen] = useState(false);
   const ref = useRef(null);
+  const freeRef = useRef(null);
   useEffect(() => { api.get('/products').then(setProducts).catch(() => {}); }, []);
   useEffect(() => {
-    const h = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const h = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (freeRef.current && !freeRef.current.contains(e.target)) setFreeOpen(false);
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
@@ -48,7 +69,11 @@ export default function ItemsEditor({ items, onChange, discount = 0, onDiscount,
   const prodById = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
 
   const subtotal = itemsSubtotal(items);
-  const total = round2(subtotal - (Number(discount) || 0));
+  const total = round2(subtotal - (Number(discount) || 0) + (Number(surcharge) || 0));
+  const cost = itemsCost(items);
+  const tax = round2(total * (Number(taxRate) || 0) / 100);
+  const margin = round2(total - cost - tax);
+  const optionalTotal = round2(items.filter((i) => i.optional).reduce((a, i) => a + itemTotal(i), 0));
 
   return (
     <div className="space-y-3">
@@ -61,9 +86,21 @@ export default function ItemsEditor({ items, onChange, discount = 0, onDiscount,
                 onFocus={() => setOpen(true)} onChange={(e) => { setSearch(e.target.value); setOpen(true); }} />
             </div>
             {!hideValues && (
-              <button type="button" className="btn-outline" onClick={() => add({ kind: 'avulso', description: '', unit: 'un', unit_price: 0 })}>
-                <PenLine className="h-4 w-4" /> Item avulso
-              </button>
+              <div ref={freeRef} className="relative">
+                <button type="button" className="btn-outline" onClick={() => setFreeOpen((o) => !o)}>
+                  <PenLine className="h-4 w-4" /> Outro item <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </button>
+                {freeOpen && (
+                  <div className="card animate-pop absolute right-0 z-40 mt-1 w-56 p-1.5">
+                    {FREE_KINDS.map(([k, l, u]) => (
+                      <button key={k} type="button" className="flex w-full items-center gap-2 rounded-app-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                        onClick={() => { setFreeOpen(false); add({ kind: k, description: '', unit: u, unit_price: 0 }); }}>
+                        <span className={cx('h-2 w-2 rounded-full', KIND_CLS[k].split(' ')[0])} />{l}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
           {open && (
@@ -80,8 +117,8 @@ export default function ItemsEditor({ items, onChange, discount = 0, onDiscount,
                 {found.map((x) => (
                   <button key={x.id} type="button" className="flex w-full items-center gap-3 rounded-app-sm px-3 py-2 text-left text-sm hover:bg-muted"
                     onClick={() => add(tab === 'servico'
-                      ? { kind: 'servico', service_id: x.id, description: x.name, unit: x.unit, unit_price: x.price, technician_id: null }
-                      : { kind: 'material', product_id: x.id, description: x.name, unit: x.unit, unit_price: x.price })}>
+                      ? { kind: 'servico', service_id: x.id, description: x.name, unit: x.unit, unit_price: x.price, unit_cost: x.cost ?? 0, technician_id: null }
+                      : { kind: 'material', product_id: x.id, description: x.name, unit: x.unit, unit_price: x.price, unit_cost: x.cost ?? 0 })}>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{x.name}</span>
                       <span className="block truncate text-xs text-ink-faint">
@@ -116,14 +153,17 @@ export default function ItemsEditor({ items, onChange, discount = 0, onDiscount,
             <tbody className="divide-y divide-line">
               {items.map((i, idx) => {
                 const p = i.product_id && prodById[i.product_id];
-                const short = p && i.kind === 'material' && Number(i.qty) > Number(p.stock) + (i._savedQty || 0);
+                const short = p && ['material', 'consumivel'].includes(i.kind) && Number(i.qty) > Number(p.stock) + (i._savedQty || 0);
                 return (
-                  <tr key={idx} className="align-top">
+                  <tr key={idx} className={cx('align-top', i.optional && 'bg-muted/30', readOnly && quoteMode && i.approved === false && 'opacity-60')}>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <span className={cx('chip shrink-0', i.kind === 'servico' ? 'bg-primary/10 text-primary' : i.kind === 'material' ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300' : 'bg-muted text-ink-soft')}>
-                          {ITEM_KIND[i.kind]}
+                        <span className={cx('chip shrink-0', KIND_CLS[i.kind] || KIND_CLS.avulso)}>
+                          {ITEM_KIND[i.kind] || i.kind}
                         </span>
+                        {i.optional && <span className="chip shrink-0 border border-dashed border-line text-ink-faint">Opcional</span>}
+                        {readOnly && quoteMode && i.approved === true && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" title="Aprovado" />}
+                        {readOnly && quoteMode && i.approved === false && <XCircle className="h-4 w-4 shrink-0 text-ink-faint" title="Não aprovado" />}
                         {readOnly ? <span>{i.description}</span> : (
                           <input className="input h-8 min-w-[180px]" value={i.description} onChange={(e) => set(idx, { description: e.target.value })} placeholder="Descrição" />
                         )}
@@ -136,6 +176,14 @@ export default function ItemsEditor({ items, onChange, discount = 0, onDiscount,
                           </select>
                         )
                       )}
+                      {quoteMode && (readOnly ? (i.group_label && <div className="mt-1 text-xs text-ink-faint">Grupo: {i.group_label}</div>) : (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                          <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+                            <input type="checkbox" checked={!!i.optional} onChange={(e) => set(idx, { optional: e.target.checked })} /> Opcional / alternativa
+                          </label>
+                          <input className="input h-7 w-40 text-xs" placeholder="Grupo (ex.: Opção A)" value={i.group_label || ''} onChange={(e) => set(idx, { group_label: e.target.value })} />
+                        </div>
+                      ))}
                       {short && <div className="mt-1 flex items-center gap-1 text-xs text-amber-600"><AlertTriangle className="h-3 w-3" /> Estoque atual: {fqty(p.stock)} {p.unit}</div>}
                     </td>
                     <td className="px-2 py-2 text-right">
@@ -184,7 +232,25 @@ export default function ItemsEditor({ items, onChange, discount = 0, onDiscount,
           ) : Number(discount) > 0 && (
             <div className="flex justify-between text-ink-soft"><span>Desconto</span><span className="tabular-nums">− {money(discount)}</span></div>
           )}
+          {onSurcharge && !readOnly ? (
+            <div className="flex items-center justify-between gap-3 text-ink-soft">
+              <span>Acréscimos</span>
+              <MoneyInput value={surcharge} onChange={onSurcharge} className="w-32 [&_input]:h-8 [&_input]:text-right" />
+            </div>
+          ) : Number(surcharge) > 0 && (
+            <div className="flex justify-between text-ink-soft"><span>Acréscimos</span><span className="tabular-nums">+ {money(surcharge)}</span></div>
+          )}
           <div className="flex justify-between border-t border-line pt-1.5 text-base font-semibold"><span>Total</span><span className="tabular-nums">{money(total)}</span></div>
+          {optionalTotal > 0 && <div className="flex justify-between text-xs text-ink-faint"><span>Opcionais (fora do total)</span><span className="tabular-nums">{money(optionalTotal)}</span></div>}
+          {showCost && (
+            <div className="mt-2 space-y-1 rounded-app-sm bg-muted/60 p-2.5 text-xs text-ink-soft">
+              <div className="flex justify-between"><span>Custo estimado</span><span className="tabular-nums">{money(cost)}</span></div>
+              {Number(taxRate) > 0 && <div className="flex justify-between"><span>Tributos estimados ({String(taxRate).replace('.', ',')}%)</span><span className="tabular-nums">{money(tax)}</span></div>}
+              <div className={cx('flex justify-between font-medium', margin < 0 ? 'text-red-600' : 'text-ink')}>
+                <span>Margem estimada</span><span className="tabular-nums">{money(margin)}{total > 0 && ` · ${Math.round((margin / total) * 100)}%`}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -91,7 +91,7 @@ export default function OrderDetail() {
   };
 
   return (
-    <div className="pb-24">
+    <div className="pb-2">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -294,7 +294,7 @@ export default function OrderDetail() {
       </div>
 
       {dirty && editable && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur">
+        <div className="action-bar">
           <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
             <span className="mr-auto text-sm text-ink-soft">Alterações não salvas.</span>
             <button className="btn-ghost" onClick={() => setF(toForm(o))}>Descartar</button>

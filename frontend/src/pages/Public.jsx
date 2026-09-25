@@ -30,23 +30,40 @@ function Shell({ company, children }) {
   );
 }
 
-function ItemsTable({ items, doc }) {
+function ItemsTable({ items, doc, pick, onPick }) {
+  const main = items.filter((i) => !i.optional);
+  const optional = items.filter((i) => i.optional);
   return (
     <div className="card overflow-hidden">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-xs text-ink-faint"><tr><th className="px-4 py-2 text-left font-medium">Item</th><th className="px-2 py-2 text-right font-medium">Qtd.</th><th className="px-4 py-2 text-right font-medium">Total</th></tr></thead>
         <tbody className="divide-y divide-line">
-          {items.map((i, k) => (
-            <tr key={k}><td className="px-4 py-2.5">{i.description}{i.kind === 'material' && <span className="text-xs text-ink-faint"> · material</span>}</td>
+          {main.map((i, k) => (
+            <tr key={k} className={cx(i.approved === false && 'opacity-50')}><td className="px-4 py-2.5">{i.description}{i.group_label && <span className="text-xs text-ink-faint"> · {i.group_label}</span>}</td>
               <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-ink-soft">{qty(i.qty)} {i.unit}</td>
               <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums">{money(i.total)}</td></tr>
+          ))}
+          {optional.length > 0 && <tr><td colSpan={3} className="bg-muted/40 px-4 py-2 text-xs font-medium text-ink-soft">Opcionais — não incluídos no total{onPick && '; marque os que deseja'}</td></tr>}
+          {optional.map((i) => (
+            <tr key={i.id || i.description}>
+              <td className="px-4 py-2.5">
+                <label className="flex items-center gap-2">
+                  {onPick && <input type="checkbox" checked={pick.has(i.id)} onChange={() => onPick(i.id)} />}
+                  <span>{i.description}{i.group_label && <span className="text-xs text-ink-faint"> · {i.group_label}</span>}{i.approved && <span className="text-xs text-emerald-700"> · aprovado</span>}</span>
+                </label>
+              </td>
+              <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums text-ink-soft">{qty(i.qty)} {i.unit}</td>
+              <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-ink-soft">{money(i.total)}</td></tr>
           ))}
         </tbody>
       </table>
       <div className="space-y-1 border-t border-line px-4 py-3 text-sm">
-        {Number(doc.discount) > 0 && <><div className="flex justify-between text-ink-soft"><span>Subtotal</span><span className="tabular-nums">{money(doc.subtotal)}</span></div>
-          <div className="flex justify-between text-ink-soft"><span>Desconto</span><span className="tabular-nums">− {money(doc.discount)}</span></div></>}
+        {(Number(doc.discount) > 0 || Number(doc.surcharge) > 0) && <div className="flex justify-between text-ink-soft"><span>Subtotal</span><span className="tabular-nums">{money(doc.subtotal)}</span></div>}
+        {Number(doc.discount) > 0 && <div className="flex justify-between text-ink-soft"><span>Desconto</span><span className="tabular-nums">− {money(doc.discount)}</span></div>}
+        {Number(doc.surcharge) > 0 && <div className="flex justify-between text-ink-soft"><span>Acréscimos</span><span className="tabular-nums">+ {money(doc.surcharge)}</span></div>}
         <div className="flex justify-between text-lg font-semibold"><span>Total</span><span className="tabular-nums">{money(doc.total)}</span></div>
+        {pick?.size > 0 && <div className="flex justify-between text-sm text-ink-soft"><span>+ opcionais escolhidos</span><span className="tabular-nums">{money(optional.filter((i) => pick.has(i.id)).reduce((a, i) => a + Number(i.total), 0))}</span></div>}
+        {doc.approved_total != null && Number(doc.approved_total) !== Number(doc.total) && <div className="flex justify-between font-medium text-emerald-700"><span>Valor aprovado</span><span className="tabular-nums">{money(doc.approved_total)}</span></div>}
       </div>
     </div>
   );
@@ -73,26 +90,36 @@ export function PublicQuote() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [act, setAct] = useState(null);
+  const [pick, setPick] = useState(() => new Set());
+  const toggle = (id) => setPick((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const load = useCallback(() => api.get(`/public/quote/${token}`).then(setData).catch((e) => setErr(e.message)), [token]);
   useEffect(() => { load(); }, [load]);
   if (err) return <div className="grid min-h-full place-items-center p-6 text-center text-ink-soft">{err}</div>;
   if (!data) return <Loading />;
   const { company, quote: q } = data;
-  const open = ['rascunho', 'enviado'].includes(q.status);
+  const open = ['enviado', 'aguardando_decisao'].includes(q.status);
+  const approvedLike = ['aprovado', 'parcialmente_aprovado', 'convertido'].includes(q.status);
   return (
     <Shell company={company}>
       <div className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <div className="text-xs uppercase tracking-wider text-ink-faint">Orçamento nº {q.number}</div>
+            <div className="text-xs uppercase tracking-wider text-ink-faint">Orçamento nº {q.number}{q.revision > 1 && ` · revisão ${q.revision}`}</div>
             <h1 className="mt-1 text-xl font-semibold">{q.title}</h1>
             <div className="mt-1 text-sm text-ink-soft">Para {q.customer_name}{q.equipment_description && ` · ${[q.equipment_description, q.equipment_brand, q.equipment_model].filter(Boolean).join(' ')}`}</div>
           </div>
-          <span className={cx('chip', QUOTE_STATUS[q.status]?.cls)}>{q.status === 'convertido' ? 'Aprovado' : QUOTE_STATUS[q.status]?.label}</span>
+          <span className={cx('chip', QUOTE_STATUS[q.status]?.cls)}>{q.status === 'convertido' ? 'Aprovado' : q.status === 'aguardando_decisao' ? 'Aguardando sua resposta' : QUOTE_STATUS[q.status]?.label}</span>
         </div>
         {q.description && <p className="mt-4 whitespace-pre-wrap text-sm">{q.description}</p>}
+        {q.scope && <><div className="mt-4 text-xs font-medium uppercase tracking-wider text-ink-faint">Escopo</div><p className="whitespace-pre-wrap text-sm">{q.scope}</p></>}
       </div>
-      <ItemsTable items={q.items} doc={q} />
+      <ItemsTable items={q.items} doc={q} pick={pick} onPick={open ? toggle : null} />
+      {(q.assumptions || q.exclusions) && (
+        <div className="card grid gap-3 p-5 text-sm sm:grid-cols-2">
+          {q.assumptions && <div><div className="text-xs text-ink-faint">Premissas</div><p className="whitespace-pre-wrap">{q.assumptions}</p></div>}
+          {q.exclusions && <div><div className="text-xs text-ink-faint">Não incluso</div><p className="whitespace-pre-wrap">{q.exclusions}</p></div>}
+        </div>
+      )}
       <div className="card grid gap-3 p-5 text-sm sm:grid-cols-2">
         <div><div className="text-xs text-ink-faint">Válido até</div><div className="font-medium">{fmt(q.valid_until)}</div></div>
         <div><div className="text-xs text-ink-faint">Prazo de execução</div><div className="font-medium">{q.delivery_days != null ? `${q.delivery_days} dias após aprovação` : 'a combinar'}</div></div>
@@ -106,15 +133,15 @@ export function PublicQuote() {
           <button className="btn-outline h-12 text-red-600 sm:w-48" onClick={() => setAct('refuse')}><XCircle className="h-5 w-5" /> Recusar</button>
         </div>
       ) : (
-        <div className={cx('card p-4 text-center text-sm', ['aprovado', 'convertido'].includes(q.status) ? 'text-emerald-700' : 'text-ink-soft')}>
-          {['aprovado', 'convertido'].includes(q.status) ? `Orçamento aprovado${q.approved_at ? ` em ${fmtDateTime(q.approved_at)}` : ''}. Obrigado!`
-            : q.status === 'recusado' ? 'Orçamento recusado.' : 'Este orçamento expirou. Fale com a empresa para atualizá-lo.'}
+        <div className={cx('card p-4 text-center text-sm', approvedLike ? 'text-emerald-700' : 'text-ink-soft')}>
+          {approvedLike ? `Orçamento aprovado${q.approved_at ? ` em ${fmtDateTime(q.approved_at)}` : ''}. Obrigado!`
+            : q.status === 'recusado' ? 'Orçamento recusado.' : 'Este orçamento venceu. Fale com a empresa para atualizá-lo.'}
           {q.order_token && <a href={appPath(`/p/os/${q.order_token}`)} className="mt-2 block font-medium text-primary">Acompanhar o serviço</a>}
         </div>
       )}
       <button className="btn-ghost mx-auto flex" onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimir</button>
       {act && <Respond title={act === 'approve' ? 'Aprovar orçamento' : 'Recusar orçamento'} confirmText={act === 'approve' ? 'Confirmar aprovação' : 'Recusar'} danger={act === 'refuse'}
-        onClose={(ok) => { setAct(null); if (ok) load(); }} onSubmit={(b) => api.post(`/public/quote/${token}/${act}`, b)} />}
+        onClose={(ok) => { setAct(null); if (ok) load(); }} onSubmit={(b) => api.post(`/public/quote/${token}/${act}`, { ...b, optional_item_ids: act === 'approve' ? [...pick] : [] })} />}
     </Shell>
   );
 }

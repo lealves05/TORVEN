@@ -4,7 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { q, one, tx } from '../db.js';
 import { signToken, requireAuth } from '../auth.js';
-import { parse, slugify, withDefaults, HttpError, DEFAULT_SETTINGS, DEFAULT_FISCAL, permissionsFor, PERMISSIONS } from '../util.js';
+import { parse, slugify, withDefaults, HttpError, DEFAULT_SETTINGS, DEFAULT_FISCAL, permissionsFor, PERMISSIONS, ROLES } from '../util.js';
 import { seedDemo } from '../seed.js';
 
 const r = Router();
@@ -23,7 +23,7 @@ export async function loadSession(userId) {
        from users u where u.id = $1`, [userId]);
   const company = await one(COMPANY_COLS, [user.company_id]);
   company.settings = withDefaults(company.settings);
-  return { user, company, permissions: permissionsFor(user.role, company.settings), permissionCatalog: PERMISSIONS };
+  return { user, company, permissions: permissionsFor(user.role, company.settings), permissionCatalog: PERMISSIONS, roles: ROLES };
 }
 
 const registerSchema = z.object({
@@ -48,6 +48,7 @@ r.post('/register', limiter, async (req, res) => {
     const { rows: [company] } = await db.query(
       'insert into companies (name, trade_name, slug, phone, email, settings, fiscal) values ($1,$1,$2,$3,$4,$5,$6) returning id',
       [d.companyName, slug, d.phone || null, d.email, DEFAULT_SETTINGS, DEFAULT_FISCAL]);
+    await db.query("insert into units (company_id, name, is_default) values ($1, 'Matriz', true)", [company.id]);
     const { rows: [user] } = await db.query(
       `insert into users (company_id, name, email, password_hash, role)
        values ($1,$2,$3,$4,'owner') returning id`,
@@ -115,6 +116,7 @@ r.post('/demo', demoLimiter, async (_req, res) => {
       `insert into companies (name, trade_name, slug, email, settings, fiscal, is_demo)
        values ('Oficina Demonstração', 'Oficina Demonstração', $1, null, $2, $3, true) returning id`,
       [`demo-${rand}`, DEFAULT_SETTINGS, DEFAULT_FISCAL]);
+    await db.query("insert into units (company_id, name, is_default) values ($1, 'Matriz', true)", [company.id]);
     const { rows: [user] } = await db.query(
       `insert into users (company_id, name, email, password_hash, role) values ($1, 'Visitante', $2, $3, 'owner') returning id`,
       [company.id, email, hash]);
@@ -142,7 +144,7 @@ r.post('/activate', requireAuth, async (req, res) => {
   if (taken) throw new HttpError(409, 'Este e-mail já está cadastrado.');
   await tx(async (db) => {
     if (!d.keepData) {
-      for (const t of ['invoices', 'transactions', 'stock_movements', 'orders', 'quotes', 'purchases', 'cash_sessions',
+      for (const t of ['attachments', 'audit_log', 'service_requests', 'invoices', 'transactions', 'stock_movements', 'orders', 'quotes', 'purchases', 'cash_sessions',
         'equipment', 'customers', 'products', 'suppliers', 'services', 'technicians']) {
         await db.query(`delete from ${t} where company_id = $1`, [req.companyId]);
       }

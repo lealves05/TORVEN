@@ -19,6 +19,9 @@ import Invoices from './pages/Invoices';
 import Reports, { Commissions } from './pages/Reports';
 import Settings from './pages/Settings';
 import Account from './pages/Account';
+import Requests, { RequestNew, RequestDetail } from './pages/Requests';
+import Audit from './pages/Audit';
+import Units from './pages/Units';
 import { PrintOrder, PrintQuote } from './pages/Print';
 import { PublicQuote, PublicOrder } from './pages/Public';
 
@@ -52,9 +55,12 @@ export default function App() {
             <Route path="os/nova" element={<Guard perms={['orders_create']}><OrderNew /></Guard>} />
             <Route path="os/:id" element={<Guard perms={['orders_view', 'orders_create']}><OrderDetail /></Guard>} />
             <Route path="venda" element={<Guard perms={['checkout']}><QuickSale /></Guard>} />
-            <Route path="orcamentos" element={<Guard perms={['quotes', 'quotes_approve']}><Quotes /></Guard>} />
+            <Route path="solicitacoes" element={<Guard perms={['requests_view', 'requests_manage']}><Requests /></Guard>} />
+            <Route path="solicitacoes/nova" element={<Guard perms={['requests_manage']}><RequestNew /></Guard>} />
+            <Route path="solicitacoes/:id" element={<Guard perms={['requests_view', 'requests_manage']}><RequestDetail /></Guard>} />
+            <Route path="orcamentos" element={<Guard perms={['quotes_view', 'quotes', 'quotes_approve']}><Quotes /></Guard>} />
             <Route path="orcamentos/novo" element={<Guard perms={['quotes']}><QuoteEditor key="novo" /></Guard>} />
-            <Route path="orcamentos/:id" element={<Guard perms={['quotes', 'quotes_approve']}><QuoteEditor /></Guard>} />
+            <Route path="orcamentos/:id" element={<Guard perms={['quotes_view', 'quotes', 'quotes_approve']}><QuoteEditor /></Guard>} />
             <Route path="clientes" element={<Guard perms={['customers_view']}><Customers /></Guard>} />
             <Route path="clientes/:id" element={<Guard perms={['customers_view']}><CustomerDetail /></Guard>} />
             <Route path="estoque" element={<Guard perms={['materials_manage', 'purchases']}><Materials /></Guard>} />
@@ -69,6 +75,8 @@ export default function App() {
             <Route path="relatorios" element={<Guard perms={['reports']}><Reports /></Guard>} />
             <Route path="comissoes" element={<Guard perms={['commissions']}><Commissions /></Guard>} />
             <Route path="configuracoes" element={<Guard perms={['settings', 'users', 'fiscal_settings']}><Settings /></Guard>} />
+            <Route path="configuracoes/unidades" element={<Guard perms={['units_manage', 'settings']}><Units /></Guard>} />
+            <Route path="auditoria" element={<Guard perms={['audit_view']}><Audit /></Guard>} />
             <Route path="conta" element={<Account />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

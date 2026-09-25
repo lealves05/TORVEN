@@ -213,12 +213,35 @@ export async function seedDemo(db, companyId, userId) {
        values ($1,$2,$3,$4,$5,$6,current_date + 15 - $7::int,$8,$8,90,7,'50% na aprovação, 50% na entrega',$9,$10,$11, now() - ($7::text || ' days')::interval) returning *`,
       [companyId, n, c.id, c.equipment.id, title, status, daysAgo, subtotal, settings.orders.termsQuote, publicToken(), userId]);
     await insertItems(db, 'quote_items', 'quote_id', qt.id, prepared);
+    if (status === 'enviado') await db.query("update quotes set revision = 1, sent_at = created_at, sent_via = 'whatsapp' where id = $1", [qt.id]);
+    return qt;
   }
-  await quote(marcos, 'Portão basculante novo 3,0 x 2,4 m', [
+  const qPortao = await quote(marcos, 'Portão basculante novo 3,0 x 2,4 m', [
     S('Fabricação de portão basculante (m²)', 7.2), S('Instalação de portão/grade'),
     M('Metalon 50x30 #18 (barra 6m)', 8), M('Chapa aço carbono 1/8" (kg)', 30), M('Esmalte sintético preto (galão 3,6L)', 2),
   ], 'enviado', 1);
   await quote(ana, 'Bancada de inox 2,0 m com cuba', [S('Solda TIG em inox (hora)', 8), M('Chapa inox 304 1,5mm (kg)', 35)], 'rascunho', 0);
+
+  // Solicitações de atendimento (entrada → triagem/visita → orçamento)
+  const unitId = (await db.query('select id from units where company_id = $1 and is_default', [companyId])).rows[0]?.id || null;
+  async function request(n, data) {
+    const r = await ins(
+      `insert into service_requests (company_id, number, unit_id, customer_id, contact_name, contact_phone, channel, equipment_id, title, description,
+              service_location, address, priority, status, visit_at, visit_technician_id, diagnosis, quote_id, created_by, created_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19, now() - ($20::text || ' hours')::interval) returning *`,
+      [companyId, n, unitId, data.c?.id || null, data.contact || null, data.phone || null, data.channel, data.c?.equipment?.id || null, data.title,
+        data.description || null, data.location || 'oficina', data.address || null, data.priority || 'normal', data.status, data.visit || null,
+        data.tech?.id || null, data.diagnosis || null, data.quote?.id || null, userId, data.hoursAgo || 1]);
+    await db.query('insert into request_events (request_id, to_status, message, user_id, created_at) values ($1,$2,$3,$4,$5)',
+      [r.id, 'nova', `Solicitação registrada (${data.channel})`, userId, r.created_at]);
+    if (data.status !== 'nova') await db.query('insert into request_events (request_id, from_status, to_status, user_id) values ($1,$2,$3,$4)', [r.id, 'nova', data.status, userId]);
+    if (data.quote) await db.query('update quotes set request_id = $2 where id = $1', [data.quote.id, r.id]);
+  }
+  await request(1, { c: marcos, channel: 'whatsapp', title: 'Portão basculante novo para garagem', status: 'orcada', quote: qPortao, location: 'externo',
+    address: 'Endereço do cliente', diagnosis: 'Vão de 3,0 x 2,4 m; estrutura existente aproveitável.', hoursAgo: 30 });
+  await request(2, { c: fazenda, channel: 'telefone', title: 'Implemento com chassi trincado', status: 'visita_agendada', location: 'externo', tech: joao,
+    visit: new Date(Date.now() + 26 * 3600000).toISOString(), description: 'Trinca na longarina da plantadeira; precisa avaliar no local.', priority: 'alta', hoursAgo: 5 });
+  await request(3, { contact: 'Cláudio Moreira', phone: '(19) 99876-1122', channel: 'presencial', title: 'Soldar suporte de ar-condicionado', status: 'nova', hoursAgo: 2 });
 
   // Entrada de materiais recebida
   const pu = await ins(

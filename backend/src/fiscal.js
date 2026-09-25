@@ -88,7 +88,7 @@ export function splitItems(order, items) {
 
 export function buildNfse({ company, customer, order, items, fiscal, dpsNumber }) {
   const f = fiscalWithDefaults(fiscal);
-  const services = splitItems(order, items).filter((i) => i.kind !== 'material');
+  const services = splitItems(order, items).filter((i) => !(['material', 'consumivel'].includes(i.kind) && i.product_id));
   const amount = round2(services.reduce((a, i) => a + i.net, 0));
   const warnings = [];
   if (!services.length) warnings.push('A OS não tem serviços para a NFS-e.');
@@ -174,7 +174,7 @@ export function buildNfse({ company, customer, order, items, fiscal, dpsNumber }
 
 export function buildNfe({ company, customer, order, items, fiscal }) {
   const f = fiscalWithDefaults(fiscal);
-  const mats = splitItems(order, items).filter((i) => i.kind === 'material');
+  const mats = splitItems(order, items).filter((i) => ['material', 'consumivel'].includes(i.kind) && i.product_id);
   const warnings = [];
   if (!mats.length) warnings.push('A OS/venda não tem materiais para a NF-e.');
   if (onlyDigits(company.document).length !== 14) warnings.push('CNPJ da empresa não cadastrado.');

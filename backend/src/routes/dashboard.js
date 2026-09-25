@@ -37,7 +37,7 @@ r.get('/', async (req, res) => {
 
   if (can(req, 'quotes') || can(req, 'quotes_approve')) {
     const { rows: [qt] } = await q(
-      `select count(*)::int as n, coalesce(sum(total),0) as total from quotes where company_id = $1 and status in ('rascunho','enviado')
+      `select count(*)::int as n, coalesce(sum(total),0) as total from quotes where company_id = $1 and status in ('rascunho','enviado','aguardando_decisao')
           and (valid_until is null or valid_until >= (now() at time zone $2)::date)`, [cid, tz]);
     out.quotes = qt;
   }

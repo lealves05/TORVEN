@@ -24,7 +24,7 @@ export async function requireAuth(req, _res, next) {
   const payload = verifyToken(req);
   if (!payload) throw new HttpError(401, 'Sessão expirada. Entre novamente.');
   const user = await one(
-    `select u.id, u.company_id, u.name, u.email, u.role, u.technician_id, u.active, u.preferences, c.settings
+    `select u.id, u.company_id, u.name, u.email, u.role, u.technician_id, u.unit_id, u.active, u.preferences, c.settings
        from users u join companies c on c.id = u.company_id where u.id = $1`,
     [payload.uid],
   );

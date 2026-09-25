@@ -125,7 +125,7 @@ export function CustomerForm({ customer, onClose, onSaved }) {
   );
 }
 
-/** Seleção de equipamento do cliente, com cadastro rápido. */
+/** Seleção do objeto de serviço do cliente (equipamento, peça, estrutura, veículo…), com cadastro rápido. */
 export function EquipmentPicker({ customerId, value, onChange, newEquipment, onNewEquipment }) {
   const { company } = useAuth();
   const [list, setList] = useState([]);
@@ -138,14 +138,14 @@ export function EquipmentPicker({ customerId, value, onChange, newEquipment, onN
   return (
     <div className="space-y-3">
       <div className="flex items-end gap-2">
-        <Select label="Equipamento / peça" value={mode === 'new' ? '__new' : value || ''} className="flex-1" disabled={!customerId}
+        <Select label="Objeto de serviço" value={mode === 'new' ? '__new' : value || ''} className="flex-1" disabled={!customerId}
           onChange={(e) => {
             if (e.target.value === '__new') { onChange(null); onNewEquipment({ category: cats[0] || '', description: '' }); }
             else { onNewEquipment(null); onChange(e.target.value || null); }
           }}>
           <option value="">{customerId ? (list.length ? 'Selecione…' : 'Nenhum cadastrado') : 'Selecione o cliente primeiro'}</option>
           {list.map((e) => <option key={e.id} value={e.id}>{[e.description, e.brand, e.model, e.serial && `nº ${e.serial}`].filter(Boolean).join(' · ')}</option>)}
-          {customerId && <option value="__new">+ Cadastrar novo equipamento/peça</option>}
+          {customerId && <option value="__new">+ Cadastrar novo objeto (equipamento, peça, estrutura…)</option>}
         </Select>
       </div>
       {newEquipment && (
@@ -158,6 +158,8 @@ export function EquipmentPicker({ customerId, value, onChange, newEquipment, onN
           <Input label="Marca" value={newEquipment.brand} onChange={(e) => onNewEquipment({ ...newEquipment, brand: e.target.value })} className="sm:col-span-2" />
           <Input label="Modelo" value={newEquipment.model} onChange={(e) => onNewEquipment({ ...newEquipment, model: e.target.value })} className="sm:col-span-2" />
           <Input label="Nº de série" value={newEquipment.serial} onChange={(e) => onNewEquipment({ ...newEquipment, serial: e.target.value })} className="sm:col-span-2" />
+          <Input label="Material" value={newEquipment.material} placeholder="Ex.: aço carbono, inox 304" onChange={(e) => onNewEquipment({ ...newEquipment, material: e.target.value })} className="sm:col-span-3" />
+          <Input label="Dimensões" value={newEquipment.dimensions} placeholder="Ex.: 3000 x 2400 mm" onChange={(e) => onNewEquipment({ ...newEquipment, dimensions: e.target.value })} className="sm:col-span-3" />
         </div>
       )}
     </div>

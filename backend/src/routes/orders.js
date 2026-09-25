@@ -1,7 +1,7 @@
 // Ordens de serviço e vendas de balcão.
 import { Router } from 'express';
 import { z } from 'zod';
-import { q, one, tx } from '../db.js';
+import { q, tx } from '../db.js';
 import { need, can } from '../auth.js';
 import { parse, notFound, bad, round2, publicToken, OPEN_STATUSES, HttpError } from '../util.js';
 import {
@@ -20,7 +20,7 @@ const orderSchema = z.object({
   customer_id: z.string().uuid().nullable().optional(),
   equipment_id: z.string().uuid().nullable().optional(),
   equipment: z.object({
-    category: opt, description: s.min(2), brand: opt, model: opt, serial: opt, year: opt, notes: opt,
+    category: opt, description: s.min(2), brand: opt, model: opt, serial: opt, year: opt, notes: opt, material: opt, dimensions: opt,
   }).nullable().optional(),
   technician_id: z.string().uuid().nullable().optional(),
   priority: z.enum(['baixa', 'normal', 'alta', 'urgente']).default('normal'),
@@ -37,7 +37,7 @@ const orderSchema = z.object({
 });
 
 // ---------- helpers ----------
-function scopeWhere(req, params, alias = 'o') {
+export function scopeWhere(req, params, alias = 'o') {
   if (can(req, 'orders_view') && req.perms.orders_view === 'all') return '';
   if (req.user.role === 'owner') return '';
   const own = req.ownTechnician;
@@ -139,7 +139,7 @@ r.get('/', async (req, res) => {
             c.name as customer_name, c.phone as customer_phone, e.description as equipment_description, e.brand as equipment_brand,
             e.model as equipment_model, t.name as technician_name, t.color as technician_color,
             coalesce(f.paid, 0) as paid, coalesce(f.receivable, 0) as receivable,
-            (select count(*) from invoices iv where iv.order_id = o.id and iv.status in ('autorizada','interna'))::int as invoices_count
+            (select count(*) from invoices iv where iv.order_id = o.id and iv.status = 'autorizada')::int as invoices_count
        from orders o left join customers c on c.id = o.customer_id left join equipment e on e.id = o.equipment_id
        left join technicians t on t.id = o.technician_id
        left join lateral (
@@ -165,9 +165,10 @@ async function resolveEquipment(db, req, d) {
   if (!d.customer_id) throw bad('Selecione o cliente para cadastrar o equipamento.');
   const e = d.equipment;
   const { rows: [row] } = await db.query(
-    `insert into equipment (company_id, customer_id, category, description, brand, model, serial, year, notes)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
-    [req.companyId, d.customer_id, e.category || null, e.description, e.brand || null, e.model || null, e.serial || null, e.year || null, e.notes || null]);
+    `insert into equipment (company_id, customer_id, category, description, brand, model, serial, year, notes, material, dimensions)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+    [req.companyId, d.customer_id, e.category || null, e.description, e.brand || null, e.model || null, e.serial || null, e.year || null,
+      e.notes || null, e.material || null, e.dimensions || null]);
   return row.id;
 }
 

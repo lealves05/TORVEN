@@ -98,17 +98,25 @@ try {
       { kind: 'servico', service_id: svTig.id, description: svTig.name, qty: 2, unit_price: 160 },
       { kind: 'material', product_id: vareta.id, description: vareta.name, qty: 0.5, unit_price: 190 },
       { kind: 'avulso', description: 'Polimento', qty: 1, unit_price: 50, discount: 10 },
+      { kind: 'deslocamento', description: 'Retirada no cliente', qty: 1, unit_price: 80, optional: true },
     ], discount: 5,
   });
-  ok(qt.total === 320 + 95 + 40 - 5 && qt.number === 3 && qt.public_token, `orçamento nº ${qt.number} total ${qt.total}`);
+  ok(qt.total === 320 + 95 + 40 - 5 && qt.number === 3 && qt.public_token, `orçamento nº ${qt.number} total ${qt.total} (opcional fora do total)`);
+  ok(qt.cost_total > 0 && qt.margin != null, `custo ${qt.cost_total} e margem ${qt.margin} calculados`);
 
   token = '';
+  await call('GET', `/public/quote/${qt.public_token}`, null, [404]);
+  ok(true, 'rascunho não aparece no link público');
+  token = reg.token;
+  const sent = await call('POST', `/quotes/${qt.id}/send`, { via: 'link' });
+  ok(sent.status === 'enviado' && sent.revision === 1 && sent.versions.length === 1, 'envio registra a revisão 1');
+  token = '';
   const pub = await call('GET', `/public/quote/${qt.public_token}`);
-  ok(pub.quote.items.length === 3 && pub.company.name, 'orçamento visível pelo link público');
+  ok(pub.quote.items.length === 4 && pub.company.name && pub.quote.status === 'aguardando_decisao', 'link público abre e marca "aguardando decisão"');
   await call('POST', `/public/quote/${qt.public_token}/approve`, { name: 'Cliente' });
   token = reg.token;
   const qt2 = await call('GET', `/quotes/${qt.id}`);
-  ok(qt2.status === 'aprovado', 'cliente aprovou pelo link');
+  ok(qt2.status === 'aprovado' && qt2.approved_total === 450 && qt2.approvals[0].via === 'link', 'cliente aprovou pelo link (registro de aprovação)');
 
   const conv = await call('POST', `/quotes/${qt.id}/convert`, { technician_id: techs[0].id });
   let os = await call('GET', `/orders/${conv.order_id}`);
@@ -199,16 +207,17 @@ try {
 
   // ---------- notas fiscais ----------
   const inv0 = await call('POST', '/invoices', { order_id: os.id, kind: 'nfse' });
-  ok(inv0.status === 'interna' && inv0.number === '1', 'sem Focus configurada: documento interno');
+  ok(inv0.status === 'preparada' && inv0.number === null && inv0.message.includes('Emissão indisponível'), 'sem integração fiscal: só prepara, sem número simulado');
   if (process.env.MOCK_FOCUS) {
     await call('PUT', '/company', { document: '11.222.333/0001-81', municipal_registration: '123456', state_registration: '244.555.666.777', phone: '(19) 3232-0000' });
     const f = await call('PUT', '/company/fiscal', { provider: 'focus', environment: 'homologacao', token_homologacao: 'TOKEN-TESTE-123' });
     ok(f.token_homologacao.endsWith('123') && f.token_homologacao.includes('•'), 'token fiscal salvo e mascarado');
     const prev = await call('GET', `/invoices/preview?order_id=${os.id}&kind=nfse`);
     ok(prev.warnings.length === 0 && prev.amount > 0, `prévia NFS-e (${prev.amount})`);
-    await call('POST', '/invoices', { order_id: os.id, kind: 'nfse' }, [400]);
-    let nf = await call('POST', '/invoices', { order_id: os.id, kind: 'nfse', force: true });
+    let nf = await call('POST', '/invoices', { order_id: os.id, kind: 'nfse' });
     ok(nf.status === 'processando' && focusCalls.at(-1).path === '/v2/nfsen', 'NFS-e nacional enviada à Focus');
+    await call('POST', '/invoices', { order_id: os.id, kind: 'nfse' }, [400]);
+    ok(true, 'bloqueia segunda NFS-e em processamento para a mesma OS');
     ok(focusCalls.at(-1).auth === `Basic ${Buffer.from('TOKEN-TESTE-123:').toString('base64')}`, 'autenticação Basic com token');
     ok(focusCalls.at(-1).body.cnpj_tomador === '11444777000161' && focusCalls.at(-1).body.numero_dps === 1, 'payload DPS com tomador e numeração');
     nf = await call('POST', `/invoices/${nf.id}/refresh`);
@@ -283,12 +292,149 @@ try {
       token = ownerToken;
     });
 
+  // ================= FASE 1 — base comercial =================
+  const units = await call('GET', '/units');
+  ok(units.length === 1 && units[0].is_default && units[0].name === 'Matriz', 'unidade principal criada');
+  const un2 = await call('POST', '/units', { name: 'Oficina Sul', city: 'Campinas', uf: 'SP' });
+  ok(un2.id && !un2.is_default, 'nova unidade cadastrada');
+
+  const ct = await call('POST', `/customers/${c.id}/contacts`, { name: 'João Compras', role: 'Comprador', phone: '(19) 97777-1111', is_primary: true });
+  const ad = await call('POST', `/customers/${c.id}/addresses`, { kind: 'execucao', label: 'Fábrica', street: 'Av. Industrial', number: '500', city: 'Paulínia', uf: 'SP' });
+  const eq2 = await call('POST', `/customers/${c.id}/equipment`, { category: 'Estrutura', description: 'Portão basculante 4x3 m', material: 'Aço carbono', dimensions: '4000 x 3000 mm', quantity: 1, condition: 'Dobradiças quebradas' });
+  const cdet = await call('GET', `/customers/${c.id}`);
+  ok(cdet.contacts[0].id === ct.id && cdet.addresses[0].id === ad.id && cdet.equipment.some((x) => x.material === 'Aço carbono'), 'contatos, endereços e objetos com dimensões/material');
+
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  await call('POST', '/attachments', { entity: 'equipment', entity_id: eq2.id, filename: 'foto.png', mime: 'image/png', data: png, authorized: false }, [400]);
+  const att = await call('POST', '/attachments', { entity: 'equipment', entity_id: eq2.id, filename: 'foto.png', mime: 'image/png', data: `data:image/png;base64,${png}`, caption: 'Recebimento' });
+  const attList = await call('GET', `/attachments?entity=equipment&entity_id=${eq2.id}`);
+  ok(attList.length === 1 && !attList[0].data && (await call('GET', `/attachments/${att.id}`)).data === png, 'foto autorizada anexada ao objeto');
+  await call('POST', '/attachments', { entity: 'equipment', entity_id: eq2.id, filename: 'x.exe', mime: 'application/x-msdownload', data: png }, [400]);
+  ok(true, 'bloqueia formato de arquivo não permitido');
+
+  // solicitação → visita → diagnóstico → orçamento → aprovação parcial → OS
+  let rq = await call('POST', '/requests', { customer_id: c.id, channel: 'whatsapp', equipment_id: eq2.id, title: 'Portão não fecha',
+    description: 'Cliente relata portão arrastando', service_location: 'externo', address: 'Av. Industrial, 500 — Paulínia', priority: 'alta' });
+  ok(rq.number === 4 && rq.status === 'nova' && rq.events.length === 1, `solicitação nº ${rq.number} registrada`);
+  await call('POST', `/requests/${rq.id}/status`, { status: 'perdida' }, [400]);
+  ok(true, 'perda exige motivo');
+  rq = await call('POST', `/requests/${rq.id}/visit`, { visit_at: new Date(Date.now() + 86400000).toISOString(), visit_technician_id: techs[1].id });
+  ok(rq.status === 'visita_agendada' && rq.visit_technician_name, 'visita técnica agendada');
+  rq = await call('POST', `/requests/${rq.id}/diagnosis`, { diagnosis: 'Dobradiças rompidas e trilho empenado; soldar reforço.' });
+  ok(rq.status === 'diagnosticada', 'diagnóstico registrado');
+  const fromReq = await call('POST', `/requests/${rq.id}/quote`);
+  rq = await call('GET', `/requests/${rq.id}`);
+  ok(rq.status === 'em_orcamento' && rq.quote_id === fromReq.quote_id, `orçamento nº ${fromReq.number} iniciado pela solicitação`);
+  let q3 = await call('GET', `/quotes/${fromReq.quote_id}`);
+  ok(q3.scope?.includes('Dobradiças') && q3.request_id === rq.id && q3.total === 0, 'orçamento herda escopo/diagnóstico');
+  const q3body = (items, extra = {}) => ({ customer_id: c.id, equipment_id: eq2.id, title: q3.title, scope: q3.scope, assumptions: 'Acesso livre ao local',
+    exclusions: 'Pintura final', tax_rate: 6, surcharge: 20, items, ...extra });
+  q3 = await call('PUT', `/quotes/${q3.id}`, q3body([
+    { kind: 'servico', service_id: svTig.id, description: 'Solda de reforço nas dobradiças', qty: 3, unit_price: 150, group_label: 'Reparo' },
+    { kind: 'deslocamento', description: 'Deslocamento', qty: 1, unit_price: 60 },
+    { kind: 'terceiro', description: 'Guincho para retirada', qty: 1, unit_price: 300, group_label: 'Alternativa', optional: true },
+  ]));
+  ok(q3.total === 450 + 60 + 20 && q3.tax_amount === 31.8, `totais com acréscimo e tributo estimado (${q3.total} / ${q3.tax_amount})`);
+  q3 = await call('POST', `/quotes/${q3.id}/send`, { via: 'whatsapp' });
+  rq = await call('GET', `/requests/${rq.id}`);
+  ok(q3.revision === 1 && rq.status === 'orcada', 'envio marca solicitação como orçada');
+  q3 = await call('PUT', `/quotes/${q3.id}`, q3body(q3.items.map((i) => ({ ...i, unit_price: i.kind === 'servico' ? 140 : i.unit_price }))));
+  ok(q3.status === 'rascunho' && q3.total === 420 + 60 + 20, 'alteração após envio volta a rascunho');
+  q3 = await call('POST', `/quotes/${q3.id}/send`, { via: 'email' });
+  ok(q3.revision === 2 && q3.versions.length === 2, 'nova revisão versionada (rev. 2)');
+  const v1 = await call('GET', `/quotes/${q3.id}/versions/1`);
+  ok(v1.snapshot.total === 530 && v1.snapshot.items.length === 3, 'revisão 1 preservada com valores originais');
+  await call('POST', `/quotes/${q3.id}/convert`, {}, [400]);
+  ok(true, 'OS só é gerada após aprovação');
+  const svcItem = q3.items.find((i) => i.kind === 'servico');
+  const optItem = q3.items.find((i) => i.optional);
+  q3 = await call('POST', `/quotes/${q3.id}/decision`, { decision: 'parcialmente_aprovado', decided_by: 'João Compras', via: 'telefone',
+    approved_item_ids: [svcItem.id, optItem.id], notes: 'Deslocamento por conta do cliente' });
+  ok(q3.status === 'parcialmente_aprovado' && q3.approvals[0].revision === 2 && near(q3.approved_total, 420 + 300 + 20 * (420 / 480)), `aprovação parcial registrada (${q3.approved_total})`);
+  await call('PUT', `/quotes/${q3.id}`, q3body(q3.items), [400]);
+  ok(true, 'orçamento aprovado bloqueado para edição');
+  const conv3 = await call('POST', `/quotes/${q3.id}/convert`, {});
+  const os3 = await call('GET', `/orders/${conv3.order_id}`);
+  ok(os3.items.filter((i) => i.description !== 'Acréscimos do orçamento').length === 2 && near(os3.total, q3.approved_total) && os3.quote_id === q3.id, `OS nº ${os3.number} só com itens aprovados (${os3.total})`);
+  rq = await call('GET', `/requests/${rq.id}`);
+  ok(rq.status === 'convertida' && rq.order_id === os3.id, 'solicitação concluída como convertida');
+  await call('POST', `/requests/${rq.id}/status`, { status: 'em_triagem' }, [400]);
+  ok(true, 'transição inválida bloqueada');
+
+  // solicitação simples → OS direta; recusa → perdida
+  const rq2 = await call('POST', '/requests', { contact_name: 'Pedro Avulso', contact_phone: '(19) 90000-0000', channel: 'presencial', title: 'Soldar suporte' });
+  await call('POST', `/requests/${rq2.id}/order`, {}, [400]);
+  ok(true, 'OS exige cliente cadastrado');
+  const rq3 = await call('POST', '/requests', { customer_id: c.id, title: 'Grade de janela' });
+  const o3 = await call('POST', `/requests/${rq3.id}/order`);
+  ok(o3.number > 0 && (await call('GET', `/requests/${rq3.id}`)).status === 'convertida', 'OS direta a partir da solicitação');
+  const rq4 = await call('POST', '/requests', { customer_id: c.id, title: 'Corrimão' });
+  const q4 = await call('POST', `/requests/${rq4.id}/quote`);
+  await call('PUT', `/quotes/${q4.quote_id}`, { customer_id: c.id, title: 'Corrimão', items: [{ kind: 'avulso', description: 'Corrimão inox', qty: 1, unit_price: 900 }] });
+  await call('POST', `/quotes/${q4.quote_id}/decision`, { decision: 'recusado', decided_by: 'Cliente', via: 'presencial', notes: 'Preço' });
+  const rq4b = await call('GET', `/requests/${rq4.id}`);
+  ok(rq4b.status === 'perdida' && rq4b.lost_reason.includes('recusado'), 'recusa marca solicitação como perdida com motivo');
+
+  const found = await call('GET', `/search?q=${encodeURIComponent('Portão')}`);
+  ok(found.some((x) => x.type === 'equipment') && found.some((x) => x.type === 'request'), `busca global (${found.length} resultados)`);
+  const byNum = await call('GET', `/search?q=${os3.number}`);
+  ok(byNum.some((x) => x.type === 'order' && x.id === os3.id), 'busca por número da OS');
+  const notif = await call('GET', '/notifications');
+  ok(Array.isArray(notif.items) && notif.items.every((n) => n.link && n.count > 0), `notificações (${notif.items.length} alertas)`);
+
+  const aud = await call('GET', '/audit?entity=quote');
+  ok(aud.rows.some((x) => x.action === 'decision' && x.summary.includes('Parcialmente')) && aud.rows.some((x) => x.action === 'send'), `auditoria de orçamentos (${aud.total})`);
+  const audAll = await call('GET', '/audit');
+  ok(audAll.rows.some((x) => x.entity === 'invoice') && audAll.rows.some((x) => x.entity === 'unit'), 'auditoria de fiscal e unidades');
+  const audPay = await call('GET', '/audit?entity=payment,stock,fiscal,cash');
+  ok(audPay.rows.some((x) => x.entity === 'payment') && audPay.rows.some((x) => x.entity === 'stock') && audPay.rows.some((x) => x.entity === 'fiscal') && !JSON.stringify(audPay.rows).includes('CONTA-PRINCIPAL-TOKEN'), 'auditoria de pagamentos, estoque e fiscal (sem segredos)');
+
+  // perfis
+  const mk = async (role) => {
+    const u = await call('POST', '/users', { name: `U ${role}`, email: `${role}${Date.now()}@torven.app`, password: '123456', role });
+    return (await call('POST', '/auth/login', { email: u.email, password: '123456' })).token;
+  };
+  const ownerTok = token;
+  const tEst = await mk('estimator');
+  const tView = await mk('viewer');
+  const tFin = await mk('finance');
+  token = tEst;
+  const qe = await call('POST', '/quotes', { customer_id: c.id, title: 'Orçamentista', items: [{ kind: 'avulso', description: 'X', qty: 1, unit_price: 10 }] });
+  await call('POST', `/quotes/${qe.id}/decision`, { decision: 'aprovado', decided_by: 'X', via: 'presencial' }, [403]);
+  await call('GET', '/cash/transactions', null, [403]);
+  await call('GET', '/audit', null, [403]);
+  ok(true, 'orçamentista: orça, mas não aprova, não vê caixa nem auditoria');
+  token = tView;
+  await call('POST', '/requests', { customer_id: c.id, title: 'x' }, [403]);
+  ok((await call('GET', '/requests')).length >= 4, 'consulta: lê solicitações, não cria');
+  await call('POST', '/users', { name: 'x', email: 'x@x.com', password: '123456', role: 'admin' }, [403]);
+  token = tFin;
+  await call('POST', '/requests', { customer_id: c.id, title: 'x' }, [403]);
+  ok((await call('GET', '/cash/transactions')).items, 'financeiro: acessa caixa, não cria solicitação');
+  token = ownerTok;
+  await call('POST', '/users', { name: 'x', email: `own${Date.now()}@x.com`, password: '123456', role: 'owner' }, [400]);
+  ok(true, 'não cria segundo proprietário');
+
+  // isolamento entre empresas
+  const other = await call('POST', '/auth/register', { companyName: 'Outra Serralheria', name: 'Outro', email: `outro${Date.now()}@torven.app`, password: '123456' });
+  token = other.token;
+  await call('GET', `/quotes/${q3.id}`, null, [404]);
+  await call('GET', `/requests/${rq.id}`, null, [404]);
+  await call('GET', `/customers/${c.id}`, null, [404]);
+  await call('GET', `/attachments/${att.id}`, null, [404]);
+  await call('POST', '/attachments', { entity: 'equipment', entity_id: eq2.id, filename: 'a.png', mime: 'image/png', data: png }, [404]);
+  await call('POST', '/requests', { customer_id: c.id, title: 'Invasão' }, [404]);
+  await call('POST', '/quotes', { customer_id: c.id, title: 'Invasão', items: [{ kind: 'avulso', description: 'X', qty: 1, unit_price: 1 }] }, [404]);
+  const srch = await call('GET', `/search?q=${encodeURIComponent('Cliente Novo')}`);
+  ok(srch.length === 0 && (await call('GET', '/audit')).rows.every((x) => !x.summary?.includes('Cliente Novo')), 'isolamento entre empresas (leitura, escrita, busca e auditoria)');
+  token = ownerTok;
+
   // ---------- versão de demonstração ----------
   token = '';
   const demo = await call('POST', '/auth/demo', {});
   ok(demo.company.is_demo && demo.token, 'demonstração criada com um clique');
   token = demo.token;
-  ok((await call('GET', '/orders')).length >= 10, 'demonstração já vem com dados de exemplo');
+  ok((await call('GET', '/orders')).length >= 10 && (await call('GET', '/requests?status=')).length === 3, 'demonstração já vem com dados de exemplo (OS e solicitações)');
   const act = await call('POST', '/auth/activate', { companyName: 'Serralheria Real', name: 'Dono Real', email: `real${Date.now()}@torven.app`, password: 'segredo1', keepData: false });
   token = act.token;
   ok(!act.company.is_demo && act.company.name === 'Serralheria Real', 'demonstração ativada para uso normal');

@@ -9,8 +9,16 @@ export async function nextNumber(db, table, companyId) {
   return r.n;
 }
 
+export const ITEM_KINDS = ['servico', 'material', 'consumivel', 'deslocamento', 'terceiro', 'outro', 'avulso'];
+/** Itens que movimentam estoque (têm material vinculado). */
+export const isGoods = (i) => ['material', 'consumivel'].includes(i.kind) && !!i.product_id;
+
 export const itemSchema = z.object({
-  kind: z.enum(['servico', 'material', 'avulso']),
+  kind: z.enum(ITEM_KINDS),
+  optional: z.boolean().optional(),
+  approved: z.boolean().nullable().optional(),
+  group_label: z.string().trim().nullable().optional(),
+  notes: z.string().trim().nullable().optional(),
   service_id: z.string().uuid().nullable().optional(),
   product_id: z.string().uuid().nullable().optional(),
   technician_id: z.string().uuid().nullable().optional(),
@@ -48,7 +56,7 @@ export async function prepareItems(db, companyId, items, { defaultTechnician = n
     if (i.discount > gross) throw bad(`Desconto maior que o valor do item "${i.description}".`);
     const total = round2(gross - (i.discount || 0));
     const technician_id = i.kind === 'servico' ? (i.technician_id || defaultTechnician || null) : (i.technician_id || null);
-    const catalogCost = i.kind === 'material' ? P[i.product_id]?.cost : S[i.service_id]?.cost;
+    const catalogCost = i.product_id ? P[i.product_id]?.cost : S[i.service_id]?.cost;
     const unit_cost = i.unit_cost ?? catalogCost ?? 0;
     let commission_rate = 0;
     if (i.kind === 'servico' && technician_id) {
@@ -59,24 +67,25 @@ export async function prepareItems(db, companyId, items, { defaultTechnician = n
       description: i.description, unit: i.unit || P[i.product_id]?.unit || S[i.service_id]?.unit || (i.kind === 'servico' ? 'serv' : 'un'),
       qty: i.qty, unit_price: i.unit_price, unit_cost, discount: i.discount || 0, total,
       commission_rate, commission_value: round2(total * commission_rate / 100),
+      optional: !!i.optional, approved: i.approved ?? null, group_label: i.group_label || null, notes: i.notes || null,
     };
   });
-  return { items: out, subtotal: round2(out.reduce((a, x) => a + x.total, 0)) };
+  const counted = out.filter((x) => !x.optional);
+  return {
+    items: out,
+    subtotal: round2(counted.reduce((a, x) => a + x.total, 0)),
+    cost: round2(counted.reduce((a, x) => a + x.qty * Number(x.unit_cost || 0), 0)),
+  };
 }
 
 export async function insertItems(db, table, fk, parentId, items) {
   await db.query(`delete from ${table} where ${fk} = $1`, [parentId]);
-  const withComm = table === 'order_items';
+  const cols = ['position', 'kind', 'service_id', 'product_id', 'description', 'unit', 'qty', 'unit_price', 'unit_cost', 'discount', 'total',
+    ...(table === 'order_items' ? ['technician_id', 'commission_rate', 'commission_value'] : ['optional', 'approved', 'group_label', 'notes'])];
   for (const i of items) {
     await db.query(
-      `insert into ${table} (${fk}, position, kind, service_id, product_id, ${withComm ? 'technician_id, commission_rate, commission_value,' : ''}
-         description, unit, qty, unit_price, unit_cost, discount, total)
-       values ($1,$2,$3,$4,$5,${withComm ? '$12,$13,$14,' : ''}$6,$7,$8,$9,$10,$11,${withComm ? '$15' : '$12'})`,
-      withComm
-        ? [parentId, i.position, i.kind, i.service_id, i.product_id, i.description, i.unit, i.qty, i.unit_price, i.unit_cost, i.discount,
-          i.technician_id, i.commission_rate, i.commission_value, i.total]
-        : [parentId, i.position, i.kind, i.service_id, i.product_id, i.description, i.unit, i.qty, i.unit_price, i.unit_cost, i.discount, i.total],
-    );
+      `insert into ${table} (${fk}, ${cols.join(', ')}) values ($1, ${cols.map((_, k) => `$${k + 2}`).join(', ')})`,
+      [parentId, ...cols.map((c) => i[c] ?? null)]);
   }
 }
 
@@ -101,7 +110,7 @@ export async function syncOrderStock(db, order, userId, settings) {
   const allowNegative = withDefaults(settings).orders.allowNegativeStock;
   const { rows: want } = await db.query(
     `select product_id, sum(qty) as qty, max(unit_cost) as unit_cost from order_items
-      where order_id = $1 and kind = 'material' and product_id is not null group by product_id`, [order.id]);
+      where order_id = $1 and kind in ('material','consumivel') and product_id is not null group by product_id`, [order.id]);
   const { rows: have } = await db.query(
     'select product_id, -sum(qty) as qty from stock_movements where order_id = $1 group by product_id', [order.id]);
   const W = Object.fromEntries(want.map((x) => [x.product_id, order.status === 'cancelada' ? 0 : Number(x.qty)]));

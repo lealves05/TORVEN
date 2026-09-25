@@ -6,6 +6,7 @@ import { need } from '../auth.js';
 import { parse, notFound, bad, fiscalWithDefaults, dpsKey } from '../util.js';
 import { buildNfse, buildNfe, focusRequest, mapStatus, errorMessage, extractDoc } from '../fiscal.js';
 import { logEvent } from '../domain.js';
+import { audit } from '../audit.js';
 
 const r = Router();
 
@@ -48,7 +49,7 @@ r.get('/preview', need('invoices_issue'), async (req, res) => {
   const ctx = await context(req.companyId, d.order_id);
   const b = build(d.kind, ctx, ctx.fiscal[dpsKey(ctx.fiscal.environment)]);
   const { rows: existing } = await q(
-    "select id, status, number from invoices where order_id = $1 and kind = $2 and status in ('processando','autorizada','interna')", [d.order_id, d.kind]);
+    "select id, status, number from invoices where order_id = $1 and kind = $2 and status in ('processando','autorizada')", [d.order_id, d.kind]);
   res.json({
     kind: d.kind, provider: ctx.fiscal.provider, environment: ctx.fiscal.environment, endpoint: b.endpoint,
     amount: b.amount, warnings: b.warnings, items: b.items, description: b.description, payload: b.payload, existing,
@@ -65,13 +66,15 @@ r.get('/:id', need('invoices_issue', 'invoices_cancel', 'cash'), async (req, res
 });
 
 r.post('/', need('invoices_issue'), async (req, res) => {
-  const d = parse(z.object({ order_id: z.string().uuid(), kind: z.enum(['nfse', 'nfe']), force: z.boolean().default(false) }), req.body);
+  const d = parse(z.object({ order_id: z.string().uuid(), kind: z.enum(['nfse', 'nfe']), prepare_only: z.boolean().default(false) }), req.body);
   const inv = await tx(async (db) => {
     await db.query('select id from companies where id = $1 for update', [req.companyId]);
     const ctx = await context(req.companyId, d.order_id);
     const { rows: dup } = await db.query(
-      "select id from invoices where order_id = $1 and kind = $2 and status in ('processando','autorizada','interna')", [d.order_id, d.kind]);
-    if (dup.length && !d.force) throw bad('Já existe nota emitida desta OS para este tipo. Cancele-a antes ou confirme a nova emissão.');
+      "select id, status from invoices where order_id = $1 and kind = $2 and status in ('processando','autorizada')", [d.order_id, d.kind]);
+    if (dup.length) throw bad(`Já existe ${d.kind === 'nfe' ? 'NF-e' : 'NFS-e'} ${dup[0].status === 'autorizada' ? 'autorizada' : 'em processamento'} para esta OS. Cancele-a antes de emitir outra.`);
+    // um único documento em preparação por OS/tipo
+    await db.query("delete from invoices where order_id = $1 and kind = $2 and status in ('preparada','erro')", [d.order_id, d.kind]);
     const f = ctx.fiscal;
     const useFocus = f.provider === 'focus';
     const b = build(d.kind, ctx, f[dpsKey(f.environment)]);
@@ -83,16 +86,15 @@ r.post('/', need('invoices_issue'), async (req, res) => {
     const base = [req.companyId, d.order_id, ctx.order.customer_id, d.kind, useFocus ? 'focus' : 'interno', useFocus ? f.environment : null,
       ref, b.amount, b.description, snapshotCustomer, JSON.stringify(b.items.map((i) => ({ description: i.description, qty: i.qty, unit: i.unit, unit_price: i.unit_price, total: i.net })))];
 
-    if (!useFocus) {
-      const number = String(f.nextInternalNumber);
-      await db.query("update companies set fiscal = jsonb_set(fiscal, '{nextInternalNumber}', to_jsonb($2::int)) where id = $1",
-        [req.companyId, f.nextInternalNumber + 1]);
+    if (!useFocus || d.prepare_only) {
       const { rows: [row] } = await db.query(
         `insert into invoices (company_id, order_id, customer_id, kind, provider, environment, ref, amount, description, customer, items,
-                               status, number, series, issued_at, message, created_by)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'interna',$12,'INT',now(),$13,$14) returning *`,
-        [...base, number, 'Documento interno, sem valor fiscal. Configure a Focus NFe para emitir notas reais.', req.user.id]);
-      await logEvent(db, d.order_id, { type: 'nota', message: `Documento ${d.kind.toUpperCase()} interno nº ${number} gerado`, userId: req.user.id });
+                               status, message, request, created_by)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,'preparada',$12,$13,$14) returning *`,
+        [...base, useFocus ? 'Preparada para conferência — ainda não enviada ao provedor.' : 'Emissão indisponível: integração fiscal não configurada.',
+          { ...b.payload, _endpoint: b.endpoint, _warnings: b.warnings }, req.user.id]);
+      await logEvent(db, d.order_id, { type: 'nota', message: `${d.kind === 'nfe' ? 'NF-e' : 'NFS-e'} preparada para conferência (sem emissão)`, userId: req.user.id });
+      await audit(db, req, { entity: 'invoice', entityId: row.id, action: 'preparar', summary: `${d.kind.toUpperCase()} preparada · ${b.amount}` });
       return row;
     }
 
@@ -114,6 +116,7 @@ r.post('/', need('invoices_issue'), async (req, res) => {
         ok ? (status === 'autorizada' ? 'Autorizada' : 'Enviada para autorização') : errorMessage(resp.data) || `Erro ${resp.status}`,
         { ...b.payload, _endpoint: b.endpoint }, resp.data, req.user.id]);
     await logEvent(db, d.order_id, { type: 'nota', message: `${d.kind === 'nfe' ? 'NF-e' : 'NFS-e'} enviada à Focus NFe (${status})`, userId: req.user.id });
+    await audit(db, req, { entity: 'invoice', entityId: row.id, action: 'emitir', summary: `${d.kind.toUpperCase()} enviada à Focus NFe (${f.environment}) · ${b.amount} · situação ${status}` });
     return row;
   });
   res.status(201).json(inv);
@@ -147,6 +150,7 @@ r.post('/:id/cancel', need('invoices_cancel'), async (req, res) => {
   const inv = await one('select * from invoices where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!inv) throw notFound();
   if (inv.status === 'cancelada') throw bad('Nota já cancelada.');
+  if (inv.status === 'preparada') throw bad('Documento apenas preparado (sem emissão): descarte-o em vez de cancelar.');
   if (inv.provider === 'focus') {
     if (inv.status !== 'autorizada') throw bad('Só notas autorizadas podem ser canceladas na Focus NFe.');
     const company = await one('select fiscal from companies where id = $1', [req.companyId]);
@@ -159,13 +163,15 @@ r.post('/:id/cancel', need('invoices_cancel'), async (req, res) => {
     "update invoices set status = 'cancelada', cancelled_at = now(), cancel_reason = $2, message = 'Cancelada' where id = $1 returning *",
     [inv.id, d.reason]);
   if (inv.order_id) await logEvent({ query: q }, inv.order_id, { type: 'nota', message: `Nota ${inv.number || ''} cancelada: ${d.reason}`, userId: req.user.id });
+  await audit(null, req, { entity: 'invoice', entityId: inv.id, action: 'cancelar', summary: `${inv.kind.toUpperCase()} ${inv.number || ''} cancelada: ${d.reason}` });
   res.json(row);
 });
 
-/** Descarta uma nota com erro (não enviada/rejeitada), liberando nova emissão. */
+/** Descarta documento preparado ou com erro (nunca autorizado), liberando nova emissão. */
 r.delete('/:id', need('invoices_issue'), async (req, res) => {
-  const row = await one("delete from invoices where id = $1 and company_id = $2 and status = 'erro' returning id", [req.params.id, req.companyId]);
-  if (!row) throw bad('Só notas com erro podem ser descartadas.');
+  const row = await one("delete from invoices where id = $1 and company_id = $2 and status in ('erro','preparada') returning id, kind, status, amount", [req.params.id, req.companyId]);
+  if (!row) throw bad('Só documentos preparados ou com erro podem ser descartados.');
+  await audit(null, req, { entity: 'invoice', entityId: row.id, action: 'descartar', summary: `${row.kind.toUpperCase()} ${row.status} descartada · ${row.amount}` });
   res.status(204).end();
 });
 

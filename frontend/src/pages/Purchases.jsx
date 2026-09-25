@@ -119,7 +119,7 @@ export function PurchaseEditor() {
   };
 
   return (
-    <div className="pb-24">
+    <div className="pb-2">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -243,7 +243,7 @@ export function PurchaseEditor() {
       </div>
 
       {!readOnly && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur">
+        <div className="action-bar">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-end gap-3 px-4 py-3 sm:px-8">
             <button className="btn-ghost" onClick={() => nav('/estoque/entradas')}>Voltar</button>
             <button className="btn-outline" disabled={busy || !f.items.length} onClick={() => save(false)}><Save className="h-4 w-4" /> Salvar rascunho</button>

@@ -24,7 +24,7 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('torven:logout', out);
   }, []);
 
-  // tema segue as configurações do salão + preferências do usuário
+  // tema segue as configurações da empresa + preferências do usuário
   useEffect(() => {
     applyTheme(state.company?.settings, state.user?.preferences);
     const mq = window.matchMedia?.('(prefers-color-scheme: dark)');

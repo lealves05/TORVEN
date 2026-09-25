@@ -1,112 +1,145 @@
-# TORVEN — gestão para assistência técnica
+# TORVEN — plataforma para assistência técnica
 
-Sistema web (frontend + backend) para oficinas de **soldas especiais, serralheria e pequenos reparos mecânicos**.
-Mesma base técnica do ORBI: clean, responsivo (funciona no celular) e personalizável pela própria empresa.
+Plataforma web (frontend + API) para empresas de **soldas especiais, serralheria, caldeiraria leve e pequenos reparos mecânicos**:
+do primeiro contato do cliente até a entrega, o faturamento e o recebimento. Responsiva (no celular as listas viram cartões),
+personalizável por empresa e por usuário, multiempresa e com perfis de acesso aplicados na API.
 
-## Funcionalidades
+## Fluxo principal
 
-**Ordens de serviço**
-- Entrada do equipamento/peça: cliente, equipamento (marca, modelo, nº de série), problema relatado, acessórios deixados e estado na entrada
-- Etapas: recebida → diagnóstico → aguardando aprovação → aprovada → aguardando material → em execução → pronta → entregue (ou cancelada)
-- **Quadro (kanban)** com arrastar e soltar, lista com filtros, prazo de entrega com alerta de atraso, prioridade e serviço na oficina ou externo
-- Serviços (hora, m², peça, valor fechado) e materiais na mesma OS, técnico por serviço, desconto por item e geral
-- Materiais lançados **baixam o estoque automaticamente**; editar/cancelar/reabrir a OS devolve ou baixa a diferença
-- Histórico com anotações internas ou visíveis ao cliente, garantia com data de vencimento
-- Recebimento parcial (sinal), pagamento dividido, troco, saldo parcelado "a receber", estorno
-- Impressão A4 da OS e recibo (ou "salvar como PDF"), mensagens prontas de WhatsApp
-- **Link de acompanhamento** para o cliente ver a etapa e aprovar o serviço
+```
+Solicitação → visita/triagem → diagnóstico → orçamento (revisões) → aprovação total/parcial → OS → execução → entrega → nota fiscal → recebimento → garantia
+```
 
-**Orçamentos**
-- Itens do catálogo ou avulsos, validade, prazo, garantia, forma de pagamento e termos
-- Envio por WhatsApp com **link público**: o cliente aprova ou recusa online
-- Orçamento aprovado **vira OS em um clique** (itens, cliente e equipamento copiados)
-- Expiração automática, duplicação, impressão/PDF, taxa de aprovação
+Estados técnicos (OS), comerciais (solicitação/orçamento), fiscais (documento) e financeiros (lançamentos) são guardados separadamente.
 
-**Venda de balcão** — materiais e serviços rápidos com recebimento na hora, troco e recibo
+## O que está operacional
 
-**Estoque e compras**
-- Materiais com unidade (kg, m, barra, m³ de gás…), custo médio, preço, mínimo, localização e dados fiscais (NCM, origem, CFOP)
-- **Entrada de materiais** (nota do fornecedor): atualiza estoque e custo médio com rateio de frete/despesas/desconto, cria materiais novos, atualiza preço de venda e gera **contas a pagar** parceladas
-- Entrada/saída avulsa e inventário, histórico de movimentações, alerta de estoque baixo, fornecedores
+| Área | Situação |
+|---|---|
+| **Navegação** | Menu lateral recolhível com grupos e dicas, trilha (breadcrumbs), busca global (`Ctrl/⌘+K` ou `/`), central de notificações calculada a partir dos dados, atalhos (`Alt+S` solicitação, `Alt+O` OS, `Alt+Q` orçamento), barra superior opcional |
+| **Empresas e unidades** | Cadastro da empresa na tela de login, versão de demonstração ativável para uso normal, unidades (matriz/filiais), numeração com prefixo configurável (`SOL-`, `ORC-`, `OS-`, `ENT-`) |
+| **Perfis de acesso** | Proprietário, administrador, gerente, atendimento, orçamentista, supervisor técnico, técnico, compras e estoque, financeiro, fiscal e consulta — permissões editáveis por perfil e verificadas no backend |
+| **Clientes e objetos de serviço** | Pessoa física/jurídica, várias pessoas de contato, endereços de cobrança/execução/entrega, objetos (equipamento, peça, estrutura, veículo) com material, dimensões, quantidade, placa, patrimônio e condição de recebimento; fotos autorizadas (reduzidas no navegador) e PDFs |
+| **Solicitações** | Entrada por telefone/WhatsApp/e-mail/balcão/site/indicação, triagem, agendamento de visita técnica, diagnóstico, perda/cancelamento com motivo, histórico, geração de orçamento ou OS direta |
+| **Orçamentos** | Mão de obra, materiais, consumíveis, deslocamento, terceiros e outras despesas; itens opcionais/alternativos com grupos; escopo, premissas e exclusões; desconto, acréscimos, tributos estimados, custo e margem; **revisões versionadas** a cada envio; registro de aprovação total/parcial ou recusa (quem, como, quando); link público com escolha de opcionais; conversão em OS só com os itens aprovados |
+| **Ordens de serviço** | Quadro kanban e lista, etapas, técnico por serviço, materiais que baixam estoque, pagamentos parciais, entrega, garantia, link de acompanhamento, impressão |
+| **Materiais e compras** | Estoque, entrada de nota do fornecedor com custo médio e contas a pagar, ajustes e inventário, fornecedores |
+| **Financeiro** | Caixa (abertura/fechamento), contas a pagar/receber, comissões, relatórios gerenciais |
+| **Fiscal** | Focus NFe (NFS-e nacional/municipal e NF-e) com cadastro guiado dentro do sistema. **Sem provedor configurado nada é emitido**: o sistema mostra *“Emissão indisponível: integração fiscal não configurada”* e só permite preparar o documento para conferência (sem número, protocolo ou valor fiscal) |
+| **Auditoria** | Registro permanente de preços, aprovações, estoque, caixa, pagamentos, documentos fiscais, usuários, perfis, unidades e configurações (sem gravar senhas, tokens ou certificados) |
 
-**Financeiro**
-- Abertura e fechamento de caixa com conferência, sangria e suprimento
-- Fluxo de caixa, contas a pagar e a receber (baixa, desfazer baixa, recorrência), taxas de cartão lançadas como despesa
-- Comissões por técnico/serviço com lançamento do pagamento
+Ainda **não** fazem parte da plataforma (fases seguintes): agenda/programação da produção, apontamento de horas, inspeção/qualidade,
+compras com cotação, conciliação bancária, DRE completa, relacionamento/pós-venda e Torven Pay. Nenhum desses itens aparece no menu até estar funcionando.
 
-**Notas fiscais (Focus NFe)**
-- **NFS-e** dos serviços (padrão nacional/DPS ou municipal) e **NF-e** dos materiais, geradas a partir da OS ou venda
-- Prévia com validação (CNPJ, IBGE, NCM, endereço), consulta da autorização, DANFE/XML, cancelamento com justificativa
-- Homologação e produção separadas; tokens guardados no servidor e nunca devolvidos inteiros ao navegador
-- Sem Focus configurada, gera documento interno (sem valor fiscal)
-
-**Relatórios** — entradas × saídas, DRE simplificada (receita, CMV, margem, despesas), formas de pagamento, faturamento por tipo de serviço, produção e comissão por técnico, serviços e materiais mais vendidos, prazo cumprido, tempo médio, melhores clientes, estoque valorizado com cobertura em dias. Exportação CSV.
-
-**Personalização e acessos**
-- Cor, tema claro/escuro, cantos, fonte, densidade, menu superior ou lateral, logo
-- Categorias de serviços, materiais e equipamentos, formas de pagamento, termos da OS/orçamento, modelos de WhatsApp
-- **Perfis editáveis** (administrador, atendimento, técnico): técnico pode ver só as próprias OS e sem valores — regras aplicadas na API
-- Multiempresa: cada cadastro cria uma empresa isolada
+> Mensagens externas: o TORVEN **não envia** WhatsApp/e-mail sozinho. O usuário escolhe o canal, confirma e a mensagem abre no aparelho dele; o sistema registra o envio.
 
 ## Tecnologias
 
 | Camada | Stack |
 |---|---|
 | Frontend | React 18, Vite, Tailwind CSS, React Router, Recharts, date-fns, lucide-react |
-| Backend | Node.js 20+, Express 5, PostgreSQL (`pg`), JWT, bcrypt, zod, helmet, rate-limit |
-| Banco | PostgreSQL 16 (Supabase em produção) — migrações automáticas na inicialização |
+| API | Node.js 20+, Express 5, PostgreSQL (`pg`), JWT, bcrypt, zod, helmet, rate-limit |
+| Banco | PostgreSQL 16 (Supabase em produção) — migrações versionadas aplicadas na inicialização |
 | Fiscal | Focus NFe (API REST v2) |
 
-## Rodar localmente
+## Instalação local
 
 ```bash
-# 1) Banco
+# 1) Banco (PostgreSQL 16)
 docker compose up -d
 
 # 2) API  (http://localhost:3333)
 cd backend
 cp .env.example .env
 npm install
-npm run dev
+npm run dev          # aplica as migrações pendentes ao iniciar
 
-# 3) Frontend  (http://localhost:5173)
+# 3) Frontend  (http://localhost:5173 — /api é encaminhado para a API)
 cd ../frontend
 npm install
 npm run dev
 ```
 
-Abra http://localhost:5173, clique em **Cadastre sua empresa** e deixe marcado “Começar com dados de exemplo”.
+Abra http://localhost:5173 e use **Cadastrar empresa** (com ou sem dados de exemplo) ou **Experimentar a demonstração**.
 
-Teste automático da API (com a API rodando): `cd backend && npm test`.
-Para testar também as notas fiscais contra um simulador da Focus NFe, rode a API com
-`FOCUS_URL_HOMOLOGACAO=http://localhost:4999` e o teste com `MOCK_FOCUS=4999 npm test`.
+### Variáveis de ambiente
 
-## Ambiente de teste publicado
+**API (`backend/.env`)**
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `DATABASE_URL` | sim | Conexão PostgreSQL. No Supabase use o *pooler* |
+| `JWT_SECRET` | sim em produção | Texto longo e aleatório para assinar as sessões (na Edge Function é gerado e guardado no banco, tabela `_secrets`) |
+| `CORS_ORIGIN` | não | Domínios do site autorizados, separados por vírgula (`https://torven.vercel.app,*.vercel.app`) |
+| `PORT` | não | Porta da API (padrão 3333) |
+| `DATABASE_SSL` | não | `false` para desligar SSL em bancos locais fora de `localhost` |
+| `FOCUS_URL_HOMOLOGACAO` / `FOCUS_URL_PRODUCAO` | não | Só para testes com o simulador da Focus |
+
+Tokens da Focus NFe **não** vão em variável de ambiente: são cadastrados por empresa em *Configurações › Fiscal*, ficam no banco e nunca voltam inteiros ao navegador.
+
+**Frontend (`frontend/.env`)**
+
+| Variável | Descrição |
+|---|---|
+| `VITE_API_URL` | URL da API quando ela não está no mesmo domínio (vazio = usa `/api`) |
+| `VITE_BASE` | Subcaminho de publicação (ex.: `/TORVEN/` no GitHub Pages) |
+
+## Migrações
+
+- Arquivos SQL em `backend/src/migrations/NNN_nome.sql`, aplicados em ordem e registrados na tabela `_migrations`.
+- Rodam automaticamente quando a API inicia (local, Render ou Edge Function). Cada arquivo roda numa transação.
+- `004_fase1_comercial.sql` (Fase 1): unidades, perfis ampliados, auditoria, contatos/endereços, objetos de serviço, anexos,
+  solicitações, orçamentos v2 (revisões e aprovações) e documentos fiscais “preparados” (os antigos “internos” perdem o número simulado).
+
+**Reversão (rollback)** — cada migração nova tem um script manual em `backend/src/migrations/rollback/`:
+
+```bash
+pg_dump "$DATABASE_URL" > antes-do-rollback.sql          # sempre faça backup antes
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/src/migrations/rollback/004_fase1_comercial.down.sql
+# publique a versão anterior do código; se a versão nova subir de novo, a migração é reaplicada
+```
+
+O script 004 apaga solicitações, contatos, endereços, anexos, revisões/aprovações e auditoria, e reconverte perfis e estados novos para os antigos.
+
+## Testes
+
+```bash
+cd backend
+# terminal 1 — API apontando o fiscal para o simulador
+FOCUS_URL_HOMOLOGACAO=http://localhost:4999 FOCUS_URL_PRODUCAO=http://localhost:4999 npm run dev
+# terminal 2 — teste ponta a ponta (sobe o simulador da Focus na porta 4999)
+MOCK_FOCUS=4999 npm test
+```
+
+O teste (`scripts/smoke.mjs`, 100+ verificações) cobre cadastro, OS, estoque, pagamentos, fiscal (preparar sem provedor, emitir,
+consultar, cancelar, cadastro da empresa na Focus), relatórios, demonstração e toda a Fase 1: unidades, contatos, endereços,
+anexos, solicitação → visita → diagnóstico → orçamento → revisões → aprovação parcial → OS, busca global, notificações,
+auditoria, permissões por perfil e **isolamento entre empresas**. Build do site: `cd frontend && npm run build`.
+
+## Backup e restauração
+
+```bash
+# backup completo (dados + estrutura)
+pg_dump --no-owner --format=custom "$DATABASE_URL" -f torven-$(date +%F).dump
+# restaurar em um banco vazio
+pg_restore --no-owner --clean --if-exists -d "$DATABASE_URL_DESTINO" torven-AAAA-MM-DD.dump
+```
+
+No Supabase os backups diários automáticos ficam em *Database › Backups*. Anexos (fotos/PDFs) ficam no próprio banco e entram no mesmo backup.
+
+## Publicação
 
 | Parte | Onde | Endereço |
 |---|---|---|
-| Site | GitHub Pages (workflow `pages.yml`, a cada push na `main`) | https://lealves05.github.io/TORVEN/ |
-| API | Supabase Edge Function `torven-api` (projeto TORVEN, São Paulo) | https://dwfbxrfniarhufltmlhb.supabase.co/functions/v1/torven-api |
-| Banco | Supabase PostgreSQL (mesmo projeto) | migrações automáticas na primeira requisição |
+| Site | **Vercel** (workflow `deploy.yml`, a cada push na `main`) | https://torven-ebon.vercel.app |
+| Site (espelho) | GitHub Pages (workflow `pages.yml`) | https://lealves05.github.io/TORVEN/ |
+| API | Supabase Edge Function `torven-api` | `/api/*` do site é encaminhado para ela (`frontend/vercel.json`) |
+| Banco | Supabase PostgreSQL (São Paulo) | migrações automáticas na primeira requisição |
 
-A Edge Function é só uma "carregadora" (`backend/dist-edge/loader.ts`, gerada por `node scripts/build-edge.mjs`):
-ela declara os pacotes npm e importa o código da API publicado junto com o site em `/edge/torven-api.js`.
-Assim, cada `git push` atualiza site **e** API. O segredo do login (JWT) é gerado e guardado no próprio banco.
-
-## Publicar (igual ao ORBI)
-
-| Parte | Serviço | Observação |
-|---|---|---|
-| Frontend | **Vercel** — projeto `torven` (pasta `frontend`) | encaminha `/api/*` para a API (`frontend/vercel.json`) |
-| API | **Vercel** — projeto `torven-api` (pasta `backend`) | função serverless (`backend/api/index.js`) |
-| Banco | **Supabase** (PostgreSQL) | crie um projeto novo para o TORVEN |
-
-1. **Supabase** → novo projeto → **Connect → Transaction pooler** (porta 6543) → copie a URL.
-2. **GitHub** → crie o repositório `torven` e envie esta pasta.
-3. Em *Settings → Secrets → Actions* do repositório: `VERCEL_TOKEN`, `DATABASE_URL` e `JWT_SECRET` (texto longo aleatório).
-4. O workflow `.github/workflows/deploy.yml` cria os projetos na Vercel, publica API e site e roda o teste ponta a ponta a cada `git push` na `main`.
-
-Alternativa com servidor sempre ligado: `render.yaml` (Render Blueprint) para a API; defina `VITE_API_URL` no frontend e `CORS_ORIGIN` na API.
+- A Edge Function é uma carregadora: importa o código da API publicado junto com o site em `/edge/torven-api.js`
+  (gerado por `node backend/scripts/build-edge.mjs`). Cada `git push` atualiza site **e** API.
+- Segredo necessário no GitHub: `VERCEL_TOKEN` (*Settings › Secrets › Actions*). Nunca coloque tokens no código.
+- Alternativa com servidor dedicado: `render.yaml` (Render) para a API; defina `VITE_API_URL` no site e `CORS_ORIGIN` na API.
 
 ## Configurar a emissão de notas (passo a passo dentro do sistema)
 
@@ -128,22 +161,26 @@ O sistema avisa no painel e na tela de notas quando o certificado estiver a 30 d
 
 ```
 TORVEN/
-├── backend/              API Express
-│   ├── src/routes/       auth, empresa, clientes, OS, orçamentos, materiais, compras, caixa, notas, relatórios, público
-│   ├── src/domain.js     regras de numeração, itens, estoque e financeiro da OS
-│   ├── src/fiscal.js     integração Focus NFe (NFS-e nacional/municipal e NF-e)
-│   ├── src/migrations/   SQL versionado
-│   └── scripts/smoke.mjs teste ponta a ponta (com simulador da Focus)
-├── frontend/             SPA React
-│   └── src/pages/        Dashboard, OS (quadro/lista/detalhe), Orçamentos, Venda, Clientes, Estoque, Entradas,
-│                         Financeiro, Notas, Relatórios, Configurações, Impressão, páginas públicas
-├── render.yaml
+├── backend/
+│   ├── src/routes/        auth, empresa, unidades, usuários, clientes, solicitações, orçamentos, OS, materiais,
+│   │                      compras, caixa, notas, anexos, auditoria, busca/notificações, relatórios, público
+│   ├── src/domain.js      numeração, itens, estoque e financeiro da OS
+│   ├── src/audit.js       trilha de auditoria (explícita + automática para operações sensíveis)
+│   ├── src/fiscal.js      integração Focus NFe
+│   ├── src/migrations/    SQL versionado (+ rollback/)
+│   └── scripts/           smoke.mjs (teste ponta a ponta), build-edge.mjs (bundle da Edge Function)
+├── frontend/src/
+│   ├── components/        Layout (menu, trilha), Workspace (busca, notificações, atalhos), Table, ItemsEditor, Attachments…
+│   └── pages/             Início, Solicitações, Orçamentos, OS, Venda, Clientes, Estoque, Entradas, Financeiro,
+│                          Notas, Relatórios, Unidades, Auditoria, Configurações, Impressão, páginas públicas
 └── docker-compose.yml
 ```
 
 ## Segurança
 
 - Senhas com bcrypt, sessões JWT (7 dias), limite de tentativas no login e nos links públicos
-- Todas as consultas isoladas por empresa; RLS ligado em todas as tabelas (a Data API pública do Supabase não enxerga nada)
-- Links públicos usam token aleatório por OS/orçamento
-- Defina um `JWT_SECRET` forte em produção
+- Autorização verificada na API em cada rota; consultas sempre filtradas pela empresa; RLS ligado em todas as tabelas
+- Operações que mexem em OS, estoque e financeiro rodam numa única transação
+- Auditoria de preços, aprovações, estoque, caixa, pagamentos, documentos fiscais, permissões e configurações
+- Nenhuma autorização fiscal, número ou protocolo é simulado; nenhuma mensagem externa é enviada sem ação do usuário
+- Links públicos com token aleatório; anexos só de tipos permitidos (JPG, PNG, WEBP, PDF) e com confirmação de autorização do cliente

@@ -89,7 +89,7 @@ export const DEFAULT_SETTINGS = {
   primaryColor: '#ea580c',
   theme: 'system',
   radius: 'lg',
-  layout: 'top',
+  layout: 'side',
   paymentMethods: [
     { id: 'dinheiro', name: 'Dinheiro', fee: 0, active: true },
     { id: 'pix', name: 'PIX', fee: 0, active: true },
@@ -138,6 +138,14 @@ export const DEFAULT_SETTINGS = {
     status: 'Olá {cliente}! Atualização da OS nº {numero} na {empresa}: {status}. Acompanhe: {link}',
   },
   modules: { purchases: true, invoices: true, commissions: true, publicLinks: true },
+  dateFormat: 'dd/MM/yyyy',
+  numbering: { request: 'SOL', quote: 'ORC', order: 'OS', purchase: 'ENT', digits: 5 },
+  quotes: {
+    taxRate: 0,
+    assumptions: 'Valores considerando o material e as dimensões informadas na solicitação. Serviço executado em horário comercial.',
+    exclusions: 'Pintura, acabamentos e desmontagem/montagem de partes não descritas no escopo.',
+  },
+  requestChannels: ['telefone', 'whatsapp', 'email', 'presencial', 'site', 'indicacao', 'outro'],
 };
 
 export const DEFAULT_FISCAL = {
@@ -202,57 +210,80 @@ export function validDocument(v) {
 
 // ---------- Perfis de acesso ----------
 export const PERMISSIONS = [
+  { group: 'Atendimento e comercial', key: 'requests_view', label: 'Ver solicitações e visitas' },
+  { group: 'Atendimento e comercial', key: 'requests_manage', label: 'Registrar e tratar solicitações, agendar visitas' },
+  { group: 'Atendimento e comercial', key: 'quotes_view', label: 'Ver orçamentos' },
+  { group: 'Atendimento e comercial', key: 'quotes', label: 'Criar, revisar e editar orçamentos' },
+  { group: 'Atendimento e comercial', key: 'quotes_send', label: 'Enviar orçamentos ao cliente' },
+  { group: 'Atendimento e comercial', key: 'quotes_approve', label: 'Registrar aprovação/recusa e converter em OS' },
+  { group: 'Clientes', key: 'customers_view', label: 'Acessar cadastro de clientes' },
+  { group: 'Clientes', key: 'customers_contact', label: 'Ver telefone, e-mail e documento' },
+  { group: 'Clientes', key: 'customers_edit', label: 'Cadastrar e editar clientes, contatos e objetos' },
+  { group: 'Clientes', key: 'customers_export', label: 'Exportar clientes' },
   { group: 'Ordens de serviço', key: 'orders_view', label: 'Ver ordens de serviço', type: 'scope' },
   { group: 'Ordens de serviço', key: 'orders_create', label: 'Abrir OS e vendas de balcão' },
   { group: 'Ordens de serviço', key: 'orders_edit', label: 'Editar OS (itens, diagnóstico, status)' },
-  { group: 'Ordens de serviço', key: 'orders_values', label: 'Ver valores das OS' },
+  { group: 'Ordens de serviço', key: 'orders_values', label: 'Ver valores e custos' },
   { group: 'Ordens de serviço', key: 'orders_deliver', label: 'Entregar OS ao cliente' },
   { group: 'Ordens de serviço', key: 'orders_cancel', label: 'Cancelar OS' },
-  { group: 'Orçamentos', key: 'quotes', label: 'Criar e editar orçamentos' },
-  { group: 'Orçamentos', key: 'quotes_approve', label: 'Aprovar orçamentos e converter em OS' },
-  { group: 'Clientes', key: 'customers_view', label: 'Acessar cadastro de clientes' },
-  { group: 'Clientes', key: 'customers_contact', label: 'Ver telefone, e-mail e documento' },
-  { group: 'Clientes', key: 'customers_edit', label: 'Cadastrar e editar clientes e equipamentos' },
-  { group: 'Estoque', key: 'materials_manage', label: 'Materiais e ajustes de estoque' },
-  { group: 'Estoque', key: 'purchases', label: 'Entrada de materiais (compras)' },
-  { group: 'Estoque', key: 'suppliers', label: 'Fornecedores' },
+  { group: 'Materiais e estoque', key: 'materials_manage', label: 'Materiais e ajustes de estoque' },
+  { group: 'Materiais e estoque', key: 'purchases', label: 'Compras e entrada de materiais' },
+  { group: 'Materiais e estoque', key: 'suppliers', label: 'Fornecedores' },
   { group: 'Financeiro', key: 'checkout', label: 'Receber pagamentos de OS/vendas' },
-  { group: 'Financeiro', key: 'discount', label: 'Dar desconto' },
-  { group: 'Financeiro', key: 'cash', label: 'Caixa, fluxo de caixa e contas' },
+  { group: 'Financeiro', key: 'discount', label: 'Conceder desconto' },
+  { group: 'Financeiro', key: 'cash', label: 'Caixa, contas, estornos e fechamento' },
   { group: 'Financeiro', key: 'reports', label: 'Relatórios gerenciais' },
   { group: 'Financeiro', key: 'commissions', label: 'Ver comissões', type: 'scope' },
-  { group: 'Fiscal', key: 'invoices_issue', label: 'Emitir notas fiscais' },
-  { group: 'Fiscal', key: 'invoices_cancel', label: 'Cancelar notas fiscais' },
-  { group: 'Cadastros', key: 'services_manage', label: 'Tabela de serviços' },
-  { group: 'Cadastros', key: 'technicians_manage', label: 'Técnicos' },
+  { group: 'Fiscal', key: 'invoices_issue', label: 'Preparar e emitir documentos fiscais' },
+  { group: 'Fiscal', key: 'invoices_cancel', label: 'Cancelar documentos fiscais' },
+  { group: 'Cadastros', key: 'services_manage', label: 'Serviços, especialidades e preços' },
+  { group: 'Cadastros', key: 'technicians_manage', label: 'Técnicos e equipes' },
   { group: 'Administração', key: 'settings', label: 'Configurações da empresa' },
-  { group: 'Administração', key: 'fiscal_settings', label: 'Configuração fiscal (certificado/token)' },
+  { group: 'Administração', key: 'units_manage', label: 'Unidades' },
+  { group: 'Administração', key: 'fiscal_settings', label: 'Integração fiscal (certificado/token)' },
   { group: 'Administração', key: 'users', label: 'Usuários e perfis de acesso' },
+  { group: 'Administração', key: 'audit_view', label: 'Logs e auditoria' },
+  { group: 'Administração', key: 'data_export', label: 'Exportar dados' },
 ];
 
+export const ROLES = {
+  owner: 'Proprietário', admin: 'Administrador', manager: 'Gerente', attendant: 'Atendimento', estimator: 'Orçamentista',
+  supervisor: 'Supervisor técnico', technician: 'Técnico', purchasing: 'Compras e estoque', finance: 'Financeiro',
+  fiscal: 'Fiscal', viewer: 'Consulta',
+};
+
 const ALL = Object.fromEntries(PERMISSIONS.map((p) => [p.key, p.type === 'scope' ? 'all' : true]));
+const NONE = Object.fromEntries(PERMISSIONS.map((p) => [p.key, p.type === 'scope' ? 'none' : false]));
+const pick = (keys, base = NONE) => ({ ...base, ...Object.fromEntries(keys.map((k) => [k, PERMISSIONS.find((p) => p.key === k)?.type === 'scope' ? 'all' : true])) });
+
 export const DEFAULT_PERMISSIONS = {
   admin: { ...ALL },
-  attendant: {
-    ...ALL, orders_cancel: false, reports: false, commissions: 'none', invoices_cancel: false,
-    services_manage: false, technicians_manage: false, settings: false, fiscal_settings: false, users: false,
-  },
-  technician: {
-    ...Object.fromEntries(PERMISSIONS.map((p) => [p.key, p.type === 'scope' ? 'none' : false])),
-    orders_view: 'own', orders_create: true, orders_edit: true, orders_values: false, quotes: true,
-    customers_view: true, materials_manage: false, commissions: 'own',
-  },
+  manager: { ...ALL, users: false, fiscal_settings: false, units_manage: false },
+  attendant: pick(['requests_view', 'requests_manage', 'quotes_view', 'quotes', 'quotes_send', 'quotes_approve', 'customers_view',
+    'customers_contact', 'customers_edit', 'orders_view', 'orders_create', 'orders_edit', 'orders_values', 'orders_deliver', 'checkout', 'cash', 'discount']),
+  estimator: pick(['requests_view', 'requests_manage', 'quotes_view', 'quotes', 'quotes_send', 'customers_view', 'customers_contact',
+    'customers_edit', 'orders_view', 'orders_values', 'services_manage']),
+  supervisor: pick(['requests_view', 'requests_manage', 'quotes_view', 'quotes', 'customers_view', 'orders_view', 'orders_create',
+    'orders_edit', 'orders_deliver', 'materials_manage', 'technicians_manage', 'commissions']),
+  technician: { ...NONE, requests_view: true, quotes_view: true, customers_view: true, orders_view: 'own', orders_create: true,
+    orders_edit: true, commissions: 'own' },
+  purchasing: pick(['materials_manage', 'purchases', 'suppliers', 'orders_view', 'quotes_view', 'customers_view']),
+  finance: pick(['checkout', 'discount', 'cash', 'reports', 'commissions', 'invoices_issue', 'orders_view', 'orders_values',
+    'quotes_view', 'customers_view', 'customers_contact', 'customers_export', 'data_export', 'purchases', 'suppliers']),
+  fiscal: pick(['invoices_issue', 'invoices_cancel', 'fiscal_settings', 'orders_view', 'orders_values', 'customers_view',
+    'customers_contact', 'reports', 'quotes_view']),
+  viewer: { ...NONE, requests_view: true, quotes_view: true, customers_view: true, orders_view: 'all', reports: true },
 };
 
 export function permissionsFor(role, settings) {
   if (role === 'owner') return { ...ALL };
-  const base = DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.technician;
+  const base = DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.viewer;
   return { ...base, ...(settings?.permissions?.[role] || {}) };
 }
 
 export function withDefaults(settings = {}) {
   const out = { ...DEFAULT_SETTINGS, ...settings };
-  for (const k of ['orders', 'whatsapp', 'modules']) {
+  for (const k of ['orders', 'whatsapp', 'modules', 'numbering', 'quotes']) {
     out[k] = { ...DEFAULT_SETTINGS[k], ...(settings?.[k] || {}) };
   }
   out.permissions = Object.fromEntries(Object.keys(DEFAULT_PERMISSIONS).map((r) =>

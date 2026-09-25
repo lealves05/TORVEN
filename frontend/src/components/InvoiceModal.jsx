@@ -6,8 +6,9 @@ import { Modal, useAction, FAIL, cx } from './ui';
 
 /** Emissão de NFS-e (serviços) ou NF-e (materiais) a partir de uma OS/venda. */
 export default function InvoiceModal({ order, onClose, onDone }) {
-  const hasServices = order.items?.some((i) => i.kind !== 'material');
-  const hasMaterials = order.items?.some((i) => i.kind === 'material');
+  const goods = (i) => ['material', 'consumivel'].includes(i.kind) && i.product_id;
+  const hasServices = order.items?.some((i) => !goods(i));
+  const hasMaterials = order.items?.some(goods);
   const [kind, setKind] = useState(hasServices ? 'nfse' : 'nfe');
   const [prev, setPrev] = useState(null);
   const [run, busy] = useAction();
@@ -18,8 +19,8 @@ export default function InvoiceModal({ order, onClose, onDone }) {
     api.get(`/invoices/preview${qs({ order_id: order.id, kind })}`).then(setPrev).catch((e) => setPrev({ error: e.message }));
   }, [kind, order.id]);
 
-  const emit = async () => {
-    const r = await run(() => api.post('/invoices', { order_id: order.id, kind, force: !!prev?.existing?.length }));
+  const emit = async (prepareOnly = false) => {
+    const r = await run(() => api.post('/invoices', { order_id: order.id, kind, prepare_only: prepareOnly }), prepareOnly || prev?.provider !== 'focus' ? 'Documento preparado para conferência' : null);
     if (r === FAIL) return;
     if (r.status === 'processando') {
       setPolling(true);
@@ -34,12 +35,14 @@ export default function InvoiceModal({ order, onClose, onDone }) {
   };
 
   const focus = prev?.provider === 'focus';
+  const blocked = prev?.existing?.length > 0;
   return (
-    <Modal open onClose={onClose} title="Emitir nota fiscal" subtitle={`${order.kind === 'venda' ? 'Venda' : 'OS'} nº ${order.number}`} size="lg"
+    <Modal open onClose={onClose} title="Nota fiscal" subtitle={`${order.kind === 'venda' ? 'Venda' : 'OS'} nº ${order.number}`} size="lg"
       footer={<>
         <button className="btn-ghost" onClick={onClose}>Cancelar</button>
-        <button className="btn-primary" disabled={busy || polling || !prev || prev.error || prev.amount <= 0 || (focus && prev.warnings.length > 0)} onClick={emit}>
-          {polling ? <><Loader2 className="h-4 w-4 animate-spin" /> Aguardando autorização…</> : <><FileCheck2 className="h-4 w-4" /> {focus ? 'Emitir nota' : 'Gerar documento interno'}</>}
+        {focus && <button className="btn-outline" disabled={busy || polling || !prev || prev.error || prev.amount <= 0 || blocked} onClick={() => emit(true)}>Só preparar</button>}
+        <button className="btn-primary" disabled={busy || polling || !prev || prev.error || prev.amount <= 0 || blocked || (focus && prev.warnings.length > 0)} onClick={() => emit(!focus)}>
+          {polling ? <><Loader2 className="h-4 w-4 animate-spin" /> Aguardando autorização…</> : <><FileCheck2 className="h-4 w-4" /> {focus ? 'Emitir nota' : 'Preparar documento'}</>}
         </button>
       </>}>
       <div className="space-y-4">
@@ -56,7 +59,7 @@ export default function InvoiceModal({ order, onClose, onDone }) {
             {!focus && (
               <div className="flex gap-2 rounded-app-sm bg-sky-500/10 p-3 text-sm text-sky-800 dark:text-sky-200">
                 <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>Integração fiscal não configurada: será gerado um <b>documento interno sem valor fiscal</b>. Configure a Focus NFe em Configurações › Fiscal para emitir notas reais.</span>
+                <span><b>Emissão indisponível: integração fiscal não configurada.</b> Você pode preparar o documento para conferência (sem número e sem valor fiscal). Configure a Focus NFe em Configurações › Fiscal para emitir notas reais.</span>
               </div>
             )}
             {focus && <div className="text-xs text-ink-faint">Focus NFe · ambiente de <b>{prev.environment === 'producao' ? 'produção' : 'homologação (testes)'}</b> · {prev.endpoint === 'nfsen' ? 'NFS-e padrão nacional' : prev.endpoint === 'nfse' ? 'NFS-e municipal' : 'NF-e modelo 55'}</div>}
@@ -67,7 +70,7 @@ export default function InvoiceModal({ order, onClose, onDone }) {
             )}
             {prev.existing?.length > 0 && (
               <div className="rounded-app-sm bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-                Já existe nota deste tipo para esta OS (nº {prev.existing.map((e) => e.number || '—').join(', ')}). Emitir outra pode duplicar o faturamento.
+                Já existe nota deste tipo {prev.existing[0].status === 'autorizada' ? 'autorizada' : 'em processamento'} para esta OS (nº {prev.existing.map((e) => e.number || '—').join(', ')}). Cancele-a antes de emitir outra.
               </div>
             )}
             <div className="text-sm"><span className="text-ink-faint">Tomador: </span>{prev.customer ? `${prev.customer.name}${prev.customer.document ? ` · ${prev.customer.document}` : ''}` : 'Consumidor não identificado'}</div>

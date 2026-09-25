@@ -39,6 +39,11 @@ export default function Account() {
             <button key={k} onClick={() => savePrefs({ density: k })} className={cx('btn border', (user.preferences?.density || 'comfortable') === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
           ))}
         </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {[['side', 'Menu lateral'], ['top', 'Barra superior']].map(([k, l]) => (
+            <button key={k} onClick={() => savePrefs({ layout: k })} className={cx('btn border', (user.preferences?.layout || company?.settings?.layout || 'side') === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
+          ))}
+        </div>
       </div>
       <div className="card space-y-4 p-6">
         <div className="flex items-start justify-between gap-3">

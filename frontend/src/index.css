@@ -103,3 +103,14 @@ body {
   .overflow-x-auto:has(> .table-stack) { background: transparent; border: 0; box-shadow: none; }
   .overflow-x-auto:has(> :is(.table-clean, .table-stack)) { overflow: visible; }
 }
+
+/* Barra de ações fixa no rodapé da área de conteúdo (não cobre o menu lateral). */
+.action-bar {
+  position: sticky; bottom: 0; z-index: 20;
+  margin: 1.5rem -1rem -1rem;
+  border-top: 1px solid rgb(var(--line));
+  background: rgb(var(--surface) / .95);
+  backdrop-filter: blur(8px);
+}
+@media (min-width: 640px) { .action-bar { margin: 1.5rem -1.5rem -1.5rem; } }
+@media (min-width: 1024px) { .action-bar { margin: 1.5rem -2rem -2rem; } }

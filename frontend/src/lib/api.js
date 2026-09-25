@@ -1,4 +1,5 @@
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+export const apiBase = `${BASE}/api`;
 /** URL absoluta de uma rota do app (respeita o subcaminho, ex.: GitHub Pages). */
 export const appUrl = (path) => `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`;
 export const appPath = (path) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`;

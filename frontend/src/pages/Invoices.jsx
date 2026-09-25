@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Receipt, RefreshCw, ExternalLink, FileCode2, XCircle, Trash2, Plus, Settings2, Printer } from 'lucide-react';
 import { api, qs, appPath } from '../lib/api';
-import { money, fmt, fmtDateTime, INVOICE_STATUS, downloadCSV } from '../lib/format';
+import { money, fmt, fmtDateTime, INVOICE_STATUS, downloadCSV, docNumber } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Input, Modal, Loading, Empty, Stat, useAction, FAIL, cx } from '../components/ui';
@@ -28,10 +28,10 @@ export default function Invoices() {
     if (r !== FAIL) { toast(`Situação: ${INVOICE_STATUS[r.status]?.label}${r.status === 'erro' ? ` — ${r.message}` : ''}`, r.status === 'erro' ? 'error' : 'success'); load(); }
   };
   const discard = async (i) => {
-    if (!(await confirm({ title: 'Descartar nota com erro?', message: 'Libera a OS para uma nova emissão.', confirmText: 'Descartar' }))) return;
+    if (!(await confirm({ title: 'Descartar documento?', message: 'Libera a OS para uma nova emissão.', confirmText: 'Descartar' }))) return;
     if ((await run(() => api.del(`/invoices/${i.id}`), 'Nota descartada')) !== FAIL) load();
   };
-  const valid = (list || []).filter((i) => ['autorizada', 'interna'].includes(i.status));
+  const valid = (list || []).filter((i) => i.status === 'autorizada' && !i.test);
   const focus = company.fiscal_provider === 'focus';
 
   return (
@@ -43,7 +43,7 @@ export default function Invoices() {
         </>} />
       {!focus && (
         <div className="mb-4 rounded-app border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-800 dark:text-sky-200">
-          A integração com a <b>Focus NFe</b> não está ativa — as emissões geram documentos internos, sem valor fiscal. {can('fiscal_settings') && <Link to="/configuracoes?tab=fiscal" className="font-medium underline">Configurar agora (passo a passo)</Link>}
+          <b>Emissão indisponível: integração fiscal não configurada.</b> Por enquanto é possível apenas preparar documentos para conferência (sem número e sem valor fiscal). {can('fiscal_settings') && <Link to="/configuracoes?tab=fiscal" className="font-medium underline">Configurar agora (passo a passo)</Link>}
         </div>
       )}
       <CertBanner company={company} />
@@ -57,10 +57,10 @@ export default function Invoices() {
       </div>
       {list && (
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Notas válidas" value={valid.length} icon={Receipt} />
+          <Stat label="Notas autorizadas" value={valid.length} icon={Receipt} />
           <Stat label="Serviços (NFS-e)" value={money(valid.filter((i) => i.kind === 'nfse').reduce((a, i) => a + i.amount, 0))} />
           <Stat label="Materiais (NF-e)" value={money(valid.filter((i) => i.kind === 'nfe').reduce((a, i) => a + i.amount, 0))} />
-          <Stat label="Com erro / processando" value={list.filter((i) => ['erro', 'processando'].includes(i.status)).length} tone="text-amber-500" />
+          <Stat label="Preparadas / erro / processando" value={list.filter((i) => ['erro', 'processando', 'preparada'].includes(i.status)).length} tone="text-amber-500" />
         </div>
       )}
       <div className="card mb-4 flex flex-wrap items-end gap-3 p-3">
@@ -82,19 +82,19 @@ export default function Invoices() {
               <tbody>
                 {list.map((i) => (
                   <tr key={i.id}>
-                    <td className="whitespace-nowrap"><button className="text-left" onClick={() => setView(i)}><div className="font-medium">{i.kind === 'nfe' ? 'NF-e' : 'NFS-e'} {i.number ? `nº ${i.number}` : ''}</div><div className="text-xs text-ink-faint">{i.provider === 'focus' ? (i.environment === 'producao' ? 'Produção' : 'Homologação') : 'Interna'}{i.test && ' · teste'}</div></button></td>
+                    <td className="whitespace-nowrap"><button className="text-left" onClick={() => setView(i)}><div className="font-medium">{i.kind === 'nfe' ? 'NF-e' : 'NFS-e'} {i.number ? `nº ${i.number}` : ''}</div><div className="text-xs text-ink-faint">{i.status === 'preparada' ? 'Sem emissão' : i.provider === 'focus' ? (i.environment === 'producao' ? 'Produção' : 'Homologação') : '—'}{i.test && ' · teste'}</div></button></td>
                     <td className="max-w-[220px] truncate">{i.customer_name || 'Consumidor'}</td>
-                    <td className="hidden md:table-cell">{i.order_id ? <Link className="text-primary" to={`/os/${i.order_id}`}>#{i.order_number}</Link> : '—'}</td>
+                    <td className="hidden md:table-cell">{i.order_id ? <Link className="text-primary" to={`/os/${i.order_id}`}>{docNumber(company.settings, 'order', i.order_number)}</Link> : '—'}</td>
                     <td className="hidden whitespace-nowrap text-ink-soft md:table-cell">{fmt(i.issued_at || i.created_at, 'dd/MM/yy HH:mm')}</td>
                     <td><span className={cx('chip', INVOICE_STATUS[i.status]?.cls)}>{INVOICE_STATUS[i.status]?.label}</span>{i.status === 'erro' && <div className="mt-0.5 max-w-[200px] truncate text-xs text-red-600" title={i.message}>{i.message}</div>}</td>
                     <td className="text-right font-medium tabular-nums">{money(i.amount)}</td>
                     <td className="w-40 whitespace-nowrap text-right">
                       {i.provider === 'focus' && ['processando', 'erro'].includes(i.status) && <button className="btn-ghost btn-icon h-8" title="Consultar situação" disabled={busy} onClick={() => refresh(i)}><RefreshCw className="h-4 w-4" /></button>}
                       {i.pdf_url && <a className="btn-ghost btn-icon h-8" title="DANFE / PDF" href={i.pdf_url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a>}
-                      {i.provider !== 'focus' && i.status === 'interna' && <a className="btn-ghost btn-icon h-8" title="Imprimir" href={appPath(`/imprimir/os/${i.order_id}?recibo=1`)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /></a>}
+                      {i.status === 'preparada' && i.order_id && <a className="btn-ghost btn-icon h-8" title="Imprimir recibo (sem valor fiscal)" href={appPath(`/imprimir/os/${i.order_id}?recibo=1`)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /></a>}
                       {i.xml_url && <a className="btn-ghost btn-icon h-8" title="XML" href={i.xml_url} target="_blank" rel="noreferrer"><FileCode2 className="h-4 w-4" /></a>}
-                      {can('invoices_cancel') && ['autorizada', 'interna'].includes(i.status) && <button className="btn-ghost btn-icon h-8 text-red-600" title="Cancelar" onClick={() => setCancel(i)}><XCircle className="h-4 w-4" /></button>}
-                      {can('invoices_issue') && i.status === 'erro' && <button className="btn-ghost btn-icon h-8 text-red-600" title="Descartar" onClick={() => discard(i)}><Trash2 className="h-4 w-4" /></button>}
+                      {can('invoices_cancel') && i.status === 'autorizada' && <button className="btn-ghost btn-icon h-8 text-red-600" title="Cancelar" onClick={() => setCancel(i)}><XCircle className="h-4 w-4" /></button>}
+                      {can('invoices_issue') && ['erro', 'preparada'].includes(i.status) && <button className="btn-ghost btn-icon h-8 text-red-600" title="Descartar" onClick={() => discard(i)}><Trash2 className="h-4 w-4" /></button>}
                     </td>
                   </tr>
                 ))}

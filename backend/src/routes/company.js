@@ -4,6 +4,7 @@ import { one } from '../db.js';
 import { need, granted } from '../auth.js';
 import { parse, withDefaults, HttpError } from '../util.js';
 import { COMPANY_COLS } from './auth.js';
+import { audit } from '../audit.js';
 
 const r = Router();
 
@@ -42,6 +43,14 @@ r.put('/', need('settings', 'users'), async (req, res) => {
   await one(
     `update companies set ${FIELDS.map((f, i) => `${f} = $${i + 1}`).join(', ')}, settings = $${FIELDS.length + 1}
       where id = $${FIELDS.length + 2} returning id`, [...vals, settings, req.companyId]);
+  const changed = [...FIELDS.filter((f) => d[f] !== undefined && d[f] !== cur[f]), ...Object.keys(d.settings || {}).map((k) => `settings.${k}`)];
+  if (changed.length) {
+    await audit(null, req, {
+      entity: d.settings?.permissions ? 'permissions' : 'settings', entityId: req.companyId, action: 'update',
+      summary: `Configurações alteradas: ${changed.filter((f) => f !== 'logo_url').join(', ') || 'logotipo'}`,
+      data: d.settings?.permissions ? { permissions: d.settings.permissions } : null,
+    });
+  }
   res.json(await load(req.companyId));
 });
 

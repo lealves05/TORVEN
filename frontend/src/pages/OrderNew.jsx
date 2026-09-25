@@ -41,7 +41,7 @@ export default function OrderNew() {
   };
 
   return (
-    <div className="pb-24">
+    <div className="pb-2">
       <PageHeader title="Nova ordem de serviço" subtitle="Registre o que o cliente trouxe e o problema relatado" />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -112,7 +112,7 @@ export default function OrderNew() {
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur">
+      <div className="action-bar">
         <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
           <button className="btn-ghost" onClick={() => nav(-1)}>Cancelar</button>
           <button className="btn-primary" disabled={busy || !customer || (f.equipment && !f.equipment.description)} onClick={save}><Save className="h-4 w-4" /> Abrir OS</button>

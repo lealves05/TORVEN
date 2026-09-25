@@ -34,24 +34,59 @@ export const PRIORITY = {
 export const QUOTE_STATUS = {
   rascunho: { label: 'Rascunho', cls: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300' },
   enviado: { label: 'Enviado', cls: 'bg-sky-500/10 text-sky-700 dark:text-sky-300' },
+  aguardando_decisao: { label: 'Aguardando decisão', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
   aprovado: { label: 'Aprovado', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
+  parcialmente_aprovado: { label: 'Aprovado parcial', cls: 'bg-teal-500/15 text-teal-700 dark:text-teal-300' },
   recusado: { label: 'Recusado', cls: 'bg-red-500/10 text-red-700 dark:text-red-300' },
-  expirado: { label: 'Expirado', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
+  vencido: { label: 'Vencido', cls: 'bg-orange-500/15 text-orange-700 dark:text-orange-300' },
   convertido: { label: 'Virou OS', cls: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300' },
 };
 
+export const REQUEST_STATUS = {
+  nova: { label: 'Nova', cls: 'bg-sky-500/10 text-sky-700 dark:text-sky-300', dot: 'bg-sky-500' },
+  em_triagem: { label: 'Em triagem', cls: 'bg-violet-500/10 text-violet-700 dark:text-violet-300', dot: 'bg-violet-500' },
+  visita_agendada: { label: 'Visita agendada', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300', dot: 'bg-amber-500' },
+  diagnosticada: { label: 'Diagnosticada', cls: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300', dot: 'bg-indigo-500' },
+  em_orcamento: { label: 'Em orçamento', cls: 'bg-blue-500/10 text-blue-700 dark:text-blue-300', dot: 'bg-blue-500' },
+  orcada: { label: 'Orçada', cls: 'bg-teal-500/15 text-teal-700 dark:text-teal-300', dot: 'bg-teal-500' },
+  convertida: { label: 'Virou OS', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300', dot: 'bg-emerald-500' },
+  perdida: { label: 'Perdida', cls: 'bg-red-500/10 text-red-700 dark:text-red-300', dot: 'bg-red-500' },
+  cancelada: { label: 'Cancelada', cls: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300', dot: 'bg-zinc-400' },
+};
+export const OPEN_REQUEST = ['nova', 'em_triagem', 'visita_agendada', 'diagnosticada', 'em_orcamento', 'orcada'];
+
+export const CHANNELS = {
+  telefone: 'Telefone', whatsapp: 'WhatsApp', email: 'E-mail', presencial: 'Presencial', site: 'Site', indicacao: 'Indicação', outro: 'Outro',
+};
+export const DECISION_VIAS = {
+  presencial: 'Presencial', telefone: 'Telefone', whatsapp: 'WhatsApp', email: 'E-mail', link: 'Link do orçamento', assinatura: 'Assinatura', outro: 'Outro',
+};
+
 export const INVOICE_STATUS = {
+  preparada: { label: 'Preparada', cls: 'bg-sky-500/10 text-sky-700 dark:text-sky-300' },
   processando: { label: 'Processando', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
   autorizada: { label: 'Autorizada', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
   erro: { label: 'Erro', cls: 'bg-red-500/10 text-red-700 dark:text-red-300' },
   cancelada: { label: 'Cancelada', cls: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300' },
-  interna: { label: 'Interna', cls: 'bg-sky-500/10 text-sky-700 dark:text-sky-300' },
 };
 
-export const ROLES = { owner: 'Proprietário', admin: 'Administrador', attendant: 'Atendimento', technician: 'Técnico' };
+export const ROLES = {
+  owner: 'Proprietário', admin: 'Administrador', manager: 'Gerente', attendant: 'Atendimento', estimator: 'Orçamentista',
+  supervisor: 'Supervisor técnico', technician: 'Técnico', purchasing: 'Compras e estoque', finance: 'Financeiro',
+  fiscal: 'Fiscal', viewer: 'Consulta',
+};
 
-export const ITEM_KIND = { servico: 'Serviço', material: 'Material', avulso: 'Avulso' };
+export const ITEM_KIND = {
+  servico: 'Mão de obra', material: 'Material', consumivel: 'Consumível', deslocamento: 'Deslocamento',
+  terceiro: 'Terceiros', outro: 'Outras despesas', avulso: 'Avulso',
+};
 
+/** Número com prefixo da empresa: OS-00012, ORC-00007… */
+export function docNumber(settings, kind, n) {
+  if (n == null) return '—';
+  const cfg = { request: 'SOL', quote: 'ORC', order: 'OS', purchase: 'ENT', digits: 5, ...(settings?.numbering || {}) };
+  return `${cfg[kind] || ''}-${String(n).padStart(Number(cfg.digits) || 1, '0')}`;
+}
 
 export const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
 
@@ -63,7 +98,7 @@ export function maskPhone(v) {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
-/** Link de WhatsApp com mensagem preenchida a partir do modelo do salão. */
+/** Link de WhatsApp com mensagem preenchida a partir do modelo da empresa. */
 export function whatsappLink(phone, template, vars) {
   let d = onlyDigits(phone);
   if (!d) return null;

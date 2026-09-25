@@ -55,6 +55,8 @@ const Totals = ({ o }) => (
   <div className="ml-auto mt-2 w-64 space-y-0.5 text-[12px]">
     <div className="flex justify-between"><span>Subtotal</span><span>{money(o.subtotal)}</span></div>
     {Number(o.discount) > 0 && <div className="flex justify-between"><span>Desconto</span><span>− {money(o.discount)}</span></div>}
+    {Number(o.surcharge) > 0 && <div className="flex justify-between"><span>Acréscimos</span><span>+ {money(o.surcharge)}</span></div>}
+    {o.approved_total != null && Number(o.approved_total) !== Number(o.total) && <div className="flex justify-between font-semibold"><span>Valor aprovado</span><span>{money(o.approved_total)}</span></div>}
     <div className="flex justify-between border-t border-zinc-800 pt-1 text-sm font-bold"><span>Total</span><span>{money(o.total)}</span></div>
   </div>
 );

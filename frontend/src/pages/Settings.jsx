@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Upload, Trash2, Plus, Check, Sun, Moon, Monitor, ShieldCheck, ExternalLink } from 'lucide-react';
+import { Upload, Trash2, Plus, Check, Sun, Moon, Monitor } from 'lucide-react';
 import { api } from '../lib/api';
 import { ROLES, maskPhone, maskDoc, maskCep, lookupCep } from '../lib/format';
 import { applyTheme, PRESET_COLORS, RADIUS, FONTS } from '../lib/theme';
@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import FiscalSetup from '../components/FiscalSetup';
 import { useUI } from '../context/UIContext';
-import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, Loading, useAction, FAIL, cx } from '../components/ui';
+import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, useAction, FAIL, cx } from '../components/ui';
 
 export default function Settings() {
   const { company, setCompany, user, can } = useAuth();
@@ -100,6 +100,22 @@ export default function Settings() {
             <Textarea label="Termos padrão dos orçamentos" rows={4} value={o.termsQuote} onChange={(e) => setO({ termsQuote: e.target.value })} />
           </div>
           <div className="card space-y-4 p-6">
+            <h3 className="font-semibold">Orçamentos</h3>
+            <Input label="Tributos estimados padrão (%)" type="number" min={0} max={100} step="0.01" value={s.quotes?.taxRate ?? 0} onChange={(e) => setS({ quotes: { ...s.quotes, taxRate: +e.target.value } })} hint="Usado só para calcular a margem estimada." />
+            <Textarea label="Premissas padrão" rows={2} value={s.quotes?.assumptions || ''} onChange={(e) => setS({ quotes: { ...s.quotes, assumptions: e.target.value } })} />
+            <Textarea label="Exclusões padrão" rows={2} value={s.quotes?.exclusions || ''} onChange={(e) => setS({ quotes: { ...s.quotes, exclusions: e.target.value } })} />
+          </div>
+          <div className="card space-y-4 p-6">
+            <h3 className="font-semibold">Numeração dos documentos</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {[['request', 'Solicitação'], ['quote', 'Orçamento'], ['order', 'Ordem de serviço'], ['purchase', 'Entrada de materiais']].map(([k, l]) => (
+                <Input key={k} label={`Prefixo — ${l}`} maxLength={6} value={s.numbering?.[k] ?? ''} onChange={(e) => setS({ numbering: { ...s.numbering, [k]: e.target.value.toUpperCase() } })} />
+              ))}
+              <Input label="Dígitos" type="number" min={1} max={8} value={s.numbering?.digits ?? 5} onChange={(e) => setS({ numbering: { ...s.numbering, digits: +e.target.value } })} />
+            </div>
+            <p className="text-xs text-ink-faint">Exemplo: {(s.numbering?.order || 'OS')}-{String(12).padStart(s.numbering?.digits || 5, '0')}. A sequência é única por empresa e nunca é reutilizada.</p>
+          </div>
+          <div className="card space-y-4 p-6">
             <h3 className="font-semibold">Mensagens de WhatsApp</h3>
             <Textarea label="Envio de orçamento" rows={3} value={s.whatsapp.quote} onChange={(e) => setS({ whatsapp: { ...s.whatsapp, quote: e.target.value } })} />
             <Textarea label="OS pronta para retirada" rows={3} value={s.whatsapp.ready} onChange={(e) => setS({ whatsapp: { ...s.whatsapp, ready: e.target.value } })} />
@@ -154,7 +170,7 @@ export default function Settings() {
               <span className="label">Menu</span>
               <div className="grid grid-cols-2 gap-2">
                 {[['top', 'Barra superior'], ['side', 'Menu lateral']].map(([k, l]) => (
-                  <button key={k} onClick={() => setS({ layout: k })} className={cx('btn h-auto flex-col gap-2 border py-3', (s.layout || 'top') === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>
+                  <button key={k} onClick={() => setS({ layout: k })} className={cx('btn h-auto flex-col gap-2 border py-3', (s.layout || 'side') === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>
                     <span className="flex h-10 w-16 overflow-hidden rounded border border-current/30">
                       {k === 'top'
                         ? <span className="flex w-full flex-col"><span className="h-2.5 w-full bg-current opacity-70" /><span className="flex-1" /></span>
@@ -245,7 +261,7 @@ export default function Settings() {
       {tab === 'equipe' && <Team />}
 
       {dirty && !['equipe', 'fiscal'].includes(tab) && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur">
+        <div className="action-bar">
           <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
             <span className="mr-auto text-sm text-ink-soft">Você tem alterações não salvas.</span>
             <button className="btn-ghost" onClick={() => setF(structuredClone(company))}>Descartar</button>
@@ -284,10 +300,11 @@ function Team() {
   const [run, busy] = useAction();
   const [list, setList] = useState([]);
   const [edit, setEdit] = useState(null);
+  const [units, setUnits] = useState([]);
   const load = () => api.get('/users').then(setList);
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); api.get('/units').then((u) => setUnits(u.filter((x) => x.active))).catch(() => {}); }, []);
   const save = async () => {
-    const body = { name: edit.name, email: edit.email, role: edit.role, technician_id: edit.technician_id || null, active: edit.active ?? true, password: edit.password || undefined };
+    const body = { name: edit.name, email: edit.email, role: edit.role, technician_id: edit.technician_id || null, unit_id: edit.unit_id || null, active: edit.active ?? true, password: edit.password || undefined };
     const r = await run(() => (edit.id ? api.put(`/users/${edit.id}`, body) : api.post('/users', body)), 'Usuário salvo');
     if (r !== FAIL) { setEdit(null); load(); }
   };
@@ -298,7 +315,7 @@ function Team() {
   return (
     <div className="max-w-4xl space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-faint">Atendimento abre OS, orçamentos e recebe. Técnicos veem só as próprias OS, sem valores (ajustável em Perfis de acesso).</p>
+        <p className="text-sm text-ink-faint">Cada usuário recebe um perfil (atendimento, orçamentista, técnico, financeiro…). O que cada perfil pode fazer é ajustável em Perfis de acesso.</p>
         <button className="btn-primary" onClick={() => setEdit({ role: 'attendant', active: true })}><Plus className="h-4 w-4" /> Novo acesso</button>
       </div>
       <div className="card divide-y divide-line">
@@ -324,9 +341,12 @@ function Team() {
             <Input label="Nome" value={edit.name || ''} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
             <Input label="E-mail (login)" type="email" value={edit.email || ''} onChange={(e) => setEdit({ ...edit, email: e.target.value })} />
             <Select label="Perfil" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>
-              <option value="admin">Administrador</option><option value="attendant">Atendimento</option><option value="technician">Técnico</option>
+              {Object.entries(ROLES).filter(([k]) => k !== 'owner').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
-            {edit.role !== 'admin' && (
+            <Select label="Unidade" value={edit.unit_id || ''} onChange={(e) => setEdit({ ...edit, unit_id: e.target.value })}>
+              <option value="">Principal</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </Select>
+            {!['admin', 'manager', 'finance', 'fiscal', 'purchasing', 'viewer'].includes(edit.role) && (
               <Select label="Vincular ao técnico" value={edit.technician_id || ''} onChange={(e) => setEdit({ ...edit, technician_id: e.target.value })}>
                 <option value="">{edit.role === 'technician' ? 'Selecione…' : 'Nenhum'}</option>{technicians.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
@@ -356,7 +376,6 @@ function resizeImage(file, max) {
   });
 }
 
-const ROLE_COLS = [['admin', 'Administrador'], ['attendant', 'Atendimento'], ['technician', 'Técnico']];
 const SCOPE_OPTS = {
   orders_view: [['all', 'Todas'], ['own', 'Só as próprias'], ['none', 'Nenhuma']],
   commissions: [['all', 'Todas'], ['own', 'Só as próprias'], ['none', 'Nenhuma']],
@@ -364,45 +383,44 @@ const SCOPE_OPTS = {
 
 function PermissionsTab({ s, setS }) {
   const { permissionCatalog } = useAuth();
+  const [role, setRole] = useState('attendant');
   const perms = s.permissions || {};
   const groups = permissionCatalog.reduce((g, p) => ({ ...g, [p.group]: [...(g[p.group] || []), p] }), {});
-  const set = (role, key, v) => setS({ permissions: { ...perms, [role]: { ...perms[role], [key]: v } } });
+  const set = (key, v) => setS({ permissions: { ...perms, [role]: { ...perms[role], [key]: v } } });
+  const roles = Object.entries(ROLES).filter(([k]) => k !== 'owner');
+  const count = (r) => Object.values(perms[r] || {}).filter((v) => v === true || v === 'all' || v === 'own').length;
   return (
-    <div className="max-w-5xl space-y-4">
-      <p className="text-sm text-ink-faint">
-        Defina o que cada perfil pode ver e fazer. O <b>Proprietário</b> sempre tem acesso total. As regras valem para o sistema e para a API — não só para o menu.
-      </p>
-      <div className="card overflow-x-auto">
-        <table className="table-clean">
-          <thead>
-            <tr><th className="w-[45%]">Permissão</th>{ROLE_COLS.map(([k, l]) => <th key={k} className="text-center">{l}</th>)}</tr>
-          </thead>
-          <tbody>
-            {Object.entries(groups).map(([g, items]) => (
-              <Fragment key={g}>
-                <tr className="bg-muted/50 hover:bg-muted/50"><td colSpan={4} className="py-2 text-xs font-semibold uppercase tracking-wider text-ink-soft">{g}</td></tr>
-                {items.map((p) => (
-                  <tr key={p.key}>
-                    <td>{p.label}</td>
-                    {ROLE_COLS.map(([role]) => (
-                      <td key={role} className="text-center">
-                        {p.type === 'scope' ? (
-                          <select className="input mx-auto h-8 w-36 text-xs" value={perms[role]?.[p.key] || 'none'} onChange={(e) => set(role, p.key, e.target.value)}>
-                            {SCOPE_OPTS[p.key].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                          </select>
-                        ) : (
-                          <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--primary))]" checked={!!perms[role]?.[p.key]} onChange={(e) => set(role, p.key, e.target.checked)} />
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+    <div className="grid max-w-5xl gap-6 lg:grid-cols-[240px_1fr]">
+      <div className="space-y-1">
+        <p className="mb-2 text-sm text-ink-faint">O <b>Proprietário</b> sempre tem acesso total. As regras valem para a API, não só para o menu.</p>
+        {roles.map(([k, l]) => (
+          <button key={k} onClick={() => setRole(k)} className={cx('flex w-full items-center justify-between rounded-app-sm px-3 py-2 text-left text-sm', role === k ? 'bg-primary/10 font-medium text-primary' : 'hover:bg-muted')}>
+            {l}<span className="text-xs text-ink-faint">{count(k)}</span>
+          </button>
+        ))}
       </div>
-      <p className="text-xs text-ink-faint">Dica: para que um técnico veja “só as próprias OS”, vincule o usuário dele ao cadastro do técnico em Usuários.</p>
+      <div className="card divide-y divide-line">
+        {Object.entries(groups).map(([g, items]) => (
+          <div key={g} className="p-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-soft">{g}</div>
+            <div className="space-y-1">
+              {items.map((p) => (
+                <div key={p.key} className="flex items-center justify-between gap-3 py-1 text-sm">
+                  <span>{p.label}</span>
+                  {p.type === 'scope' ? (
+                    <select className="input h-8 w-40 text-xs" value={perms[role]?.[p.key] || 'none'} onChange={(e) => set(p.key, e.target.value)} aria-label={p.label}>
+                      {SCOPE_OPTS[p.key].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  ) : (
+                    <input type="checkbox" aria-label={p.label} className="h-4 w-4 accent-[rgb(var(--primary))]" checked={!!perms[role]?.[p.key]} onChange={(e) => set(p.key, e.target.checked)} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <p className="p-4 text-xs text-ink-faint">Dica: para que um técnico veja “só as próprias OS”, vincule o usuário dele ao cadastro do técnico em Usuários. Salve para aplicar.</p>
+      </div>
     </div>
   );
 }
