@@ -30,6 +30,10 @@ import scheduleRoutes from './routes/schedule.js';
 import productionRoutes from './routes/production.js';
 import qualityRoutes from './routes/quality.js';
 import warrantyRoutes from './routes/warranty.js';
+import procurementRoutes from './routes/procurement.js';
+import financeRoutes from './routes/finance.js';
+import relationshipRoutes from './routes/relationship.js';
+import exportRoutes from './routes/export.js';
 
 export function createApp() {
   const app = express();
@@ -82,6 +86,10 @@ export function createApp() {
   api.use('/production', productionRoutes);
   api.use('/quality', qualityRoutes);
   api.use('/warranty', warrantyRoutes);
+  api.use('/procurement', procurementRoutes);
+  api.use('/finance', financeRoutes);
+  api.use('/relationship', relationshipRoutes);
+  api.use('/export', exportRoutes);
   api.use('/', workspaceRoutes);
   app.use('/api', api);
 

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Upload, Trash2, Plus, Check, Sun, Moon, Monitor } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, apiBase, getToken } from '../lib/api';
 import { ROLES, maskPhone, maskDoc, maskCep, lookupCep } from '../lib/format';
 import { applyTheme, PRESET_COLORS, RADIUS, FONTS } from '../lib/theme';
 import { useAuth } from '../context/AuthContext';
@@ -52,6 +52,7 @@ export default function Settings() {
         ...(can('fiscal_settings') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
         ...(full ? [{ value: 'modulos', label: 'Módulos' }] : []),
         ...(can('users') ? [{ value: 'perfis', label: 'Perfis de acesso' }, { value: 'equipe', label: 'Usuários' }] : []),
+        ...(can('data_export') ? [{ value: 'dados', label: 'Dados e exportação' }] : []),
       ]} />
 
       {tab === 'empresa' && (
@@ -107,6 +108,16 @@ export default function Settings() {
             <Input label="Tributos estimados padrão (%)" type="number" min={0} max={100} step="0.01" value={s.quotes?.taxRate ?? 0} onChange={(e) => setS({ quotes: { ...s.quotes, taxRate: +e.target.value } })} hint="Usado só para calcular a margem estimada." />
             <Textarea label="Premissas padrão" rows={2} value={s.quotes?.assumptions || ''} onChange={(e) => setS({ quotes: { ...s.quotes, assumptions: e.target.value } })} />
             <Textarea label="Exclusões padrão" rows={2} value={s.quotes?.exclusions || ''} onChange={(e) => setS({ quotes: { ...s.quotes, exclusions: e.target.value } })} />
+          </div>
+          <div className="card space-y-4 p-6">
+            <h3 className="font-semibold">Relacionamento (retornos automáticos)</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {[['postSaleDays', 'Pós-venda após a entrega (dias)'], ['quoteFollowupDays', 'Retorno de orçamento enviado (dias)'], ['warrantyNoticeDays', 'Aviso antes do fim da garantia (dias)'],
+                ['collectionDays', 'Cobrança após o vencimento (dias)'], ['maintenanceDays', 'Oferecer manutenção após (dias, 0 = não)']].map(([k, l]) => (
+                <Input key={k} label={l} type="number" min={0} value={s.relationship?.[k] ?? 0} onChange={(e) => setS({ relationship: { ...s.relationship, [k]: +e.target.value } })} />
+              ))}
+            </div>
+            <p className="text-xs text-ink-faint">O sistema só cria a lista de retornos; o contato é feito e registrado pela equipe.</p>
           </div>
           <ChecklistTemplates />
           <div className="card space-y-4 p-6">
@@ -263,8 +274,9 @@ export default function Settings() {
       )}
 
       {tab === 'equipe' && <Team />}
+      {tab === 'dados' && <DataExport />}
 
-      {dirty && !['equipe', 'fiscal'].includes(tab) && (
+      {dirty && !['equipe', 'fiscal', 'dados'].includes(tab) && (
         <div className="action-bar">
           <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
             <span className="mr-auto text-sm text-ink-soft">Você tem alterações não salvas.</span>
@@ -383,7 +395,9 @@ function resizeImage(file, max) {
 const SCOPE_OPTS = {
   orders_view: [['all', 'Todas'], ['own', 'Só as próprias'], ['none', 'Nenhuma']],
   commissions: [['all', 'Todas'], ['own', 'Só as próprias'], ['none', 'Nenhuma']],
+  time_log: [['all', 'De qualquer técnico'], ['own', 'Só as próprias horas'], ['none', 'Não aponta']],
 };
+const DEFAULT_SCOPE = [['all', 'Todos'], ['own', 'Só os próprios'], ['none', 'Nenhum']];
 
 function PermissionsTab({ s, setS }) {
   const { permissionCatalog } = useAuth();
@@ -413,7 +427,7 @@ function PermissionsTab({ s, setS }) {
                   <span>{p.label}</span>
                   {p.type === 'scope' ? (
                     <select className="input h-8 w-40 text-xs" value={perms[role]?.[p.key] || 'none'} onChange={(e) => set(p.key, e.target.value)} aria-label={p.label}>
-                      {SCOPE_OPTS[p.key].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      {(SCOPE_OPTS[p.key] || DEFAULT_SCOPE).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   ) : (
                     <input type="checkbox" aria-label={p.label} className="h-4 w-4 accent-[rgb(var(--primary))]" checked={!!perms[role]?.[p.key]} onChange={(e) => set(p.key, e.target.checked)} />
@@ -469,6 +483,45 @@ function ChecklistTemplates() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+function DataExport() {
+  const { toast } = useUI();
+  const [list, setList] = useState([]);
+  const [busy, setBusy] = useState('');
+  useEffect(() => { api.get('/export').then(setList).catch(() => {}); }, []);
+  const download = async (path, filename) => {
+    setBusy(path);
+    try {
+      const res = await fetch(`${apiBase}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Falha ao exportar.');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { toast(e.message, 'error'); } finally { setBusy(''); }
+  };
+  return (
+    <div className="max-w-4xl space-y-4">
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-5">
+        <div>
+          <h3 className="font-semibold">Cópia completa dos dados (JSON)</h3>
+          <p className="text-sm text-ink-faint">Todas as tabelas da empresa em um arquivo. Não inclui senhas, tokens fiscais nem certificados. Fica registrado na auditoria.</p>
+        </div>
+        <button className="btn-primary" disabled={!!busy} onClick={() => download('/export/backup.json', `torven-backup-${new Date().toISOString().slice(0, 10)}.json`)}>Baixar cópia</button>
+      </div>
+      <div className="card p-5">
+        <h3 className="mb-3 font-semibold">Planilhas (CSV) por assunto</h3>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {list.map((x) => (
+            <button key={x.key} className="btn-outline justify-start" disabled={!!busy} onClick={() => download(`/export/${x.key}.csv`, `torven-${x.key}.csv`)}>{busy === `/export/${x.key}.csv` ? 'Gerando…' : x.label}</button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

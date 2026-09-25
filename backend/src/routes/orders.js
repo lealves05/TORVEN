@@ -374,6 +374,7 @@ r.delete('/:id/payments/:tid', need('checkout'), async (req, res) => {
     const { rows: [t] } = await db.query(
       "select * from transactions where id = $1 and order_id = $2 and company_id = $3 and type = 'entrada'", [req.params.tid, req.params.id, req.companyId]);
     if (!t) throw notFound('Pagamento não encontrado');
+    if (t.reconciled_at) throw bad('Pagamento já conciliado com o extrato bancário: desfaça a conciliação antes de estornar.');
     await db.query('delete from transactions where id = $1', [t.id]);
     if (t.paid_at) {
       await db.query(

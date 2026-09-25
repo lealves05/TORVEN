@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TrendingUp, TrendingDown, Wallet, ClipboardCheck, Timer, Target, Download, BadgePercent } from 'lucide-react';
@@ -5,21 +6,24 @@ import { api, qs } from '../lib/api';
 import { money, num, qty, fmt, methodName, downloadCSV, ORDER_STATUS } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { PageHeader, Tabs, Stat, Loading, Empty, Modal, MoneyInput, Select, useAction, FAIL, Avatar, cx } from '../components/ui';
+import Management from './Management';
 import { PeriodPicker, monthRange, HBar, InOutChart, useChartTheme } from '../components/charts';
 
 export default function Reports() {
-  const [tab, setTab] = useState('financeiro');
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(params.get('aba') || 'gestao');
   const [period, setPeriod] = useState(monthRange());
   return (
     <div>
-      <PageHeader title="Relatórios" subtitle="Resultado, produção da oficina, comissões e estoque" />
+      <PageHeader title="Relatórios" subtitle="Indicadores de gestão, resultado, produção da oficina, comissões e estoque" />
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <Tabs value={tab} onChange={setTab} tabs={[
-          { value: 'financeiro', label: 'Financeiro' }, { value: 'producao', label: 'Produção' },
+          { value: 'gestao', label: 'Indicadores de gestão' }, { value: 'financeiro', label: 'Financeiro' }, { value: 'producao', label: 'Produção' },
           { value: 'comissoes', label: 'Comissões' }, { value: 'estoque', label: 'Estoque' },
         ]} />
         {tab !== 'estoque' && <PeriodPicker value={period} onChange={setPeriod} />}
       </div>
+      {tab === 'gestao' && <Management period={period} />}
       {tab === 'financeiro' && <Finance period={period} />}
       {tab === 'producao' && <Production period={period} />}
       {tab === 'comissoes' && <Commissions period={period} embedded />}

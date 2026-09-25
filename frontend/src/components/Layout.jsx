@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   LayoutDashboard, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
   LogOut, Menu, X, Sun, Moon, BadgePercent, ChevronDown, Plus, ShoppingCart, Truck, PackagePlus, Receipt, HardHat,
-  Inbox, Headset, Boxes, CalendarDays, Timer, ShieldAlert, Landmark, FileSpreadsheet, ShieldCheck, Building2, ChevronsLeft, ChevronsRight, ChevronRight, Home,
+  Inbox, HeartHandshake, Headset, Boxes, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, ChevronsLeft, ChevronsRight, ChevronRight, Home,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
 import { useAuth } from '../context/AuthContext';
@@ -64,11 +64,14 @@ export function useNav() {
     ] },
     { label: 'Materiais', icon: Boxes, children: [
       can('materials_manage', 'purchases') && { to: '/estoque', label: 'Materiais e estoque', icon: Package, end: true },
+      can('purchases') && { to: '/compras', label: 'Compras e cotações', icon: ShoppingBag },
+      can('materials_manage', 'orders_edit') && { to: '/separacao', label: 'Separação para OS', icon: PackageOpen },
       can('purchases') && mods.purchases && { to: '/estoque/entradas', label: 'Entrada de materiais', icon: PackagePlus },
       can('suppliers', 'purchases') && { to: '/fornecedores', label: 'Fornecedores', icon: Truck },
     ] },
     { label: 'Financeiro', icon: Landmark, children: [
-      can('cash') && { to: '/financeiro', label: 'Caixa e contas', icon: Wallet },
+      can('cash') && { to: '/financeiro', label: 'Caixa e lançamentos', icon: Wallet, end: true },
+      can('cash', 'reports') && { to: '/financeiro/gestao', label: 'Contas, conciliação e DRE', icon: Landmark },
       mods.commissions && scope('commissions') !== 'none' && { to: '/comissoes', label: 'Comissões', icon: BadgePercent },
     ] },
     { label: 'Fiscal', icon: Receipt, children: [
@@ -76,6 +79,9 @@ export function useNav() {
     ] },
     { label: 'Relatórios', icon: BarChart3, children: [
       can('reports') && { to: '/relatorios', label: 'Relatórios gerenciais', icon: FileSpreadsheet },
+    ] },
+    { label: 'Relacionamento', icon: HeartHandshake, children: [
+      can('followups') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },
     ] },
     { label: 'Configurações', icon: Settings, children: [
       can('settings', 'users', 'fiscal_settings') && { to: '/configuracoes', label: 'Empresa e sistema', icon: Settings, end: true },

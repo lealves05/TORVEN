@@ -79,6 +79,14 @@ export async function prepareItems(db, companyId, items, { defaultTechnician = n
 }
 
 export async function insertItems(db, table, fk, parentId, items) {
+  // separação física já confirmada é preservada ao reeditar os itens da OS
+  const picked = {};
+  if (table === 'order_items') {
+    const { rows } = await db.query(
+      `select product_id, sum(picked_qty) as q, max(picked_at) as at, (array_agg(picked_by))[1] as by from order_items
+        where order_id = $1 and picked_qty > 0 and product_id is not null group by product_id`, [parentId]);
+    for (const x of rows) picked[x.product_id] = { q: Number(x.q), at: x.at, by: x.by };
+  }
   await db.query(`delete from ${table} where ${fk} = $1`, [parentId]);
   const cols = ['position', 'kind', 'service_id', 'product_id', 'description', 'unit', 'qty', 'unit_price', 'unit_cost', 'discount', 'total',
     ...(table === 'order_items' ? ['technician_id', 'commission_rate', 'commission_value'] : ['optional', 'approved', 'group_label', 'notes'])];
@@ -86,6 +94,16 @@ export async function insertItems(db, table, fk, parentId, items) {
     await db.query(
       `insert into ${table} (${fk}, ${cols.join(', ')}) values ($1, ${cols.map((_, k) => `$${k + 2}`).join(', ')})`,
       [parentId, ...cols.map((c) => i[c] ?? null)]);
+  }
+  for (const [pid, p] of Object.entries(picked)) {
+    let left = p.q;
+    const { rows } = await db.query('select id, qty from order_items where order_id = $1 and product_id = $2 order by position', [parentId, pid]);
+    for (const it of rows) {
+      if (left <= 0) break;
+      const take = Math.min(left, Number(it.qty));
+      await db.query('update order_items set picked_qty = $2, picked_at = $3, picked_by = $4 where id = $1', [it.id, take, p.at, p.by]);
+      left -= take;
+    }
   }
 }
 
@@ -161,6 +179,10 @@ export const DEFAULT_CHECKLISTS = [
 export async function ensureCompanyDefaults(db, companyId) {
   await db.query(`insert into units (company_id, name, is_default) select $1, 'Matriz', true
                    where not exists (select 1 from units where company_id = $1)`, [companyId]);
+  await db.query(`insert into financial_accounts (company_id, name, kind, is_default_cash) select $1, 'Caixa da oficina', 'caixa', true
+                   where not exists (select 1 from financial_accounts where company_id = $1 and is_default_cash)`, [companyId]);
+  await db.query(`insert into financial_accounts (company_id, name, kind, is_default_bank) select $1, 'Conta bancária principal', 'banco', true
+                   where not exists (select 1 from financial_accounts where company_id = $1 and is_default_bank)`, [companyId]);
   for (const t of DEFAULT_CHECKLISTS) {
     await db.query(`insert into checklist_templates (company_id, name, kind, items) select $1, $2, $3, $4
                      where not exists (select 1 from checklist_templates where company_id = $1 and kind = $3)`,

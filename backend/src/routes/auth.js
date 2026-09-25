@@ -145,7 +145,7 @@ r.post('/activate', requireAuth, async (req, res) => {
   if (taken) throw new HttpError(409, 'Este e-mail já está cadastrado.');
   await tx(async (db) => {
     if (!d.keepData) {
-      for (const t of ['attachments', 'audit_log', 'warranty_claims', 'schedule_entries', 'order_time_logs', 'order_inspections', 'service_requests', 'invoices', 'transactions', 'stock_movements', 'orders', 'quotes', 'purchases', 'cash_sessions',
+      for (const t of ['attachments', 'audit_log', 'followups', 'statement_lines', 'bank_statements', 'purchase_orders', 'purchase_quotations', 'warranty_claims', 'schedule_entries', 'order_time_logs', 'order_inspections', 'service_requests', 'invoices', 'transactions', 'stock_movements', 'orders', 'quotes', 'purchases', 'cash_sessions',
         'equipment', 'customers', 'products', 'suppliers', 'services', 'technicians']) {
         await db.query(`delete from ${t} where company_id = $1`, [req.companyId]);
       }

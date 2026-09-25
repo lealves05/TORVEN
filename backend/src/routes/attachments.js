@@ -7,9 +7,9 @@ import { parse, notFound, bad, HttpError } from '../util.js';
 import { audit } from '../audit.js';
 
 const r = Router();
-const TABLE = { equipment: 'equipment', request: 'service_requests', quote: 'quotes', order: 'orders', customer: 'customers', warranty: 'warranty_claims', inspection: 'order_inspections' };
-const READ = { equipment: ['customers_view'], customer: ['customers_view'], request: ['requests_view'], quote: ['quotes_view', 'quotes'], order: ['orders_view'], warranty: ['warranty_manage', 'orders_view'], inspection: ['orders_view', 'inspections'] };
-const WRITE = { equipment: ['customers_edit', 'orders_edit'], customer: ['customers_edit'], request: ['requests_manage'], quote: ['quotes'], order: ['orders_edit', 'orders_create'], warranty: ['warranty_manage'], inspection: ['inspections', 'orders_deliver'] };
+const TABLE = { equipment: 'equipment', request: 'service_requests', quote: 'quotes', order: 'orders', customer: 'customers', warranty: 'warranty_claims', inspection: 'order_inspections', purchase: 'purchases', purchase_order: 'purchase_orders' };
+const READ = { equipment: ['customers_view'], customer: ['customers_view'], request: ['requests_view'], quote: ['quotes_view', 'quotes'], order: ['orders_view'], warranty: ['warranty_manage', 'orders_view'], inspection: ['orders_view', 'inspections'], purchase: ['purchases', 'materials_manage'], purchase_order: ['purchases'] };
+const WRITE = { equipment: ['customers_edit', 'orders_edit'], customer: ['customers_edit'], request: ['requests_manage'], quote: ['quotes'], order: ['orders_edit', 'orders_create'], warranty: ['warranty_manage'], inspection: ['inspections', 'orders_deliver'], purchase: ['purchases'], purchase_order: ['purchases'] };
 const MAX_BYTES = 1_500_000;
 const MIMES = /^(image\/(jpeg|png|webp|gif)|application\/pdf)$/;
 

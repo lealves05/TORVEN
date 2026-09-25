@@ -12,7 +12,7 @@ const opt = s.nullable().optional();
 const schema = z.object({
   name: s.min(2, 'informe o nome'), sku: opt, barcode: opt, category: opt, unit: s.min(1).default('un'),
   cost: z.coerce.number().min(0).default(0), price: z.coerce.number().min(0).default(0),
-  min_stock: z.coerce.number().min(0).default(0), location: opt, ncm: opt, cfop: opt,
+  min_stock: z.coerce.number().min(0).default(0), max_stock: z.coerce.number().min(0).nullable().optional(), lead_days: z.coerce.number().int().min(0).nullable().optional(), location: opt, ncm: opt, cfop: opt,
   origin: z.coerce.number().int().min(0).max(8).default(0), supplier_id: z.string().uuid().nullable().optional(),
   active: z.boolean().optional(),
 });

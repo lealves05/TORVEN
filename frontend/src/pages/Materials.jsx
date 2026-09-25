@@ -102,7 +102,7 @@ function ProductForm({ p, onClose, onSaved }) {
   const save = async () => {
     const body = {
       name: f.name, sku: f.sku || null, barcode: f.barcode || null, category: f.category || null, unit: f.unit || 'un', cost: Number(f.cost) || 0,
-      price: Number(f.price) || 0, min_stock: Number(f.min_stock) || 0, location: f.location || null, ncm: f.ncm || null, cfop: f.cfop || null,
+      price: Number(f.price) || 0, min_stock: Number(f.min_stock) || 0, max_stock: f.max_stock === '' || f.max_stock == null ? null : Number(f.max_stock), lead_days: f.lead_days === '' || f.lead_days == null ? null : Number(f.lead_days), location: f.location || null, ncm: f.ncm || null, cfop: f.cfop || null,
       origin: Number(f.origin) || 0, supplier_id: f.supplier_id || null, ...(p.id ? {} : { stock: Number(f.stock) || 0 }),
     };
     const r = await run(() => (p.id ? api.put(`/products/${p.id}`, body) : api.post('/products', body)), 'Material salvo');
@@ -127,6 +127,8 @@ function ProductForm({ p, onClose, onSaved }) {
         <div className="flex items-end pb-2 text-sm text-ink-faint sm:col-span-2">{margin !== null && <>Markup: <b className="ml-1 text-ink">{margin}%</b></>}</div>
         {!p.id && <Input label="Estoque inicial" type="number" step="0.001" value={f.stock} onChange={set('stock')} className="sm:col-span-2" />}
         <Input label="Estoque mínimo" type="number" step="0.001" min={0} value={f.min_stock ?? 0} onChange={set('min_stock')} className="sm:col-span-2" />
+        <Input label="Estoque máximo (reposição até)" type="number" step="0.001" min={0} value={f.max_stock ?? ''} onChange={set('max_stock')} className="sm:col-span-2" />
+        <Input label="Prazo do fornecedor (dias)" type="number" min={0} value={f.lead_days ?? ''} onChange={set('lead_days')} className="sm:col-span-2" />
         <Input label="Localização" value={f.location} onChange={set('location')} className="sm:col-span-2" placeholder="Prateleira A3" />
         <Input label="Código interno (SKU)" value={f.sku} onChange={set('sku')} className="sm:col-span-2" />
         <Input label="Código de barras" value={f.barcode} onChange={set('barcode')} className="sm:col-span-2" />

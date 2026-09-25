@@ -130,6 +130,10 @@ r.get('/notifications', async (req, res) => {
     jobs.push(one(`select count(*)::int as n from order_time_logs where company_id = $1 and ended_at is null and started_at < now() - interval '10 hours'`, [cid])
       .then((x) => push({ id: 'timers_long', level: 'warning', title: 'Cronômetros esquecidos', detail: 'Apontamentos abertos há mais de 10 horas', count: x.n, link: '/producao' })));
   }
+  if (can(req, 'followups')) {
+    jobs.push(one("select count(*)::int as n from followups where company_id = $1 and status = 'pendente' and due_date <= current_date", [cid])
+      .then((x) => push({ id: 'followups_due', level: 'info', title: 'Retornos a fazer', detail: 'Pós-venda, orçamentos e cobranças para hoje', count: x.n, link: '/relacionamento' })));
+  }
   if (can(req, 'warranty_manage')) {
     jobs.push(one("select count(*)::int as n from warranty_claims where company_id = $1 and status in ('aberta','em_analise')", [cid])
       .then((x) => push({ id: 'warranty_open', level: 'warning', title: 'Garantias em aberto', detail: 'Aguardando análise', count: x.n, link: '/garantias' })));

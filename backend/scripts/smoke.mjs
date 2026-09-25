@@ -496,6 +496,140 @@ try {
   ok((await call('GET', '/schedule')).every((e) => e.technician_id === techs[1].id), 'técnico vê só a própria agenda e não programa');
   token = ownerTok;
 
+  // ================= FASE 3 — materiais =================
+  const sug = await call('GET', '/procurement/suggestions');
+  ok(sug.length > 0 && sug.every((x) => x.suggested > 0), `sugestão de compra (${sug.length} materiais abaixo do mínimo)`);
+  const prodsNow = await call('GET', '/products');
+  const pA = prodsNow.find((x) => x.id === sug[0].id);
+  const pB = prodsNow.find((x) => x.id === vareta.id);
+  const cot = await call('POST', '/procurement/quotations', { title: 'Reposição semanal', supplier_ids: [sups[0].id, sups[1].id],
+    items: [{ product_id: pA.id, description: pA.name, unit: pA.unit, qty: 10 }, { product_id: pB.id, description: pB.name, unit: pB.unit, qty: 2, order_id: os3.id }] });
+  ok(cot.number >= 1 && cot.items.length === 2 && cot.suppliers.length === 2, `cotação nº ${cot.number} com 2 fornecedores`);
+  const [ci1, ci2] = cot.items;
+  const cot2 = await call('POST', `/procurement/quotations/${cot.id}/prices`, { prices: [
+    { item_id: ci1.id, supplier_id: sups[0].id, unit_cost: 10, lead_days: 2 }, { item_id: ci1.id, supplier_id: sups[1].id, unit_cost: 9.5, lead_days: 5 },
+    { item_id: ci2.id, supplier_id: sups[0].id, unit_cost: 150 }, { item_id: ci2.id, supplier_id: sups[1].id, unit_cost: 170 },
+  ] });
+  ok(cot2.items[0].best_supplier_id === sups[1].id && cot2.items[1].best_supplier_id === sups[0].id, 'mapa de preços aponta o menor preço por item');
+  await call('POST', `/procurement/quotations/${cot.id}/close`, { choices: [{ item_id: ci1.id, supplier_id: sups[1].id }, { item_id: ci2.id, supplier_id: sups[2].id }] }, [400]);
+  const cotClosed = await call('POST', `/procurement/quotations/${cot.id}/close`, { choices: [{ item_id: ci1.id, supplier_id: sups[1].id }, { item_id: ci2.id, supplier_id: sups[0].id }] });
+  ok(cotClosed.purchase_orders.length === 2 && cotClosed.quotation.status === 'fechada', 'cotação fechada gera 1 pedido por fornecedor');
+  const poA = await call('GET', `/procurement/orders/${cotClosed.purchase_orders.find((x) => x).id}`);
+  const po1 = [poA, await call('GET', `/procurement/orders/${cotClosed.purchase_orders[1].id}`)].find((x) => x.items[0].product_id === pA.id);
+  ok(po1.total === 95 && po1.status === 'rascunho', `pedido nº ${po1.number} (${po1.total})`);
+  await call('POST', `/procurement/orders/${po1.id}/send`, { via: 'email' });
+  const stockA0 = pA.stock;
+  await call('POST', `/procurement/orders/${po1.id}/receive`, { items: [{ po_item_id: po1.items[0].id, qty: 12 }] }, [400]);
+  ok(true, 'recebimento acima do pedido exige confirmação');
+  let rec = await call('POST', `/procurement/orders/${po1.id}/receive`, { invoice_number: '9001', items: [{ po_item_id: po1.items[0].id, qty: 6, unit_cost: 9.8, lot: 'L-2231', certificate: 'CQ-778' }],
+    installments: [{ due_date: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), amount: 58.8 }] });
+  let pA1 = (await call('GET', '/products')).find((x) => x.id === pA.id);
+  ok(rec.status === 'parcial' && rec.items[0].qty_received === 6 && near(pA1.stock, stockA0 + 6) && rec.divergences.length === 2, 'recebimento parcial conferido (estoque, divergências de qtd/custo)');
+  const ent = await call('GET', `/purchases/${rec.purchase_id}`);
+  ok(ent.items[0].lot === 'L-2231' && ent.items[0].certificate === 'CQ-778' && ent.payables.length === 1 && ent.purchase_order_id === po1.id, 'entrada com lote, certificado e conta a pagar');
+  await call('POST', `/purchases/${rec.purchase_id}/cancel`);
+  rec = await call('GET', `/procurement/orders/${po1.id}`);
+  ok(rec.items[0].qty_received === 0 && rec.status === 'enviado', 'cancelar a entrada devolve o pedido para pendente');
+  rec = await call('POST', `/procurement/orders/${po1.id}/receive`, { invoice_number: '9002', items: [{ po_item_id: po1.items[0].id, qty: 10 }] });
+  ok(rec.status === 'recebido', 'pedido recebido por completo');
+  await call('POST', `/procurement/orders/${po1.id}/cancel`, { reason: 'teste' }, [400]);
+  const poM = await call('POST', '/procurement/orders', { supplier_id: sups[2].id, items: [{ description: 'Disco de corte 7"', unit: 'un', qty: 20, unit_cost: 6.5 }] });
+  const poMc = await call('POST', `/procurement/orders/${poM.id}/cancel`, { reason: 'Comprado no balcão' });
+  ok(poM.total === 130 && poMc.status === 'cancelado', 'pedido manual criado e cancelado com motivo');
+
+  const osPick = await call('POST', '/orders', { kind: 'os', customer_id: c.id, status: 'aprovada', problem: 'Separação',
+    items: [{ kind: 'material', product_id: vareta.id, description: vareta.name, qty: 1, unit_price: 190 }] });
+  let pick = await call('GET', '/procurement/picking');
+  const pItem = pick.find((x) => x.order_id === osPick.id);
+  ok(pItem && pItem.picked_qty === 0, 'material da OS aprovada aparece na separação');
+  await call('POST', `/procurement/picking/${pItem.id}`, { qty: 2 }, [400]);
+  await call('POST', `/procurement/picking/${pItem.id}`, { qty: 1 });
+  const osPick2 = await call('GET', `/orders/${osPick.id}`);
+  await call('PUT', `/orders/${osPick.id}`, { ...osPick2, items: osPick2.items.map((i) => ({ ...i, qty: Number(i.qty), unit_price: Number(i.unit_price), discount: Number(i.discount) })) });
+  ok((await call('GET', `/orders/${osPick.id}`)).items[0].picked_qty === 1 && !(await call('GET', '/procurement/picking')).some((x) => x.order_id === osPick.id), 'separação confirmada e preservada ao editar a OS');
+
+  // ================= FASE 4 — financeiro =================
+  const today4 = new Date().toISOString().slice(0, 10);
+  let accs = await call('GET', '/finance/accounts');
+  const accCash = accs.find((a) => a.is_default_cash);
+  const accBank = accs.find((a) => a.is_default_bank);
+  ok(accCash && accBank, 'contas padrão (caixa e banco) criadas');
+  const fin0 = await call('GET', `/reports/finance?from=${today4.slice(0, 8)}01&to=${today4}`);
+  const accX = await call('POST', '/finance/accounts', { name: 'Banco Cooperativa', kind: 'banco', bank_name: 'Coop', opening_balance: 1000 });
+  await call('POST', '/finance/transfers', { from_id: accBank.id, to_id: accX.id, amount: 300 });
+  accs = await call('GET', '/finance/accounts');
+  const fin1 = await call('GET', `/reports/finance?from=${today4.slice(0, 8)}01&to=${today4}`);
+  ok(near(accs.find((a) => a.id === accX.id).balance, 1300) && near(accs.find((a) => a.id === accBank.id).balance, accBank.balance - 300) && near(fin1.totals.income, fin0.totals.income),
+    'transferência entre contas não mexe na receita');
+  const [recv4] = await call('POST', '/cash/transactions', { type: 'entrada', category: 'Ordens de serviço', description: 'Cliente pagou por depósito', amount: 777.77, paid: false, due_date: today4 });
+  const ofx = `OFXHEADER:100\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><BANKTRANLIST>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>${today4.replace(/-/g, '')}120000<TRNAMT>777.77<FITID>A1<MEMO>DEP CLIENTE</STMTTRN>
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>${today4.replace(/-/g, '')}<TRNAMT>-50.00<FITID>A2<NAME>TARIFA PACOTE</STMTTRN>
+</BANKTRANLIST></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  const stOfx = await call('POST', '/finance/statements', { account_id: accX.id, filename: 'extrato.ofx', content: ofx });
+  const stDup = await call('POST', '/finance/statements', { account_id: accX.id, filename: 'extrato.ofx', content: ofx });
+  ok(stOfx.lines_count === 2 && stDup.lines_count === 0 && stDup.duplicates === 2, 'extrato OFX importado sem duplicar');
+  let std = await call('GET', `/finance/statements/${stOfx.id}`);
+  const lCred = std.lines.find((l) => l.amount > 0);
+  const lDeb = std.lines.find((l) => l.amount < 0);
+  ok(lCred.candidates.some((c) => c.id === recv4.id), 'sugestão de conciliação encontra o recebimento pendente');
+  await call('POST', `/finance/lines/${lDeb.id}/match`, { transaction_id: recv4.id }, [400]);
+  await call('POST', `/finance/lines/${lCred.id}/match`, { transaction_id: recv4.id });
+  let txs = (await call('GET', '/cash/transactions?status=pago')).items;
+  const rec4 = txs.find((t) => t.id === recv4.id);
+  ok(rec4.paid_at && rec4.reconciled_at && rec4.account_id === accX.id, 'conciliação dá baixa na data do banco e na conta do extrato');
+  await call('DELETE', `/cash/transactions/${recv4.id}`, null, [400]);
+  await call('POST', `/cash/transactions/${recv4.id}/unpay`, null, [400]);
+  ok(true, 'lançamento conciliado não pode ser excluído nem ter a baixa desfeita');
+  await call('POST', `/finance/lines/${lDeb.id}/create`, { category: 'Tarifas bancárias' });
+  std = await call('GET', `/finance/statements/${stOfx.id}`);
+  ok(std.lines.every((l) => l.status === 'conciliado'), 'tarifa do extrato lançada e conciliada');
+  await call('POST', `/finance/lines/${lCred.id}/undo`);
+  txs = (await call('GET', '/cash/transactions?status=pago')).items;
+  ok(!txs.find((t) => t.id === recv4.id).reconciled_at, 'conciliação desfeita');
+  await call('POST', '/cash/transactions', { type: 'entrada', category: 'Outras receitas', description: 'Pix avulso', amount: 88.88, method: 'pix', paid: true, account_id: accX.id });
+  const stc = await call('POST', '/finance/statements', { account_id: accX.id, filename: 'extrato.csv', content: `data;descrição;valor\n${today4.split('-').reverse().join('/')};Pix recebido;88,88\n${today4.split('-').reverse().join('/')};Venda grande;1.234,56` });
+  const auto = await call('POST', `/finance/statements/${stc.id}/auto`);
+  const stcd = await call('GET', `/finance/statements/${stc.id}`);
+  ok(stc.lines_count === 2 && auto.reconciled === 1 && stcd.lines.find((l) => l.amount === 1234.56).status === 'pendente', 'CSV brasileiro importado e conciliação automática segura');
+  const cf = await call('GET', '/finance/cashflow?days=90');
+  ok(typeof cf.current === 'number' && Array.isArray(cf.weeks) && cf.overdue, `fluxo de caixa projetado (saldo ${cf.current} → ${cf.projected})`);
+  const dre = await call('GET', `/finance/dre?year=${today4.slice(0, 4)}`);
+  ok(dre.months.length === 12 && near(dre.total.resultado, dre.total.lucro_bruto - dre.total.despesas) && dre.total.receita > 0, `DRE gerencial (receita ${dre.total.receita}, resultado ${dre.total.resultado})`);
+
+  // ================= FASE 5 — relacionamento, gestão, fiscal e exportação =================
+  const fups = await call('GET', '/relationship/followups');
+  ok(fups.some((f) => f.kind === 'pos_venda') && fups.some((f) => f.kind === 'orcamento'), `retornos gerados automaticamente (${fups.length})`);
+  const fups2 = await call('GET', '/relationship/followups');
+  ok(fups2.length === fups.length, 'geração de retornos é idempotente');
+  const pv = fups.find((f) => f.kind === 'pos_venda');
+  await call('POST', `/relationship/followups/${pv.id}/done`, { result: 'ok', channel: 'telefone' }, [400]);
+  const pvDone = await call('POST', `/relationship/followups/${pv.id}/done`, { result: 'Cliente satisfeito com o reparo', channel: 'telefone', rating: 10 });
+  ok(pvDone.status === 'feito' && pvDone.rating === 10, 'contato de pós-venda registrado com nota');
+  const summ = await call('GET', '/relationship/summary');
+  ok(summ.nps.answers >= 1 && summ.nps.score === 100, `NPS calculado (${summ.nps.score})`);
+  const manual = await call('POST', '/relationship/followups', { customer_id: c.id, kind: 'outro', title: 'Ligar sobre novo projeto', due_date: today4 });
+  await call('POST', `/relationship/followups/${manual.id}/cancel`, { reason: 'Cliente pediu para não ligar' });
+  ok(true, 'retorno manual criado e cancelado com motivo');
+  const mgmt = await call('GET', `/reports/management?from=${today4.slice(0, 8)}01&to=${today4}`);
+  ok(mgmt.funnel.requests >= 4 && mgmt.funnel.quotes_sent >= 2 && mgmt.margin.orders >= 1 && Array.isArray(mgmt.technicians), `indicadores de gestão (conversão ${mgmt.funnel.quote_approval_pct}%, margem ${mgmt.margin.margin_pct}%)`);
+  const osm = mgmt.margin.lowest.find((m) => m.id === os3.id);
+  ok(!osm || near(osm.cost, Number(osm.material_cost) + Number(osm.other_cost) + Number(osm.labor_cost) + Number(osm.commissions)), 'margem real considera materiais, mão de obra apontada e comissões');
+  const fis = await call('GET', `/reports/fiscal?from=${today4.slice(0, 8)}01&to=${today4}`);
+  ok(Array.isArray(fis.pending) && fis.by_status.length > 0, `painel fiscal (${fis.pending.length} OS entregues a faturar)`);
+  const exps = await call('GET', '/export');
+  ok(exps.length > 20, 'catálogo de exportação');
+  const csvRes = await fetch(`${API}/api/export/clientes.csv`, { headers: { Authorization: `Bearer ${token}` } });
+  const csvTxt = await csvRes.text();
+  ok(csvRes.status === 200 && csvTxt.includes('Cliente Novo Ltda'), 'exportação CSV de clientes');
+  const bk = await call('GET', '/export/backup.json');
+  const bkTxt = JSON.stringify(bk);
+  ok(bk.tables.os.length > 0 && !bkTxt.includes('password_hash') && !bkTxt.includes('TOKEN-TESTE-123') && !bkTxt.includes('CONTA-PRINCIPAL-TOKEN'), 'backup JSON completo sem senhas nem tokens');
+  token = tEst;
+  await call('GET', '/export/backup.json', null, [403]);
+  token = ownerTok;
+  ok(true, 'exportação restrita ao perfil autorizado');
+
   // isolamento entre empresas
   const other = await call('POST', '/auth/register', { companyName: 'Outra Serralheria', name: 'Outro', email: `outro${Date.now()}@torven.app`, password: '123456' });
   token = other.token;
@@ -510,6 +644,18 @@ try {
   await call('POST', `/production/orders/${os3.id}/time/start`, {}, [400, 404]);
   await call('POST', `/quality/orders/${os3.id}/inspections`, { kind: 'inspecao', items: [{ label: 'x', result: 'ok' }], result: 'aprovado' }, [404]);
   ok((await call('GET', '/schedule')).every((e) => e.order_id !== os3.id), 'isolamento: garantia, apontamento, inspeção e agenda de outra empresa');
+  await call('GET', `/procurement/orders/${po1.id}`, null, [404]);
+  await call('GET', `/procurement/quotations/${cot.id}`, null, [404]);
+  await call('POST', `/procurement/picking/${pItem.id}`, { qty: 0 }, [404]);
+  await call('POST', '/procurement/orders', { supplier_id: sups[0].id, items: [{ description: 'x', qty: 1, unit_cost: 1 }] }, [404]);
+  ok(!(await call('GET', '/procurement/picking')).some((x) => x.order_id === osPick.id), 'isolamento: cotações, pedidos e separação');
+  await call('GET', `/finance/statements/${stOfx.id}`, null, [404]);
+  await call('POST', `/finance/lines/${lCred.id}/match`, { transaction_id: recv4.id }, [404]);
+  await call('POST', '/finance/transfers', { from_id: accBank.id, to_id: accX.id, amount: 1 }, [404]);
+  ok((await call('GET', '/finance/accounts')).every((a) => a.id !== accX.id), 'isolamento: contas, extratos e conciliação');
+  await call('POST', `/relationship/followups/${manual.id}/reschedule`, { due_date: today4 }, [404]);
+  const bkOther = await call('GET', '/export/backup.json');
+  ok(!JSON.stringify(bkOther).includes('Cliente Novo Ltda') && (await call('GET', '/relationship/followups')).every((f) => f.customer_id !== c.id), 'isolamento: relacionamento e exportação');
   const srch = await call('GET', `/search?q=${encodeURIComponent('Cliente Novo')}`);
   ok(srch.length === 0 && (await call('GET', '/audit')).rows.every((x) => !x.summary?.includes('Cliente Novo')), 'isolamento entre empresas (leitura, escrita, busca e auditoria)');
   token = ownerTok;

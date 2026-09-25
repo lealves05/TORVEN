@@ -25,6 +25,9 @@ import Units from './pages/Units';
 import Agenda from './pages/Agenda';
 import Production from './pages/Production';
 import Warranty from './pages/Warranty';
+import Procurement, { QuotationDetail, PurchaseOrderDetail, Picking } from './pages/Procurement';
+import Finance from './pages/Finance';
+import Relationship from './pages/Relationship';
 import { PrintOrder, PrintQuote } from './pages/Print';
 import { PublicQuote, PublicOrder } from './pages/Public';
 
@@ -82,6 +85,12 @@ export default function App() {
             <Route path="agenda" element={<Guard perms={['schedule_view', 'schedule_manage']}><Agenda /></Guard>} />
             <Route path="producao" element={<Guard perms={['schedule_view', 'time_log']}><Production /></Guard>} />
             <Route path="garantias" element={<Guard perms={['warranty_manage']}><Warranty /></Guard>} />
+            <Route path="compras" element={<Guard perms={['purchases']}><Procurement /></Guard>} />
+            <Route path="compras/cotacoes/:id" element={<Guard perms={['purchases']}><QuotationDetail /></Guard>} />
+            <Route path="compras/pedidos/:id" element={<Guard perms={['purchases']}><PurchaseOrderDetail /></Guard>} />
+            <Route path="separacao" element={<Guard perms={['materials_manage', 'orders_edit']}><Picking /></Guard>} />
+            <Route path="financeiro/gestao" element={<Guard perms={['cash', 'reports']}><Finance /></Guard>} />
+            <Route path="relacionamento" element={<Guard perms={['followups']}><Relationship /></Guard>} />
             <Route path="auditoria" element={<Guard perms={['audit_view']}><Audit /></Guard>} />
             <Route path="conta" element={<Account />} />
             <Route path="*" element={<Navigate to="/" replace />} />

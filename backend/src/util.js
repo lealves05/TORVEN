@@ -102,7 +102,7 @@ export const DEFAULT_SETTINGS = {
   expenseCategories: [
     'Compra de materiais', 'Gases e consumíveis', 'Ferramentas e EPI', 'Aluguel', 'Energia elétrica',
     'Água/Internet/Telefone', 'Salários', 'Comissões', 'Manutenção de máquinas', 'Combustível/Deslocamento',
-    'Terceirização', 'Taxas de cartão', 'Impostos', 'Estornos', 'Outras despesas',
+    'Terceirização', 'Taxas de cartão', 'Tarifas bancárias', 'Impostos', 'Estornos', 'Outras despesas',
   ],
   serviceCategories: [
     'Solda TIG', 'Solda MIG/MAG', 'Solda eletrodo revestido', 'Solda em alumínio', 'Solda em inox',
@@ -142,7 +142,8 @@ export const DEFAULT_SETTINGS = {
   },
   modules: { purchases: true, invoices: true, commissions: true, publicLinks: true },
   dateFormat: 'dd/MM/yyyy',
-  numbering: { request: 'SOL', quote: 'ORC', order: 'OS', purchase: 'ENT', digits: 5 },
+  numbering: { request: 'SOL', quote: 'ORC', order: 'OS', purchase: 'ENT', purchase_order: 'PC', quotation: 'COT', warranty: 'GAR', digits: 5 },
+  relationship: { postSaleDays: 7, quoteFollowupDays: 3, warrantyNoticeDays: 15, maintenanceDays: 0, collectionDays: 3 },
   quotes: {
     taxRate: 0,
     assumptions: 'Valores considerando o material e as dimensões informadas na solicitação. Serviço executado em horário comercial.',
@@ -234,6 +235,7 @@ export const PERMISSIONS = [
   { group: 'Agenda e produção', key: 'time_log', label: 'Apontar horas', type: 'scope' },
   { group: 'Agenda e produção', key: 'inspections', label: 'Registrar inspeção de qualidade' },
   { group: 'Agenda e produção', key: 'warranty_manage', label: 'Registrar e analisar garantias' },
+  { group: 'Relacionamento', key: 'followups', label: 'Pós-venda, retornos e cobranças (follow-ups)' },
   { group: 'Materiais e estoque', key: 'materials_manage', label: 'Materiais e ajustes de estoque' },
   { group: 'Materiais e estoque', key: 'purchases', label: 'Compras e entrada de materiais' },
   { group: 'Materiais e estoque', key: 'suppliers', label: 'Fornecedores' },
@@ -269,16 +271,16 @@ export const DEFAULT_PERMISSIONS = {
   manager: { ...ALL, users: false, fiscal_settings: false, units_manage: false },
   attendant: pick(['requests_view', 'requests_manage', 'quotes_view', 'quotes', 'quotes_send', 'quotes_approve', 'customers_view',
     'customers_contact', 'customers_edit', 'orders_view', 'orders_create', 'orders_edit', 'orders_values', 'orders_deliver', 'checkout', 'cash', 'discount',
-    'schedule_view', 'schedule_manage', 'warranty_manage']),
+    'schedule_view', 'schedule_manage', 'warranty_manage', 'followups']),
   estimator: pick(['requests_view', 'requests_manage', 'quotes_view', 'quotes', 'quotes_send', 'customers_view', 'customers_contact',
-    'customers_edit', 'orders_view', 'orders_values', 'services_manage', 'schedule_view']),
+    'customers_edit', 'orders_view', 'orders_values', 'services_manage', 'schedule_view', 'followups']),
   supervisor: pick(['requests_view', 'requests_manage', 'quotes_view', 'quotes', 'customers_view', 'orders_view', 'orders_create',
     'orders_edit', 'orders_deliver', 'materials_manage', 'technicians_manage', 'commissions', 'schedule_view', 'schedule_manage', 'time_log',
     'inspections', 'warranty_manage']),
   technician: { ...NONE, requests_view: true, quotes_view: true, customers_view: true, orders_view: 'own', orders_create: true,
     orders_edit: true, commissions: 'own', schedule_view: true, time_log: 'own' },
   purchasing: pick(['materials_manage', 'purchases', 'suppliers', 'orders_view', 'quotes_view', 'customers_view', 'schedule_view']),
-  finance: pick(['checkout', 'discount', 'cash', 'reports', 'commissions', 'invoices_issue', 'orders_view', 'orders_values',
+  finance: pick(['followups', 'checkout', 'discount', 'cash', 'reports', 'commissions', 'invoices_issue', 'orders_view', 'orders_values',
     'quotes_view', 'customers_view', 'customers_contact', 'customers_export', 'data_export', 'purchases', 'suppliers']),
   fiscal: pick(['invoices_issue', 'invoices_cancel', 'fiscal_settings', 'orders_view', 'orders_values', 'customers_view',
     'customers_contact', 'reports', 'quotes_view']),
@@ -293,7 +295,7 @@ export function permissionsFor(role, settings) {
 
 export function withDefaults(settings = {}) {
   const out = { ...DEFAULT_SETTINGS, ...settings };
-  for (const k of ['orders', 'whatsapp', 'modules', 'numbering', 'quotes']) {
+  for (const k of ['orders', 'whatsapp', 'modules', 'numbering', 'quotes', 'relationship']) {
     out[k] = { ...DEFAULT_SETTINGS[k], ...(settings?.[k] || {}) };
   }
   out.permissions = Object.fromEntries(Object.keys(DEFAULT_PERMISSIONS).map((r) =>

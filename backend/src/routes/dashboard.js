@@ -45,7 +45,7 @@ r.get('/', async (req, res) => {
   if (can(req, 'cash') || can(req, 'reports')) {
     const { rows: [m] } = await q(
       `select coalesce(sum(amount) filter (where type='entrada'),0) as income, coalesce(sum(amount) filter (where type='saida'),0) as expense
-         from transactions where company_id = $1 and paid_at is not null
+         from transactions where company_id = $1 and paid_at is not null and category <> 'Transferência entre contas'
           and date_trunc('month', paid_at at time zone $2) = date_trunc('month', now() at time zone $2)`, [cid, tz]);
     const { rows: [p] } = await q(
       `select coalesce(sum(amount) filter (where type='entrada'),0) as receivable,

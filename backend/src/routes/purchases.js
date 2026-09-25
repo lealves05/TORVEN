@@ -23,6 +23,9 @@ const schema = z.object({
     qty: z.coerce.number().positive('quantidade deve ser maior que zero'),
     unit_cost: z.coerce.number().min(0),
     sale_price: z.coerce.number().min(0).optional(),
+    lot: opt, certificate: opt,
+    po_item_id: z.string().uuid().nullable().optional(),
+    qty_ordered: z.coerce.number().min(0).nullable().optional(),
   })).min(1, 'inclua ao menos um item'),
   freight: z.coerce.number().min(0).default(0),
   other: z.coerce.number().min(0).default(0),
@@ -66,7 +69,7 @@ async function full(id, companyId) {
 
 r.get('/:id', async (req, res) => res.json(await full(req.params.id, req.companyId)));
 
-async function save(db, req, d, existing) {
+export async function save(db, req, d, existing) {
   const subtotal = round2(d.items.reduce((a, i) => a + i.qty * i.unit_cost, 0));
   const total = round2(subtotal + d.freight + d.other - d.discount);
   if (total < 0) throw bad('Desconto maior que o total da compra.');
@@ -89,14 +92,15 @@ async function save(db, req, d, existing) {
   await db.query('delete from purchase_items where purchase_id = $1', [id]);
   for (const [position, i] of d.items.entries()) {
     await db.query(
-      `insert into purchase_items (purchase_id, product_id, description, unit, qty, unit_cost, total, position)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [id, i.product_id || null, i.description, i.unit || null, i.qty, i.unit_cost, round2(i.qty * i.unit_cost), position]);
+      `insert into purchase_items (purchase_id, product_id, description, unit, qty, unit_cost, total, position, lot, certificate, po_item_id, qty_ordered)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [id, i.product_id || null, i.description, i.unit || null, i.qty, i.unit_cost, round2(i.qty * i.unit_cost), position,
+        i.lot || null, i.certificate || null, i.po_item_id || null, i.qty_ordered ?? null]);
   }
   return { id, subtotal, total };
 }
 
-async function receive(db, req, id, d) {
+export async function receive(db, req, id, d) {
   const { rows: [p] } = await db.query('select * from purchases where id = $1 for update', [id]);
   if (p.status !== 'rascunho') throw bad('Esta entrada já foi processada.');
   const { rows: items } = await db.query('select * from purchase_items where purchase_id = $1 order by position', [id]);
@@ -179,6 +183,15 @@ r.post('/:id/cancel', async (req, res) => {
       const { rows: [{ n }] } = await db.query('select count(*)::int as n from transactions where purchase_id = $1 and paid_at is not null', [p.id]);
       if (n > 0) throw bad('Há parcelas já pagas desta entrada. Estorne/exclua os pagamentos no financeiro antes de cancelar.');
       await db.query('delete from transactions where purchase_id = $1', [p.id]);
+    }
+    if (p.purchase_order_id && p.status === 'recebida') {
+      await db.query(
+        `update purchase_order_items poi set qty_received = greatest(0, poi.qty_received - pi.qty)
+           from purchase_items pi where pi.purchase_id = $1 and pi.po_item_id = poi.id`, [p.id]);
+      await db.query(
+        `update purchase_orders po set status = case
+            when not exists (select 1 from purchase_order_items i where i.purchase_order_id = po.id and i.qty_received > 0) then 'enviado'
+            else 'parcial' end where po.id = $1 and po.status in ('parcial','recebido')`, [p.purchase_order_id]);
     }
     await db.query("update purchases set status = 'cancelada' where id = $1", [p.id]);
   });

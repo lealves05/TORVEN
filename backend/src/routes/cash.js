@@ -84,13 +84,13 @@ r.get('/transactions', async (req, res) => {
   if (req.query.customer_id) { params.push(req.query.customer_id); where += ` and t.customer_id = $${params.length}`; }
   if (req.query.supplier_id) { params.push(req.query.supplier_id); where += ` and t.supplier_id = $${params.length}`; }
   const { rows } = await q(
-    `select t.*, ${ref} as ref_date, c.name as customer_name, sp.name as supplier_name, te.name as technician_name,
+    `select t.*, ${ref} as ref_date, fa.name as account_name, c.name as customer_name, sp.name as supplier_name, te.name as technician_name,
             o.number as order_number, o.kind as order_kind, pu.number as purchase_number
        from transactions t left join customers c on c.id = t.customer_id left join suppliers sp on sp.id = t.supplier_id
        left join technicians te on te.id = t.technician_id left join orders o on o.id = t.order_id
-       left join purchases pu on pu.id = t.purchase_id
+       left join purchases pu on pu.id = t.purchase_id left join financial_accounts fa on fa.id = t.account_id
       where ${where} order by ${ref} desc, t.created_at desc limit 2000`, params);
-  const sum = (f) => round2(rows.filter(f).reduce((a, x) => a + x.amount, 0));
+  const sum = (f) => round2(rows.filter((x) => x.category !== 'Transferência entre contas').filter(f).reduce((a, x) => a + x.amount, 0));
   res.json({
     items: rows,
     totals: {
@@ -115,25 +115,34 @@ const txSchema = z.object({
   supplier_id: z.string().uuid().nullable().optional(),
   document: z.string().trim().nullable().optional(),
   repeat: z.coerce.number().int().min(1).max(36).default(1),
+  account_id: z.string().uuid().nullable().optional(),
 });
+const RECONCILED = 'Lançamento conciliado com o extrato bancário: desfaça a conciliação antes.';
+const checkAccount = async (db, companyId, id) => {
+  if (!id) return null;
+  const { rows: [a] } = await db.query('select id from financial_accounts where id = $1 and company_id = $2 and active', [id, companyId]);
+  if (!a) throw notFound('Conta financeira não encontrada');
+  return a.id;
+};
 
 r.post('/transactions', async (req, res) => {
   const d = parse(txSchema, req.body);
   const out = await tx(async (db) => {
     const { rows: [session] } = await db.query(
       'select id from cash_sessions where company_id=$1 and closed_at is null limit 1', [req.companyId]);
+    const accountId = await checkAccount(db, req.companyId, d.account_id);
     const created = [];
     for (let i = 0; i < d.repeat; i++) {
       const paidNow = d.paid && i === 0;
       const { rows: [t] } = await db.query(
         `insert into transactions (company_id, type, category, description, amount, method, due_date, paid_at,
-                                   cash_session_id, technician_id, customer_id, created_by, supplier_id, document)
+                                   cash_session_id, technician_id, customer_id, created_by, supplier_id, document, account_id)
          values ($1,$2,$3,$4,$5,$6, coalesce($7::date, current_date) + ($8::text || ' month')::interval,
-                 case when $9 then now() end, $10, $11, $12, $13, $14, $15) returning *`,
+                 case when $9 then now() end, $10, $11, $12, $13, $14, $15, $16) returning *`,
         [req.companyId, d.type, d.category,
           d.repeat > 1 ? `${d.description || d.category} (${i + 1}/${d.repeat})` : d.description || null,
           d.amount, d.method || null, d.due_date || null, String(i), paidNow, paidNow ? session?.id || null : null,
-          d.technician_id || null, d.customer_id || null, req.user.id, d.supplier_id || null, d.document || null]);
+          d.technician_id || null, d.customer_id || null, req.user.id, d.supplier_id || null, d.document || null, accountId]);
       created.push(t);
     }
     return created;
@@ -145,6 +154,8 @@ r.put('/transactions/:id', async (req, res) => {
   const d = parse(txSchema.omit({ repeat: true }), req.body);
   const cur = await one('select * from transactions where id=$1 and company_id=$2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
+  if (cur.reconciled_at) throw bad(RECONCILED);
+  if (cur.transfer_id) throw bad('Transferência entre contas: exclua e lance novamente.');
   if (cur.auto && (cur.order_id || cur.purchase_id) && cur.paid_at) throw bad('Lançamento gerado por OS/entrada já baixado. Estorne pela própria OS.');
   if (cur.auto && (cur.order_id || cur.purchase_id) && (d.amount !== Number(cur.amount) || d.type !== cur.type)) throw bad('Valor e tipo de lançamentos gerados por OS/entrada não podem ser alterados.');
   const t = await one(
@@ -159,13 +170,14 @@ r.put('/transactions/:id', async (req, res) => {
 
 /** Dar baixa (receber/pagar) em um lançamento pendente. */
 r.post('/transactions/:id/pay', async (req, res) => {
-  const d = parse(z.object({ method: z.string().optional().nullable() }), req.body);
+  const d = parse(z.object({ method: z.string().optional().nullable(), account_id: z.string().uuid().nullable().optional() }), req.body);
   const session = await one('select id from cash_sessions where company_id=$1 and closed_at is null limit 1', [req.companyId]);
+  const accountId = await checkAccount({ query: q }, req.companyId, d.account_id);
   const t = await one(
     `update transactions set paid_at=now(), method=coalesce($1, case when method='fiado' then null else method end),
-            cash_session_id=$2
+            cash_session_id=$2, account_id = coalesce($5, account_id)
       where id=$3 and company_id=$4 and paid_at is null returning *`,
-    [d.method || null, session?.id || null, req.params.id, req.companyId]);
+    [d.method || null, session?.id || null, req.params.id, req.companyId, accountId]);
   if (!t) throw bad('Lançamento não encontrado ou já baixado.');
   res.json(t);
 });
@@ -173,8 +185,8 @@ r.post('/transactions/:id/pay', async (req, res) => {
 /** Desfaz a baixa (volta a pendente). */
 r.post('/transactions/:id/unpay', async (req, res) => {
   const t = await one(
-    `update transactions set paid_at = null, cash_session_id = null
-      where id = $1 and company_id = $2 and paid_at is not null and due_date is not null and not (auto and order_id is not null and category <> 'Ordens de serviço' and category <> 'Venda de materiais')
+    `update transactions set paid_at = null, cash_session_id = null, account_id = null
+      where id = $1 and company_id = $2 and paid_at is not null and reconciled_at is null and transfer_id is null and due_date is not null and not (auto and order_id is not null and category <> 'Ordens de serviço' and category <> 'Venda de materiais')
       returning *`, [req.params.id, req.companyId]);
   if (!t) throw bad('Não foi possível desfazer a baixa deste lançamento.');
   res.json(t);
@@ -183,9 +195,14 @@ r.post('/transactions/:id/unpay', async (req, res) => {
 r.delete('/transactions/:id', async (req, res) => {
   const cur = await one('select * from transactions where id=$1 and company_id=$2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
+  if (cur.reconciled_at) throw bad(RECONCILED);
   if (cur.order_id && cur.paid_at) throw bad('Este lançamento pertence a uma OS/venda. Estorne pela própria OS.');
   if (cur.purchase_id && cur.paid_at) throw bad('Parcela já paga de uma entrada de materiais. Desfaça a baixa antes.');
-  await q('delete from transactions where id=$1', [cur.id]);
+  if (cur.transfer_id) {
+    const { rows: [rc] } = await q('select count(*)::int as n from transactions where transfer_id = $1 and reconciled_at is not null', [cur.transfer_id]);
+    if (rc.n) throw bad(RECONCILED);
+    await q('delete from transactions where transfer_id = $1 and company_id = $2', [cur.transfer_id, req.companyId]);
+  } else await q('delete from transactions where id=$1', [cur.id]);
   res.status(204).end();
 });
 

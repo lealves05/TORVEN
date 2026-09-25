@@ -287,7 +287,7 @@ function Transactions({ pendingOnly }) {
                         </div>
                       </td>
                       <td className="hidden text-ink-soft md:table-cell">{t.category}</td>
-                      <td className="hidden text-ink-soft lg:table-cell">{methodName(settings, t.method)}</td>
+                      <td className="hidden text-ink-soft lg:table-cell">{methodName(settings, t.method)}{t.account_name && <div className="text-xs text-ink-faint">{t.account_name}{t.reconciled_at && ' · conciliado'}</div>}</td>
                       <td className={cx('whitespace-nowrap text-right font-medium tabular-nums', t.type === 'entrada' ? 'text-emerald-600' : 'text-red-600')}>
                         {t.type === 'entrada' ? '+' : '−'} {money(t.amount)}
                       </td>
@@ -320,12 +320,13 @@ function TxForm({ tx, onClose, onSaved }) {
   const cats = f.type === 'entrada' ? settings.incomeCategories : settings.expenseCategories;
   const { technicians } = useCatalog();
   const [suppliers, setSuppliers] = useState([]);
-  useEffect(() => { api.get('/suppliers').then(setSuppliers).catch(() => {}); }, []);
+  const [accounts, setAccounts] = useState([]);
+  useEffect(() => { api.get('/suppliers').then(setSuppliers).catch(() => {}); api.get('/finance/accounts').then((a) => setAccounts(a.filter((x) => x.active))).catch(() => {}); }, []);
   useEffect(() => { if (!cats?.includes(f.category)) set('category', cats?.[0] || ''); }, [f.type]); // eslint-disable-line
   const save = async () => {
     const body = { type: f.type, category: f.category, description: f.description, amount: +f.amount, method: f.method || null,
       due_date: f.due_date || null, paid: f.paid, repeat: +f.repeat || 1, customer_id: f.customer_id || null, technician_id: f.technician_id || null,
-      supplier_id: f.supplier_id || null, document: f.document || null };
+      supplier_id: f.supplier_id || null, document: f.document || null, account_id: f.account_id || null };
     const r = await run(() => (tx.id ? api.put(`/cash/transactions/${tx.id}`, body) : api.post('/cash/transactions', body)), 'Lançamento salvo');
     if (r !== FAIL) { onSaved(); onClose(); }
   };
@@ -351,6 +352,11 @@ function TxForm({ tx, onClose, onSaved }) {
           <option value="">—</option>{settings.paymentMethods?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </Select>
         <Input label="Nº do documento (NF, boleto)" value={f.document || ''} onChange={(e) => set('document', e.target.value)} />
+        {!tx.id && f.paid && accounts.length > 0 && (
+          <Select label="Conta" value={f.account_id || ''} onChange={(e) => set('account_id', e.target.value)}>
+            <option value="">Padrão pela forma de pagamento</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </Select>
+        )}
         {f.type === 'saida' ? (
           <Select label="Fornecedor" value={f.supplier_id || ''} onChange={(e) => set('supplier_id', e.target.value)}>
             <option value="">—</option>{suppliers.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}

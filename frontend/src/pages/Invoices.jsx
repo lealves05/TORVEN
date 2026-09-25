@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Receipt, RefreshCw, ExternalLink, FileCode2, XCircle, Trash2, Plus, Settings2, Printer } from 'lucide-react';
 import { api, qs, appPath } from '../lib/api';
 import { money, fmt, fmtDateTime, INVOICE_STATUS, downloadCSV, docNumber } from '../lib/format';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useSettings } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Input, Modal, Loading, Empty, Stat, useAction, FAIL, cx } from '../components/ui';
 import { PeriodPicker, monthRange } from '../components/charts';
@@ -63,6 +63,7 @@ export default function Invoices() {
           <Stat label="Preparadas / erro / processando" value={list.filter((i) => ['erro', 'processando', 'preparada'].includes(i.status)).length} tone="text-amber-500" />
         </div>
       )}
+      {can('invoices_issue') && <ToInvoice period={period} onEmit={async (id) => setEmitFor(await api.get(`/orders/${id}`))} reloadKey={list} />}
       <div className="card mb-4 flex flex-wrap items-end gap-3 p-3">
         <input className="input min-w-[200px] flex-1" placeholder="Cliente ou número…" value={f.search} onChange={(e) => setF({ ...f, search: e.target.value })} />
         <select className="input w-40" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}><option value="">NFS-e e NF-e</option><option value="nfse">NFS-e</option><option value="nfe">NF-e</option></select>
@@ -179,6 +180,42 @@ export function CertBanner({ company }) {
     <div className={cx('mb-4 rounded-app border px-4 py-3 text-sm', days < 0 ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200')}>
       {days < 0 ? 'O certificado digital A1 está vencido — as notas serão rejeitadas.' : `O certificado digital A1 vence em ${days} dia(s) (${fmt(company.fiscal_cert_until)}).`}{' '}
       <Link to="/configuracoes?tab=fiscal" className="font-medium underline">Renovar certificado</Link>
+    </div>
+  );
+}
+
+/** OS entregues no período ainda sem documento fiscal autorizado ou em processamento. */
+function ToInvoice({ period, onEmit, reloadKey }) {
+  const settings = useSettings();
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { api.get(`/reports/fiscal${qs(period)}`).then(setData).catch(() => setData(null)); }, [period, reloadKey]);
+  if (!data || !data.pending.length) return null;
+  return (
+    <div className="card mb-4 overflow-hidden">
+      <button className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm" onClick={() => setOpen(!open)}>
+        <span><b>{data.pending.length} OS entregue(s) sem nota</b> no período · {money(data.pending_total)}</span>
+        <span className="text-xs text-primary">{open ? 'Ocultar' : 'Ver lista'}</span>
+      </button>
+      {open && (
+        <div className="overflow-x-auto border-t border-line">
+          <table className="table-clean">
+            <thead><tr><th>OS</th><th>Cliente</th><th className="hidden md:table-cell">Entregue</th><th className="text-right">Serviços</th><th className="text-right">Materiais</th><th /></tr></thead>
+            <tbody>
+              {data.pending.map((o) => (
+                <tr key={o.id}>
+                  <td><Link to={`/os/${o.id}`} className="text-primary">{docNumber(settings, 'order', o.number)}</Link>{o.invoice_statuses && <div className="text-xs text-ink-faint">{o.invoice_statuses.replace('preparada', 'preparada (sem emissão)')}</div>}</td>
+                  <td className="max-w-[220px] truncate">{o.customer_name || 'Consumidor'}</td>
+                  <td className="hidden whitespace-nowrap text-ink-soft md:table-cell">{fmt(o.delivered_at, 'dd/MM/yy')}</td>
+                  <td className="text-right tabular-nums">{money(o.services)}</td>
+                  <td className="text-right tabular-nums">{money(o.goods)}</td>
+                  <td className="text-right"><button className="btn-outline h-8 text-xs" onClick={() => onEmit(o.id)}>Nota</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
