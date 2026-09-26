@@ -630,6 +630,17 @@ try {
   token = ownerTok;
   ok(true, 'exportação restrita ao perfil autorizado');
 
+  // custo do serviço informado na abertura da OS e editável depois
+  let osCost = await call('POST', '/orders', { kind: 'os', customer_id: c.id, problem: 'Custo informado',
+    items: [{ kind: 'servico', service_id: svTig.id, description: svTig.name, qty: 2, unit_price: 160, unit_cost: 55 }, { kind: 'avulso', description: 'Frete', qty: 1, unit_price: 40, unit_cost: 30 }] });
+  ok(osCost.items[0].unit_cost === 55 && osCost.items[1].unit_cost === 30, 'custo do serviço gravado na abertura da OS');
+  osCost = await call('PUT', `/orders/${osCost.id}`, { ...osCost, items: osCost.items.map((i) => ({ ...i, qty: Number(i.qty), unit_price: Number(i.unit_price), discount: Number(i.discount), unit_cost: i.kind === 'servico' ? 62.5 : Number(i.unit_cost) })) });
+  ok(osCost.items[0].unit_cost === 62.5, 'custo do serviço editado na OS');
+  token = tView;
+  const osCostV = await call('GET', `/orders/${osCost.id}`);
+  ok(osCostV.total === null && osCostV.items.every((i) => i.unit_cost == null || i.unit_cost === undefined), 'perfil sem acesso a valores não vê o custo');
+  token = ownerTok;
+
   // isolamento entre empresas
   const other = await call('POST', '/auth/register', { companyName: 'Outra Serralheria', name: 'Outro', email: `outro${Date.now()}@torven.app`, password: '123456' });
   token = other.token;

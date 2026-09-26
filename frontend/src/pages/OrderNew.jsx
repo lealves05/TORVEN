@@ -67,7 +67,7 @@ export default function OrderNew() {
               <h2 className="font-semibold">Serviços e materiais</h2>
               <p className="text-xs text-ink-faint">Opcional agora — você pode lançar depois do diagnóstico. Materiais baixam do estoque.</p>
             </div>
-            <ItemsEditor items={f.items} onChange={set('items')} discount={f.discount} onDiscount={set('discount')} showTechnician hideValues={!can('orders_values')} />
+            <ItemsEditor items={f.items} onChange={set('items')} discount={f.discount} onDiscount={set('discount')} showTechnician hideValues={!can('orders_values')} editCost={can('orders_values')} showCost={can('orders_values')} />
           </section>
         </div>
 

@@ -27,7 +27,7 @@ const toForm = (o) => ({
   promised_at: toLocalInput(o.promised_at),
   discount: Number(o.discount) || 0,
   equipment: null,
-  items: o.items.map((i) => ({ ...i, qty: Number(i.qty), unit_price: i.unit_price == null ? null : Number(i.unit_price), discount: Number(i.discount) || 0, _savedQty: i.kind === 'material' ? Number(i.qty) : 0 })),
+  items: o.items.map((i) => ({ ...i, qty: Number(i.qty), unit_price: i.unit_price == null ? null : Number(i.unit_price), unit_cost: i.unit_cost == null ? null : Number(i.unit_cost), discount: Number(i.discount) || 0, _savedQty: i.kind === 'material' ? Number(i.qty) : 0 })),
 });
 
 export const publicUrl = appUrl;
@@ -190,7 +190,7 @@ export default function OrderDetail() {
           <section className="card space-y-4 p-5">
             <h2 className="font-semibold">Serviços e materiais</h2>
             <ItemsEditor items={f.items} onChange={set('items')} discount={f.discount} onDiscount={set('discount')}
-              showTechnician={o.kind === 'os'} hideValues={!values} readOnly={!editable} />
+              showTechnician={o.kind === 'os'} hideValues={!values} readOnly={!editable} editCost={values} showCost={values} />
           </section>
 
           {o.kind === 'os' && (can('time_log') || o.time_logs?.length > 0) && <ExecutionCard o={o} onChanged={load} />}

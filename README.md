@@ -131,7 +131,7 @@ FOCUS_URL_HOMOLOGACAO=http://localhost:4999 FOCUS_URL_PRODUCAO=http://localhost:
 MOCK_FOCUS=4999 npm test
 ```
 
-O teste (`scripts/smoke.mjs`, 169 verificações) cobre cadastro, OS, estoque, pagamentos, fiscal (preparar sem provedor, emitir,
+O teste (`scripts/smoke.mjs`, 172 verificações) cobre cadastro, OS, estoque, pagamentos, fiscal (preparar sem provedor, emitir,
 consultar, cancelar, cadastro da empresa na Focus), relatórios, demonstração e toda a Fase 1: unidades, contatos, endereços,
 anexos, solicitação → visita → diagnóstico → orçamento → revisões → aprovação parcial → OS, busca global, notificações,
 auditoria, permissões por perfil e **isolamento entre empresas**; e a Fase 2: agenda com conflito, cronômetro e lançamento manual,

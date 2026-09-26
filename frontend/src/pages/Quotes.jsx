@@ -117,7 +117,7 @@ export function QuoteEditor() {
     setF({
       ...r, customer: r.customer_id ? { id: r.customer_id, name: r.customer_name, phone: r.customer_phone, document: r.customer_document } : null,
       equipment: null, technician_id: r.technician_id || '', discount: Number(r.discount), surcharge: Number(r.surcharge), tax_rate: Number(r.tax_rate),
-      items: r.items.map((i) => ({ ...i, qty: Number(i.qty), unit_price: Number(i.unit_price), discount: Number(i.discount) })),
+      items: r.items.map((i) => ({ ...i, qty: Number(i.qty), unit_price: Number(i.unit_price), unit_cost: i.unit_cost == null ? null : Number(i.unit_cost), discount: Number(i.discount) })),
     });
   };
   const [params] = useSearchParams();
@@ -232,7 +232,7 @@ export function QuoteEditor() {
               <span className="text-xs text-ink-faint">Marque como opcional/alternativa o que o cliente pode escolher</span>
             </div>
             <ItemsEditor items={f.items} onChange={set('items')} discount={f.discount} onDiscount={set('discount')} readOnly={readOnly}
-              quoteMode surcharge={f.surcharge} onSurcharge={set('surcharge')} taxRate={f.tax_rate} showCost={showCost} />
+              quoteMode surcharge={f.surcharge} onSurcharge={set('surcharge')} taxRate={f.tax_rate} showCost={showCost} editCost={showCost} />
           </section>
           {q && <Attachments entity="quote" entityId={q.id} canEdit={can('quotes')} />}
         </div>

@@ -27,7 +27,7 @@ export const cleanItems = (items) => items.map((i) => ({
   kind: i.kind, service_id: i.service_id || null, product_id: i.product_id || null, technician_id: i.technician_id || null,
   description: i.description, unit: i.unit || null, qty: Number(i.qty) || 0, unit_price: Number(i.unit_price) || 0,
   discount: Number(i.discount) || 0, optional: !!i.optional, group_label: i.group_label || null, notes: i.notes || null,
-  ...(i.unit_cost != null && i.unit_cost !== '' && !i.service_id && !i.product_id ? { unit_cost: Number(i.unit_cost) || 0 } : {}),
+  ...(i.unit_cost != null && i.unit_cost !== '' ? { unit_cost: Number(i.unit_cost) || 0 } : {}),
 }));
 
 /**
@@ -36,7 +36,7 @@ export const cleanItems = (items) => items.map((i) => ({
  */
 export default function ItemsEditor({
   items, onChange, discount = 0, onDiscount, showTechnician, hideValues, readOnly, allowDiscount = true,
-  quoteMode, surcharge = 0, onSurcharge, taxRate = 0, showCost,
+  quoteMode, surcharge = 0, onSurcharge, taxRate = 0, showCost, editCost,
 }) {
   const { services, technicians } = useCatalog();
   const { can } = useAuth();
@@ -143,11 +143,11 @@ export default function ItemsEditor({
             <thead className="bg-muted/50 text-xs text-ink-faint">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Item</th>
-                <th className="w-24 px-2 py-2 text-right font-medium">Qtd.</th>
-                {!hideValues && <th className="w-32 px-2 py-2 text-right font-medium">Unitário</th>}
-                {!hideValues && allowDiscount && <th className="hidden w-28 px-2 py-2 text-right font-medium md:table-cell">Desc.</th>}
-                {!hideValues && <th className="w-28 px-3 py-2 text-right font-medium">Total</th>}
-                {!readOnly && <th className="w-10" />}
+                <th className="w-20 px-2 py-2 text-right font-medium">Qtd.</th>
+                {!hideValues && <th className="w-36 px-2 py-2 text-right font-medium">{editCost ? <span title="Preço de venda e, abaixo, o custo para a empresa (não aparece para o cliente)">Unitário / custo</span> : 'Unitário'}</th>}
+                {!hideValues && allowDiscount && <th className="hidden w-24 px-2 py-2 text-right font-medium md:table-cell">Desc.</th>}
+                {!hideValues && <th className="w-24 whitespace-nowrap px-2 py-2 text-right font-medium">Total</th>}
+                {!readOnly && <th className="w-9" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
@@ -157,7 +157,7 @@ export default function ItemsEditor({
                 return (
                   <tr key={idx} className={cx('align-top', i.optional && 'bg-muted/30', readOnly && quoteMode && i.approved === false && 'opacity-60')}>
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className={cx('chip shrink-0', KIND_CLS[i.kind] || KIND_CLS.avulso)}>
                           {ITEM_KIND[i.kind] || i.kind}
                         </span>
@@ -165,7 +165,7 @@ export default function ItemsEditor({
                         {readOnly && quoteMode && i.approved === true && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" title="Aprovado" />}
                         {readOnly && quoteMode && i.approved === false && <XCircle className="h-4 w-4 shrink-0 text-ink-faint" title="Não aprovado" />}
                         {readOnly ? <span>{i.description}</span> : (
-                          <input className="input h-8 min-w-[180px]" value={i.description} onChange={(e) => set(idx, { description: e.target.value })} placeholder="Descrição" />
+                          <input className="input h-8 min-w-[150px] flex-1 basis-40" value={i.description} onChange={(e) => set(idx, { description: e.target.value })} placeholder="Descrição" />
                         )}
                       </div>
                       {showTechnician && i.kind === 'servico' && (
@@ -189,28 +189,45 @@ export default function ItemsEditor({
                     <td className="px-2 py-2 text-right">
                       {readOnly ? <span className="tabular-nums">{fqty(i.qty)} <span className="text-xs text-ink-faint">{i.unit}</span></span> : (
                         <div className="flex items-center justify-end gap-1">
-                          <input className="input h-8 w-20 text-right tabular-nums" inputMode="decimal" value={String(i.qty).replace('.', ',')}
+                          <input className="input h-8 w-14 px-2 text-right tabular-nums" inputMode="decimal" value={String(i.qty).replace('.', ',')}
                             onChange={(e) => { const v = e.target.value.replace(/[^\d,.]/g, '').replace(',', '.'); set(idx, { qty: v }); }} />
-                          <span className="w-6 text-left text-xs text-ink-faint">{i.unit}</span>
+                          <span className="w-7 truncate text-left text-xs text-ink-faint">{i.unit}</span>
                         </div>
                       )}
                     </td>
                     {!hideValues && (
                       <td className="px-2 py-2 text-right">
+                        <div className="flex flex-col items-end">
                         {readOnly ? <span className="tabular-nums">{money(i.unit_price)}</span>
-                          : <MoneyInput value={i.unit_price} onChange={(v) => set(idx, { unit_price: v })} className="[&_input]:h-8 [&_input]:text-right" />}
+                          : <MoneyInput value={i.unit_price} onChange={(v) => set(idx, { unit_price: v })} className="w-[7rem] shrink-0 [&_input]:h-8 [&_input]:text-right" aria-label="Preço unitário" />}
+                        {editCost && (
+                          <div className="mt-1.5">
+                            {readOnly ? <div className="text-xs tabular-nums text-ink-faint">custo {money(i.unit_cost || 0)}</div> : (
+                              <label className="flex items-center justify-end gap-1.5 text-[11px] text-ink-faint">
+                                custo
+                                <MoneyInput value={i.unit_cost ?? 0} onChange={(v) => set(idx, { unit_cost: v })} className="w-[6rem] [&_input]:h-7 [&_input]:text-right [&_input]:text-xs" aria-label="Custo unitário" />
+                              </label>
+                            )}
+                            {Number(i.unit_price) > 0 && (
+                              <div className={cx('mt-0.5 text-right text-[11px] tabular-nums', Number(i.unit_cost) > Number(i.unit_price) ? 'text-red-600' : 'text-ink-faint')}>
+                                margem {Math.round(((Number(i.unit_price) - (Number(i.unit_cost) || 0)) / Number(i.unit_price)) * 100)}%
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        </div>
                       </td>
                     )}
                     {!hideValues && allowDiscount && (
                       <td className="hidden px-2 py-2 text-right md:table-cell">
                         {readOnly ? <span className="tabular-nums text-ink-faint">{Number(i.discount) ? money(i.discount) : '—'}</span>
-                          : <MoneyInput value={i.discount} onChange={(v) => set(idx, { discount: v })} disabled={!can('discount')} className="[&_input]:h-8 [&_input]:text-right" />}
+                          : <MoneyInput value={i.discount} onChange={(v) => set(idx, { discount: v })} disabled={!can('discount')} className="w-[5.5rem] ml-auto [&_input]:h-8 [&_input]:text-right" />}
                       </td>
                     )}
-                    {!hideValues && <td className="px-3 py-2 text-right font-medium tabular-nums">{money(itemTotal(i))}</td>}
+                    {!hideValues && <td className="whitespace-nowrap px-2 py-2 text-right font-medium tabular-nums">{money(itemTotal(i))}</td>}
                     {!readOnly && (
-                      <td className="py-2 pr-2 text-right">
-                        <button type="button" className="btn-ghost btn-icon h-8 text-red-600" onClick={() => remove(idx)}><Trash2 className="h-4 w-4" /></button>
+                      <td className="py-2 pr-1 text-right">
+                        <button type="button" className="btn-ghost btn-icon h-8 w-8 text-red-600" onClick={() => remove(idx)}><Trash2 className="h-4 w-4" /></button>
                       </td>
                     )}
                   </tr>
