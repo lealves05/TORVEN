@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
-import { Save, Wrench, MapPin } from 'lucide-react';
+import { Save, Wrench, MapPin, RotateCcw } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
-import { PageHeader, Input, Textarea, Select, useAction, FAIL, cx } from '../components/ui';
+import { PageHeader, Input, Textarea, Select, MoneyInput, useAction, FAIL, cx } from '../components/ui';
+import { money } from '../lib/format';
 import CustomerPicker, { EquipmentPicker } from '../components/CustomerPicker';
 import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
 
@@ -13,7 +14,8 @@ export default function OrderNew() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const { company, can, user } = useAuth();
-  const { technicians } = useCatalog();
+  const { technicians, services } = useCatalog();
+  const showValues = can('orders_values');
   const cfg = company.settings.orders;
   const [run, busy] = useAction();
   const [customer, setCustomer] = useState(null);
@@ -24,6 +26,20 @@ export default function OrderNew() {
     warranty_days: cfg.defaultWarrantyDays, status: 'aberta',
   });
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
+
+  // serviço principal: um item do tipo serviço marcado (_main) na lista — o valor vem do cadastro e pode ser editado
+  const mainIdx = f.items.findIndex((i) => i._main);
+  const main = mainIdx >= 0 ? f.items[mainIdx] : null;
+  const mainSvc = main && services.find((x) => x.id === main.service_id);
+  const chooseService = (id) => setF((x) => {
+    const rest = x.items.filter((i) => !i._main);
+    const svc = services.find((v) => v.id === id);
+    if (!svc) return { ...x, items: rest };
+    const item = { kind: 'servico', service_id: svc.id, description: svc.name, unit: svc.unit, unit_price: Number(svc.price) || 0,
+      unit_cost: svc.cost ?? 0, qty: 1, discount: 0, technician_id: null, _main: true };
+    return { ...x, items: [item, ...rest] };
+  });
+  const setMainPrice = (v) => setF((x) => ({ ...x, items: x.items.map((i) => (i._main ? { ...i, unit_price: v } : i)) }));
 
   useEffect(() => {
     const id = params.get('cliente');
@@ -59,6 +75,25 @@ export default function OrderNew() {
             <div className="grid gap-4 sm:grid-cols-2">
               <Textarea label="Acessórios deixados" rows={2} value={f.accessories} onChange={set('accessories')} placeholder="Tocha, garra, cabo obra, cilindro…" />
               <Textarea label="Estado / condições do item" rows={2} value={f.condition} onChange={set('condition')} placeholder="Riscos, amassados, peças faltando…" />
+            </div>
+            <div className={cx('grid gap-4', showValues && 'sm:grid-cols-[1fr_12rem]')}>
+              <Select label="Serviço" aria-label="Serviço" value={main?.service_id || ''} onChange={(e) => chooseService(e.target.value)}>
+                <option value="">Selecione um serviço cadastrado (opcional)</option>
+                {services.filter((x) => x.active !== false).map((x) => (
+                  <option key={x.id} value={x.id}>{x.name}{showValues && x.price != null ? ` — ${money(x.price)}` : ''}</option>
+                ))}
+              </Select>
+              {showValues && (
+                <div>
+                  <MoneyInput label="Valor do serviço" value={main ? main.unit_price : ''} onChange={setMainPrice} disabled={!main}
+                    placeholder={main ? '' : 'escolha o serviço'} aria-label="Valor do serviço" />
+                  {mainSvc && Number(main.unit_price) !== Number(mainSvc.price) ? (
+                    <button type="button" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline" onClick={() => setMainPrice(Number(mainSvc.price) || 0)}>
+                      <RotateCcw className="h-3 w-3" /> Voltar ao valor da tabela ({money(mainSvc.price)})
+                    </button>
+                  ) : main && <p className="mt-1 text-xs text-ink-faint">Valor da tabela — pode ser alterado</p>}
+                </div>
+              )}
             </div>
           </section>
 
