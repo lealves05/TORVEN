@@ -76,8 +76,15 @@ export default function OrderNew() {
               <Textarea label="Acessórios deixados" rows={2} value={f.accessories} onChange={set('accessories')} placeholder="Tocha, garra, cabo obra, cilindro…" />
               <Textarea label="Estado / condições do item" rows={2} value={f.condition} onChange={set('condition')} placeholder="Riscos, amassados, peças faltando…" />
             </div>
-            <div className={cx('grid gap-4', showValues && 'sm:grid-cols-[1fr_12rem]')}>
-              <Select label="Serviço" aria-label="Serviço" value={main?.service_id || ''} onChange={(e) => chooseService(e.target.value)}>
+          </section>
+
+          <section className="card space-y-4 p-5">
+            <div>
+              <h2 className="font-semibold">Serviços e materiais</h2>
+              <p className="text-xs text-ink-faint">Opcional agora — você pode lançar depois do diagnóstico. Materiais baixam do estoque.</p>
+            </div>
+            <div className={cx('grid gap-4 rounded-app-sm border border-line bg-muted/30 p-3', showValues && 'sm:grid-cols-[1fr_12rem]')}>
+              <Select label="Serviço principal" aria-label="Serviço" value={main?.service_id || ''} onChange={(e) => chooseService(e.target.value)}>
                 <option value="">Selecione um serviço cadastrado (opcional)</option>
                 {services.filter((x) => x.active !== false).map((x) => (
                   <option key={x.id} value={x.id}>{x.name}{showValues && x.price != null ? ` — ${money(x.price)}` : ''}</option>
@@ -88,19 +95,12 @@ export default function OrderNew() {
                   <MoneyInput label="Valor do serviço" value={main ? main.unit_price : ''} onChange={setMainPrice} disabled={!main}
                     placeholder={main ? '' : 'escolha o serviço'} aria-label="Valor do serviço" />
                   {mainSvc && Number(main.unit_price) !== Number(mainSvc.price) ? (
-                    <button type="button" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline" onClick={() => setMainPrice(Number(mainSvc.price) || 0)}>
-                      <RotateCcw className="h-3 w-3" /> Voltar ao valor da tabela ({money(mainSvc.price)})
+                    <button type="button" title="Voltar ao valor da tabela" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline" onClick={() => setMainPrice(Number(mainSvc.price) || 0)}>
+                      <RotateCcw className="h-3 w-3" /> Tabela: {money(mainSvc.price)}
                     </button>
                   ) : main && <p className="mt-1 text-xs text-ink-faint">Valor da tabela — pode ser alterado</p>}
                 </div>
               )}
-            </div>
-          </section>
-
-          <section className="card space-y-4 p-5">
-            <div>
-              <h2 className="font-semibold">Serviços e materiais</h2>
-              <p className="text-xs text-ink-faint">Opcional agora — você pode lançar depois do diagnóstico. Materiais baixam do estoque.</p>
             </div>
             <ItemsEditor items={f.items} onChange={set('items')} discount={f.discount} onDiscount={set('discount')} showTechnician hideValues={!can('orders_values')} editCost={can('orders_values')} showCost={can('orders_values')} />
           </section>
