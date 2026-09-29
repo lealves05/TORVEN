@@ -34,6 +34,8 @@ import procurementRoutes from './routes/procurement.js';
 import financeRoutes from './routes/finance.js';
 import relationshipRoutes from './routes/relationship.js';
 import exportRoutes from './routes/export.js';
+import { platformApi, billing } from './routes/platform.js';
+import { platformGate } from './platform.js';
 
 export function createApp() {
   const app = express();
@@ -52,17 +54,21 @@ export function createApp() {
       cb(ok ? null : new HttpError(403, 'Origem não permitida'), ok);
     },
   }));
-  app.use(express.json({ limit: '3mb' }));
+  // corpo bruto para conferir a assinatura das chamadas da central da plataforma
+  app.use(express.json({ limit: '3mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/')) req.rawBody = buf; } }));
 
   app.get('/', (_req, res) => res.json({ name: 'TORVEN API', status: 'ok' }));
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
   app.use('/api/auth', authRoutes);
   app.use('/api/public', publicRoutes);
+  app.use('/api/platform/v1', platformApi); // central da plataforma (chamadas assinadas)
 
   const api = express.Router();
   api.use(requireAuth);
+  api.use(platformGate); // assinatura, bloqueio e módulos definidos pela central
   api.use(autoAudit);
+  api.use('/billing', billing);
   api.use('/company/fiscal', fiscalSetupRoutes);
   api.use('/company', companyRoutes);
   api.use('/users', userRoutes);

@@ -21,8 +21,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const out = () => setState({ loading: false, user: null, company: null });
     window.addEventListener('torven:logout', out);
-    return () => window.removeEventListener('torven:logout', out);
-  }, []);
+    // situação da assinatura mudou (402/403 da API): recarrega a sessão, que traz a situação atual
+    let t = null;
+    const onAccess = () => { clearTimeout(t); t = setTimeout(() => { load(); }, 300); };
+    window.addEventListener('torven:access', onAccess);
+    return () => { window.removeEventListener('torven:logout', out); window.removeEventListener('torven:access', onAccess); clearTimeout(t); };
+  }, [load]);
 
   // tema segue as configurações da empresa + preferências do usuário
   useEffect(() => {
@@ -72,6 +76,8 @@ export function AuthProvider({ children }) {
       if (state.user.role === 'owner') return true;
       return keys.some((k) => { const v = state.permissions?.[k]; return v === true || v === 'all' || v === 'own'; });
     },
+    /** Módulo liberado pela central da plataforma (sem central configurada, tudo liberado). */
+    feature(key) { return state.access?.features ? state.access.features[key] !== false : true; },
     scope(key) { return state.user?.role === 'owner' ? 'all' : state.permissions?.[key] || 'none'; },
   }), [state, load]);
 

@@ -7,6 +7,7 @@ import { signToken, requireAuth } from '../auth.js';
 import { ensureCompanyDefaults } from '../domain.js';
 import { parse, slugify, withDefaults, HttpError, DEFAULT_SETTINGS, DEFAULT_FISCAL, permissionsFor, PERMISSIONS, ROLES } from '../util.js';
 import { seedDemo } from '../seed.js';
+import { accessFor, registerCompany } from '../platform.js';
 
 const r = Router();
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false,
@@ -24,7 +25,9 @@ export async function loadSession(userId) {
        from users u where u.id = $1`, [userId]);
   const company = await one(COMPANY_COLS, [user.company_id]);
   company.settings = withDefaults(company.settings);
-  return { user, company, permissions: permissionsFor(user.role, company.settings), permissionCatalog: PERMISSIONS, roles: ROLES };
+  // situação da assinatura definida pela central da plataforma (null = sem central ou demonstração)
+  const access = await accessFor(company.id).catch(() => null);
+  return { user, company, access, permissions: permissionsFor(user.role, company.settings), permissionCatalog: PERMISSIONS, roles: ROLES };
 }
 
 const registerSchema = z.object({
@@ -57,6 +60,9 @@ r.post('/register', limiter, async (req, res) => {
     if (d.demo) await seedDemo(db, company.id, user.id);
     return user.id;
   });
+  // cadastro na central da plataforma (período de teste e assinatura); falha aqui não impede o uso — a central sincroniza depois
+  const u = await one('select company_id from users where id=$1', [userId]);
+  await registerCompany(u.company_id).catch((e) => console.warn('[plataforma] cadastro na central adiado:', e.message));
 
   const session = await loadSession(userId);
   res.status(201).json({ token: signToken(session.user), ...session });
@@ -72,6 +78,7 @@ r.post('/login', limiter, async (req, res) => {
     throw new HttpError(401, 'E-mail ou senha incorretos.');
   }
   if (!user.active) throw new HttpError(403, 'Usuário desativado. Fale com o administrador.');
+  await q('update users set last_login_at=now() where id=$1', [user.id]);
   const session = await loadSession(user.id);
   res.json({ token: signToken(user), ...session });
 });
@@ -160,6 +167,8 @@ r.post('/activate', requireAuth, async (req, res) => {
     await db.query('update users set name = $2, email = $3, password_hash = $4 where id = $1',
       [req.user.id, d.name, d.email, await bcrypt.hash(d.password, 10)]);
   });
+  // demonstração virou empresa de verdade: entra na central da plataforma (período de teste e assinatura)
+  await registerCompany(req.companyId).catch((e) => console.warn('[plataforma] cadastro na central adiado:', e.message));
   const session = await loadSession(req.user.id);
   res.json({ token: signToken(session.user), ...session });
 });

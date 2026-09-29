@@ -30,6 +30,22 @@ import Finance from './pages/Finance';
 import Relationship from './pages/Relationship';
 import { PrintOrder, PrintQuote } from './pages/Print';
 import { PublicQuote, PublicOrder } from './pages/Public';
+import Subscription from './pages/Subscription';
+import { BlockedScreen } from './components/Billing';
+import { ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+/** Assinatura aberta com o acesso bloqueado: tela própria, sem o restante do sistema. */
+function BlockedSubscription() {
+  return (
+    <div className="min-h-full bg-bg">
+      <div className="mx-auto max-w-[1100px] p-4 sm:p-6">
+        <Link to="/" className="btn-ghost mb-3"><ArrowLeft className="h-4 w-4" /> Voltar</Link>
+        <Subscription />
+      </div>
+    </div>
+  );
+}
 
 function Guard({ perms, children }) {
   const { can } = useAuth();
@@ -37,7 +53,8 @@ function Guard({ perms, children }) {
 }
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, access } = useAuth();
+  const admin = ['owner', 'admin'].includes(user?.role);
 
   return (
     <Routes>
@@ -50,6 +67,11 @@ export default function App() {
           <Route path="/entrar" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />
           <Route path="*" element={<Navigate to="/entrar" replace />} />
+        </>
+      ) : access?.blocked ? (
+        <>
+          {admin && <Route path="/assinatura" element={<BlockedSubscription />} />}
+          <Route path="*" element={<BlockedScreen />} />
         </>
       ) : (
         <>
@@ -93,6 +115,7 @@ export default function App() {
             <Route path="relacionamento" element={<Guard perms={['followups']}><Relationship /></Guard>} />
             <Route path="auditoria" element={<Guard perms={['audit_view']}><Audit /></Guard>} />
             <Route path="conta" element={<Account />} />
+            {access && admin && <Route path="assinatura" element={<Subscription />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </>

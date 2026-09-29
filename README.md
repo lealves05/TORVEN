@@ -84,6 +84,7 @@ Abra http://localhost:5173 e use **Cadastrar empresa** (com ou sem dados de exem
 | `PORT` | não | Porta da API (padrão 3333) |
 | `DATABASE_SSL` | não | `false` para desligar SSL em bancos locais fora de `localhost` |
 | `FOCUS_URL_HOMOLOGACAO` / `FOCUS_URL_PRODUCAO` | não | Só para testes com o simulador da Focus |
+| `PLATFORM_HUB_URL` / `PLATFORM_SECRET` | não | Ligação com a central da plataforma (MASTER do ORBI). Na Edge Function ficam na tabela `_secrets` (`platform_hub_url`, `platform_secret`) |
 
 Tokens da Focus NFe **não** vão em variável de ambiente: são cadastrados por empresa em *Configurações › Fiscal*, ficam no banco e nunca voltam inteiros ao navegador.
 
@@ -93,6 +94,22 @@ Tokens da Focus NFe **não** vão em variável de ambiente: são cadastrados por
 |---|---|
 | `VITE_API_URL` | URL da API quando ela não está no mesmo domínio (vazio = usa `/api`) |
 | `VITE_BASE` | Subcaminho de publicação (ex.: `/TORVEN/` no GitHub Pages) |
+
+## Assinatura pela central da plataforma
+
+O TORVEN é administrado pela **central da plataforma** (o MASTER do ORBI), com a **mesma base de cobrança** de todos os sistemas.
+
+- A central decide período de teste, plano, módulos, bloqueio e cobrança de cada empresa; o TORVEN guarda a última situação recebida
+  (`companies.platform_access`) e aplica o portão na própria API: empresa bloqueada → `402 TENANT_BLOCKED` (só *Assinatura* continua aberta);
+  módulo fora do plano → `403 FEATURE_DISABLED` e o item some do menu.
+- **Configurações › Assinatura e plano** (`/assinatura`, proprietário e administradores): situação, plano, cobranças, contratação e troca de plano —
+  o pagamento é feito na página segura do gateway da central; o cartão nunca passa pelo TORVEN.
+- Cadastro de empresa (ou ativação da demonstração) cria a empresa na central com o teste padrão da plataforma. Demonstrações não entram na central.
+- Contrato v1 com a central (chamadas assinadas com HMAC-SHA256): `backend/src/platform.js` e `backend/src/routes/platform.js`
+  (`/api/platform/v1/manifest`, `/tenants`, `/tenants/:id`, `/tenants/:id/access`, `/tenants/:id/owner-reset`).
+- Sem `PLATFORM_HUB_URL`/`PLATFORM_SECRET` configurados, nada muda: o TORVEN funciona sem bloqueio. Se a central ficar fora do ar, vale a última situação recebida.
+- Módulos que a central pode ligar/desligar: comercial, agenda, produção, qualidade, compras, financeiro (contas/conciliação/DRE), relacionamento, fiscal, relatórios e exportação.
+  OS, clientes, materiais, caixa e configurações ficam sempre disponíveis.
 
 ## Migrações
 

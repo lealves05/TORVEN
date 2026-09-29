@@ -318,7 +318,7 @@ try {
   ok(rq.number === 4 && rq.status === 'nova' && rq.events.length === 1, `solicitação nº ${rq.number} registrada`);
   await call('POST', `/requests/${rq.id}/status`, { status: 'perdida' }, [400]);
   ok(true, 'perda exige motivo');
-  rq = await call('POST', `/requests/${rq.id}/visit`, { visit_at: new Date(Date.now() + 86400000).toISOString(), visit_technician_id: techs[1].id });
+  rq = await call('POST', `/requests/${rq.id}/visit`, { visit_at: new Date(Date.now() + 3 * 86400000).toISOString(), visit_technician_id: techs[1].id });
   ok(rq.status === 'visita_agendada' && rq.visit_technician_name, 'visita técnica agendada');
   rq = await call('POST', `/requests/${rq.id}/diagnosis`, { diagnosis: 'Dobradiças rompidas e trilho empenado; soldar reforço.' });
   ok(rq.status === 'diagnosticada', 'diagnóstico registrado');

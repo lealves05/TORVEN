@@ -3,13 +3,14 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   LayoutDashboard, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
   LogOut, Menu, X, Sun, Moon, BadgePercent, ChevronDown, Plus, ShoppingCart, Truck, PackagePlus, Receipt, HardHat,
-  Inbox, HeartHandshake, Headset, Boxes, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, ChevronsLeft, ChevronsRight, ChevronRight, Home,
+  Inbox, HeartHandshake, Headset, Boxes, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
 import { useAuth } from '../context/AuthContext';
 import { ROLES } from '../lib/format';
 import { cx, Avatar } from './ui';
 import DemoBanner from './DemoBanner';
+import { BillingNotices } from './Billing';
 import { PRESET_COLORS } from '../lib/theme';
 
 export function Mark({ className = 'h-5 w-5' }) {
@@ -45,12 +46,12 @@ export function Logo({ company, compact, light }) {
  * módulos das próximas fases (agenda/produção, Torven Pay…) aparecem quando estiverem operacionais.
  */
 export function useNav() {
-  const { company, can, scope } = useAuth();
+  const { company, can, scope, feature, access, user } = useAuth();
   const mods = company?.settings?.modules || {};
   const groups = [
     { label: 'Atendimento e comercial', icon: Headset, children: [
-      can('requests_view', 'requests_manage') && { to: '/solicitacoes', label: 'Solicitações', icon: Inbox },
-      can('quotes_view', 'quotes', 'quotes_approve') && { to: '/orcamentos', label: 'Orçamentos', icon: FileText },
+      can('requests_view', 'requests_manage') && feature('comercial') && { to: '/solicitacoes', label: 'Solicitações', icon: Inbox },
+      can('quotes_view', 'quotes', 'quotes_approve') && feature('comercial') && { to: '/orcamentos', label: 'Orçamentos', icon: FileText },
       can('customers_view') && { to: '/clientes', label: 'Clientes e objetos', icon: Users },
     ] },
     { label: 'Ordens de serviço', icon: ClipboardList, children: [
@@ -58,30 +59,30 @@ export function useNav() {
       can('orders_create') && can('checkout') && { to: '/venda', label: 'Venda de balcão', icon: ShoppingCart },
     ] },
     { label: 'Agenda e produção', icon: CalendarDays, children: [
-      can('schedule_view', 'schedule_manage') && { to: '/agenda', label: 'Agenda', icon: CalendarDays },
-      can('schedule_view', 'time_log') && { to: '/producao', label: 'Painel de produção', icon: Timer },
-      can('warranty_manage') && { to: '/garantias', label: 'Garantias', icon: ShieldAlert },
+      can('schedule_view', 'schedule_manage') && feature('agenda') && { to: '/agenda', label: 'Agenda', icon: CalendarDays },
+      can('schedule_view', 'time_log') && feature('producao') && { to: '/producao', label: 'Painel de produção', icon: Timer },
+      can('warranty_manage') && feature('qualidade') && { to: '/garantias', label: 'Garantias', icon: ShieldAlert },
     ] },
     { label: 'Materiais', icon: Boxes, children: [
       can('materials_manage', 'purchases') && { to: '/estoque', label: 'Materiais e estoque', icon: Package, end: true },
-      can('purchases') && { to: '/compras', label: 'Compras e cotações', icon: ShoppingBag },
+      can('purchases') && feature('compras') && { to: '/compras', label: 'Compras e cotações', icon: ShoppingBag },
       can('materials_manage', 'orders_edit') && { to: '/separacao', label: 'Separação para OS', icon: PackageOpen },
-      can('purchases') && mods.purchases && { to: '/estoque/entradas', label: 'Entrada de materiais', icon: PackagePlus },
+      can('purchases') && mods.purchases && feature('compras') && { to: '/estoque/entradas', label: 'Entrada de materiais', icon: PackagePlus },
       can('suppliers', 'purchases') && { to: '/fornecedores', label: 'Fornecedores', icon: Truck },
     ] },
     { label: 'Financeiro', icon: Landmark, children: [
       can('cash') && { to: '/financeiro', label: 'Caixa e lançamentos', icon: Wallet, end: true },
-      can('cash', 'reports') && { to: '/financeiro/gestao', label: 'Contas, conciliação e DRE', icon: Landmark },
+      can('cash', 'reports') && feature('financeiro') && { to: '/financeiro/gestao', label: 'Contas, conciliação e DRE', icon: Landmark },
       mods.commissions && scope('commissions') !== 'none' && { to: '/comissoes', label: 'Comissões', icon: BadgePercent },
     ] },
     { label: 'Fiscal', icon: Receipt, children: [
-      can('invoices_issue', 'invoices_cancel') && mods.invoices && { to: '/notas', label: 'Documentos fiscais', icon: Receipt },
+      can('invoices_issue', 'invoices_cancel') && mods.invoices && feature('fiscal') && { to: '/notas', label: 'Documentos fiscais', icon: Receipt },
     ] },
     { label: 'Relatórios', icon: BarChart3, children: [
-      can('reports') && { to: '/relatorios', label: 'Relatórios gerenciais', icon: FileSpreadsheet },
+      can('reports') && feature('relatorios') && { to: '/relatorios', label: 'Relatórios gerenciais', icon: FileSpreadsheet },
     ] },
     { label: 'Relacionamento', icon: HeartHandshake, children: [
-      can('followups') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },
+      can('followups') && feature('relacionamento') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },
     ] },
     { label: 'Configurações', icon: Settings, children: [
       can('settings', 'users', 'fiscal_settings') && { to: '/configuracoes', label: 'Empresa e sistema', icon: Settings, end: true },
@@ -89,6 +90,7 @@ export function useNav() {
       can('services_manage') && { to: '/servicos', label: 'Serviços e preços', icon: Wrench },
       can('technicians_manage') && { to: '/tecnicos', label: 'Técnicos', icon: HardHat },
       can('audit_view') && { to: '/auditoria', label: 'Logs e auditoria', icon: ShieldCheck },
+      access && ['owner', 'admin'].includes(user?.role) && { to: '/assinatura', label: 'Assinatura e plano', icon: CreditCard },
     ] },
     { label: 'Minha Torven', icon: UserRound, children: [
       { to: '/conta', label: 'Minha conta e aparência', icon: UserRound },
@@ -283,6 +285,7 @@ function TopLayout() {
       </header>
       {open && <MobileDrawer nav={nav} onClose={() => setOpen(false)} />}
       <DemoBanner />
+        <BillingNotices />
       <main key={loc.pathname} className="flex-1 overflow-y-auto">
         <div className={cx('mx-auto w-full p-4 animate-fade sm:p-6', wide ? 'max-w-none lg:px-6' : 'max-w-[1400px] lg:p-8')}>
           <div className="mb-3"><Breadcrumbs nav={nav} /></div>
@@ -373,6 +376,7 @@ function SideLayout() {
           </div>
         </header>
         <DemoBanner />
+        <BillingNotices />
         <main key={loc.pathname} className="flex-1 overflow-y-auto">
           <div className={cx('mx-auto w-full p-4 animate-fade sm:p-6', wide ? 'max-w-none lg:px-6' : 'max-w-[1400px] lg:p-8')}>
             <div className="mb-3 lg:hidden"><Breadcrumbs nav={nav} /></div>

@@ -40,6 +40,8 @@ async function request(method, path, body) {
     setToken(null);
     window.dispatchEvent(new Event('torven:logout'));
   }
+  // assinatura bloqueada ou módulo fora do plano: a tela recarrega a situação vinda da central
+  if (res.status === 402 || (res.status === 403 && data?.code === 'FEATURE_DISABLED')) window.dispatchEvent(new Event('torven:access'));
   if (!res.ok) throw new ApiError(res.status, data);
   return data;
 }
