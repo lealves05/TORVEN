@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
+  LayoutDashboard, LifeBuoy, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
   LogOut, Menu, X, Sun, Moon, BadgePercent, ChevronDown, Plus, ShoppingCart, Truck, PackagePlus, Receipt, HardHat,
   Inbox, HeartHandshake, Headset, Boxes, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
 } from 'lucide-react';
@@ -94,6 +94,7 @@ export function useNav() {
     ] },
     { label: 'Minha Torven', icon: UserRound, children: [
       { to: '/conta', label: 'Minha conta e aparência', icon: UserRound },
+      { to: '/suporte', label: 'Suporte e treinamento', icon: LifeBuoy },
     ] },
   ].map((g) => ({ ...g, children: g.children.filter(Boolean) })).filter((g) => g.children.length);
   return [{ to: '/', label: 'Início', icon: LayoutDashboard, end: true }, ...groups];

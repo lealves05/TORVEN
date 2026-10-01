@@ -19,6 +19,7 @@ import Invoices from './pages/Invoices';
 import Reports, { Commissions } from './pages/Reports';
 import Settings from './pages/Settings';
 import Account from './pages/Account';
+import Support from './pages/Support';
 import Requests, { RequestNew, RequestDetail } from './pages/Requests';
 import Audit from './pages/Audit';
 import Units from './pages/Units';
@@ -115,6 +116,7 @@ export default function App() {
             <Route path="relacionamento" element={<Guard perms={['followups']}><Relationship /></Guard>} />
             <Route path="auditoria" element={<Guard perms={['audit_view']}><Audit /></Guard>} />
             <Route path="conta" element={<Account />} />
+            <Route path="suporte" element={<Support />} />
             {access && admin && <Route path="assinatura" element={<Subscription />} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
