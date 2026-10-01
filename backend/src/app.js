@@ -109,8 +109,11 @@ export function createApp() {
     else if (err.code === '23503') { status = 409; message = 'Registro vinculado a outros dados.'; }
     else if (err.code === '22P02') { status = 400; message = 'Identificador inválido.'; }
     else if (err.type === 'entity.too.large') { status = 413; message = 'Arquivo muito grande.'; }
+    else if (err.type === 'entity.parse.failed') { status = 400; message = 'Requisição inválida.'; }
     if (status >= 500) console.error(err);
-    res.status(status).json({ error: status >= 500 ? 'Erro interno no servidor.' : message, ...(err.extra || {}) });
+    // erros previstos (HttpError) mostram a mensagem; só falhas inesperadas viram a mensagem genérica
+    const expected = err instanceof HttpError;
+    res.status(status).json({ error: status >= 500 && !expected ? 'Erro interno no servidor.' : message, ...(err.extra || {}) });
   });
 
   return app;
