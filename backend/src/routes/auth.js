@@ -8,6 +8,7 @@ import { ensureCompanyDefaults } from '../domain.js';
 import { parse, slugify, withDefaults, HttpError, DEFAULT_SETTINGS, DEFAULT_FISCAL, permissionsFor, PERMISSIONS, ROLES } from '../util.js';
 import { seedDemo } from '../seed.js';
 import { accessFor, registerCompany } from '../platform.js';
+import { getSystemParams, systemNotice, newCompanySettings } from '../params.js';
 
 const r = Router();
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false,
@@ -27,7 +28,8 @@ export async function loadSession(userId) {
   company.settings = withDefaults(company.settings);
   // situação da assinatura definida pela central da plataforma (null = sem central ou demonstração)
   const access = await accessFor(company.id).catch(() => null);
-  return { user, company, access, permissions: permissionsFor(user.role, company.settings), permissionCatalog: PERMISSIONS, roles: ROLES };
+  const notice = await systemNotice().catch(() => null);
+  return { user, company, access, notice, permissions: permissionsFor(user.role, company.settings), permissionCatalog: PERMISSIONS, roles: ROLES };
 }
 
 const registerSchema = z.object({
@@ -39,8 +41,13 @@ const registerSchema = z.object({
   demo: z.boolean().optional().default(true),
 });
 
+const signupClosed = () => new HttpError(403, 'Novos cadastros estão temporariamente fechados.');
+
 r.post('/register', limiter, async (req, res) => {
   const d = parse(registerSchema, req.body);
+  const sys = await getSystemParams();
+  if (sys.signup_enabled === false) throw signupClosed();
+  const settings = await newCompanySettings(DEFAULT_SETTINGS);
   const exists = await one('select 1 from users where email = $1', [d.email]);
   if (exists) throw new HttpError(409, 'Este e-mail já está cadastrado.');
 
@@ -51,7 +58,7 @@ r.post('/register', limiter, async (req, res) => {
     if (taken.some((t) => t.slug === slug)) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
     const { rows: [company] } = await db.query(
       'insert into companies (name, trade_name, slug, phone, email, settings, fiscal) values ($1,$1,$2,$3,$4,$5,$6) returning id',
-      [d.companyName, slug, d.phone || null, d.email, DEFAULT_SETTINGS, DEFAULT_FISCAL]);
+      [d.companyName, slug, d.phone || null, d.email, settings, DEFAULT_FISCAL]);
     await ensureCompanyDefaults(db, company.id);
     const { rows: [user] } = await db.query(
       `insert into users (company_id, name, email, password_hash, role)
@@ -114,8 +121,10 @@ const demoLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 10, standardHea
 
 /** Cria uma empresa de demonstração com dados de exemplo e entra direto. */
 r.post('/demo', demoLimiter, async (_req, res) => {
-  // demonstrações abandonadas há mais de 7 dias são apagadas
-  await q("delete from companies where is_demo and created_at < now() - interval '7 days'").catch(() => {});
+  const sys = await getSystemParams();
+  if (sys.demo_enabled === false) throw new HttpError(403, 'A demonstração está desativada no momento.');
+  // demonstrações abandonadas são apagadas (prazo definido pela central)
+  await q('delete from companies where is_demo and created_at < now() - make_interval(days => $1)', [Number(sys.demo_days) || 7]).catch(() => {});
   const rand = Math.random().toString(36).slice(2, 10);
   const email = `demo-${rand}@demo.torven.app`;
   const hash = await bcrypt.hash(`${rand}${Date.now()}`, 8);
@@ -145,6 +154,7 @@ r.post('/activate', requireAuth, async (req, res) => {
     phone: z.string().trim().optional(),
     keepData: z.boolean().default(false),
   }), req.body);
+  if ((await getSystemParams()).signup_enabled === false) throw signupClosed();
   if (req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode ativar o sistema.');
   const c = await one('select is_demo from companies where id = $1', [req.companyId]);
   if (!c?.is_demo) throw new HttpError(400, 'Esta empresa já está em uso normal.');

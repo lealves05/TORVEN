@@ -30,11 +30,17 @@ const isTenantAdmin = (u) => ['owner', 'admin'].includes(u?.role);
 
 /** Avisos de vencimento/teste/inadimplência no topo das telas (vindos do servidor). */
 export function BillingNotices() {
-  const { access: billing, user } = useAuth();
+  const { access: billing, user, notice } = useAuth();
   const notices = billing?.notices || [];
-  if (!notices.length) return null;
+  if (!notices.length && !notice) return null;
   return (
     <div className="space-y-2 px-4 pt-3 sm:px-6">
+      {notice && (
+        <div role="status" className={cx('flex items-center gap-3 rounded-app-sm border px-3.5 py-2.5 text-sm',
+          notice.level === 'warn' ? 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100' : 'border-sky-500/30 bg-sky-500/10 text-sky-900 dark:text-sky-100')}>
+          <Info className="h-4 w-4 shrink-0" /><span className="flex-1">{notice.text}</span>
+        </div>
+      )}
       {notices.map((n) => (
         <div key={n.text} role="status" className={cx('flex flex-wrap items-center gap-3 rounded-app-sm border px-3.5 py-2.5 text-sm',
           n.level === 'danger' ? 'border-red-500/30 bg-red-500/10 text-red-800 dark:text-red-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100')}>

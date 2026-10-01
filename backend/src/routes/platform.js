@@ -2,9 +2,10 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import { q, one } from '../db.js';
+import { q, one, tx } from '../db.js';
 import { parse, HttpError, notFound, ROLES } from '../util.js';
 import { FEATURES, verifyHubRequest, tenantPayload, storeAccess, hubCall, accessFor } from '../platform.js';
+import { settingsManifest, getSystemParams, setSystemParams, getTenantParams, setTenantParams } from '../params.js';
 
 // =====================================================================
 // Central → TORVEN (/api/platform/v1): chamadas assinadas da central da plataforma
@@ -22,9 +23,10 @@ async function company(id) {
 }
 
 platformApi.get('/manifest', (_req, res) => res.json({
-  code: 'torven', name: 'TORVEN', contract: 1, version: process.env.TORVEN_VERSION || '2026.09',
+  code: 'torven', name: 'TORVEN', contract: 1, contract_minor: 1, version: process.env.TORVEN_VERSION || '2026.10',
   description: 'Gestão para assistência técnica: soldas especiais, serralheria e reparos mecânicos.',
   features: Object.fromEntries(Object.entries(FEATURES).map(([k, v]) => [k, v.label])),
+  settings: settingsManifest(),
 }));
 
 platformApi.get('/tenants', async (_req, res) => {
@@ -72,6 +74,26 @@ platformApi.post('/tenants/:id/owner-reset', async (req, res) => {
   [c.id, owner.id, JSON.stringify({ email })]);
   res.json({ ok: true, user_id: owner.id, email, temporary_password: temp,
     message: 'Senha provisória criada. Oriente o responsável a trocá-la em "Meu perfil" logo no primeiro acesso.' });
+});
+
+// ---- Parâmetros (contrato v1.1): do sistema e de cada empresa ----
+platformApi.get('/settings', async (_req, res) => res.json({ values: await getSystemParams() }));
+platformApi.put('/settings', async (req, res) => res.json({ values: await setSystemParams(req.body?.values) }));
+platformApi.get('/tenants/:id/settings', async (req, res) => {
+  const c = await company(req.params.id);
+  res.json({ values: await getTenantParams(c.id) });
+});
+platformApi.put('/tenants/:id/settings', async (req, res) => {
+  const c = await company(req.params.id);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 300) : null;
+  const changed = await tx(async (db) => {
+    const ch = await setTenantParams(db, c.id, req.body?.values);
+    await db.query(`insert into audit_log (company_id, user_id, user_name, entity, entity_id, action, summary, data)
+                    values ($1, null, 'Central da plataforma', 'company', $2, 'platform.settings', $3, $4)`,
+    [c.id, String(c.id), `Parâmetros alterados pela central${reason ? `: ${reason}` : ''}`, JSON.stringify(ch)]);
+    return ch;
+  });
+  res.json({ ok: true, changed, values: await getTenantParams(c.id) });
 });
 
 // =====================================================================
