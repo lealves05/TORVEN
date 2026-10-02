@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { q, one, tx } from '../db.js';
@@ -7,7 +8,8 @@ import { signToken, requireAuth } from '../auth.js';
 import { ensureCompanyDefaults } from '../domain.js';
 import { parse, slugify, withDefaults, HttpError, DEFAULT_SETTINGS, DEFAULT_FISCAL, permissionsFor, PERMISSIONS, ROLES } from '../util.js';
 import { seedDemo } from '../seed.js';
-import { accessFor, registerCompany } from '../platform.js';
+import { accessFor, registerCompany, hubCall } from '../platform.js';
+import { audit } from '../audit.js';
 import { getSystemParams, systemNotice, newCompanySettings } from '../params.js';
 
 const r = Router();
@@ -88,6 +90,57 @@ r.post('/login', limiter, async (req, res) => {
   await q('update users set last_login_at=now() where id=$1', [user.id]);
   const session = await loadSession(user.id);
   res.json({ token: signToken(user), ...session });
+});
+
+// ---- Esqueci minha senha: link de uso único (60 min) enviado pela central, com o remetente da plataforma ----
+const RESET_MIN = 60;
+const GENERIC_FORGOT = { ok: true, message: 'Se o e-mail estiver cadastrado, você vai receber um link para criar uma nova senha em alguns minutos.' };
+const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
+const forgotLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { error: 'Muitos pedidos. Aguarde e tente de novo.' } });
+const perEmail = new Map(); // limite por e-mail (3 por hora) dentro da instância
+let mailCache = { at: 0, v: false };
+async function resetAvailable() {
+  if (Date.now() - mailCache.at < 60000) return mailCache.v;
+  let v = false;
+  try { v = !!(await hubCall('GET', '/mail/status', undefined, 5000)).available; } catch { v = false; }
+  mailCache = { at: Date.now(), v };
+  return v;
+}
+r.get('/reset-options', async (_req, res) => res.json({ available: await resetAvailable() }));
+
+r.post('/forgot', forgotLimiter, async (req, res) => {
+  const d = parse(z.object({ email: z.string().trim().toLowerCase().email('e-mail inválido').max(200) }), req.body);
+  if (!(await resetAvailable())) throw new HttpError(503, 'A recuperação de senha por e-mail ainda não está ativa. Peça ao administrador da empresa para definir uma nova senha em Usuários, ou fale com o suporte.', { code: 'RESET_UNAVAILABLE' });
+  const now = Date.now(); const hits = (perEmail.get(d.email) || []).filter((t) => now - t < 3600000);
+  if (hits.length >= 3) return res.json(GENERIC_FORGOT);
+  perEmail.set(d.email, [...hits, now]);
+  const u = await one(`select u.id, u.name, u.email, u.company_id, c.name as company_name, c.is_demo from users u join companies c on c.id = u.company_id
+     where u.email = $1 and u.active`, [d.email]);
+  if (!u || u.is_demo) return res.json(GENERIC_FORGOT);
+  const token = crypto.randomBytes(32).toString('hex');
+  await q('update password_resets set used_at = now() where user_id = $1 and used_at is null', [u.id]);
+  await q(`insert into password_resets (user_id, token_hash, expires_at, ip) values ($1,$2, now() + make_interval(mins => $3), $4)`,
+    [u.id, sha(token), RESET_MIN, String(req.ip || '').slice(0, 64)]);
+  try {
+    await hubCall('POST', '/mail/password-reset', { to: u.email, name: u.name, company: u.company_name, path: `/redefinir-senha?token=${token}`, minutes: RESET_MIN }, 20000);
+  } catch (e) {
+    await q('update password_resets set used_at = now() where token_hash = $1', [sha(token)]);
+    throw new HttpError(e.status === 429 ? 429 : 502, e.status === 429 ? e.message : 'Não foi possível enviar o e-mail agora. Tente novamente em alguns minutos.');
+  }
+  await audit(null, { companyId: u.company_id, user: { id: u.id, name: u.name } }, { entity: 'user', entityId: u.id, action: 'senha_redefinicao_pedida', summary: 'Pediu o link de nova senha por e-mail' });
+  res.json(GENERIC_FORGOT);
+});
+
+r.post('/reset', limiter, async (req, res) => {
+  const d = parse(z.object({ token: z.string().regex(/^[0-9a-f]{64}$/, 'link inválido'),
+    new_password: z.string().min(8, 'a senha deve ter ao menos 8 caracteres').max(200).refine((p) => /[A-Za-z]/.test(p) && /\d/.test(p), 'use letras e números na senha') }), req.body);
+  const row = await one(`update password_resets set used_at = now() where token_hash = $1 and used_at is null and expires_at > now() returning user_id`, [sha(d.token)]);
+  if (!row) throw new HttpError(400, 'Este link expirou ou já foi usado. Peça um novo em “Esqueci minha senha”.', { code: 'RESET_INVALID' });
+  const u = await one('select id, name, company_id from users where id = $1 and active', [row.user_id]);
+  if (!u) throw new HttpError(400, 'Conta indisponível.');
+  await q('update users set password_hash = $1, password_changed_at = now() where id = $2', [await bcrypt.hash(d.new_password, 10), u.id]);
+  await audit(null, { companyId: u.company_id, user: { id: u.id, name: u.name } }, { entity: 'user', entityId: u.id, action: 'senha_redefinida_email', summary: 'Senha redefinida pelo link do e-mail' });
+  res.json({ ok: true });
 });
 
 r.get('/me', requireAuth, async (req, res) => {

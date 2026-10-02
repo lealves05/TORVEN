@@ -19,6 +19,7 @@ const hub = http.createServer((req, res) => {
     res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' });
     if (!ok) return res.end('{}');
     hubCalls.push({ method: req.method, route, body: body ? JSON.parse(body) : null });
+    if (route === '/mail/status') return res.end(JSON.stringify({ available: true }));
     res.end(JSON.stringify({ access: { status: 'TRIAL', blocked: false, features: {}, notices: [] } }));
   });
 });
@@ -93,6 +94,27 @@ await check('parâmetro fecha cadastros e demonstração', async () => {
   assert.equal((await api('POST', '/auth/demo')).status, 403);
   await central('PUT', '/settings', { values: { signup_enabled: true, demo_enabled: true, notice_text: '' } });
   assert.equal((await api('POST', '/auth/demo')).status, 201);
+});
+
+await check('esqueci minha senha: link pela central, uso único, derruba a sessão antiga', async () => {
+  const reg = await api('POST', '/auth/register', { companyName: 'Oficina Senha', name: 'Rita Lima', email: 'rita@teste.dev', password: 'Senha123x', demo: false });
+  assert.equal(reg.status, 201, JSON.stringify(reg.data));
+  const oldToken = reg.data.token;
+  assert.equal((await api('GET', '/auth/reset-options')).data.available, true);
+  const n = hubCalls.length;
+  assert.equal((await api('POST', '/auth/forgot', { email: 'ninguem@teste.dev' })).status, 200);
+  assert.equal(hubCalls.filter((c) => c.route === '/mail/password-reset').length, hubCalls.slice(0, n).filter((c) => c.route === '/mail/password-reset').length);
+  assert.equal((await api('POST', '/auth/forgot', { email: 'rita@teste.dev' })).status, 200);
+  const mail = hubCalls.filter((c) => c.route === '/mail/password-reset').at(-1).body;
+  assert.equal(mail.to, 'rita@teste.dev'); assert.equal(mail.company, 'Oficina Senha');
+  const token = new URL(`http://x${mail.path}`).searchParams.get('token');
+  await new Promise((r) => setTimeout(r, 1100));
+  assert.equal((await api('POST', '/auth/reset', { token, new_password: 'curta' })).status, 400);
+  assert.equal((await api('POST', '/auth/reset', { token, new_password: 'NovaSenha2026' })).status, 200);
+  assert.equal((await api('POST', '/auth/reset', { token, new_password: 'NovaSenha2027' })).status, 400);
+  assert.equal((await api('POST', '/auth/login', { email: 'rita@teste.dev', password: 'Senha123x' })).status, 401);
+  assert.equal((await api('POST', '/auth/login', { email: 'rita@teste.dev', password: 'NovaSenha2026' })).status, 200);
+  assert.equal((await api('GET', '/auth/me', null, oldToken)).status, 401);
 });
 
 server.close(); hub.close(); await pool.end();

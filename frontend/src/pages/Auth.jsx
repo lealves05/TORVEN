@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ClipboardList, Wallet, Receipt, PackageCheck, Building2, PlayCircle, LogIn, Loader2, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { Input, cx } from '../components/ui';
 import { Logo } from '../components/Layout';
 import { maskPhone } from '../lib/format';
+import { api } from '../lib/api';
 
 function Shell({ children }) {
   const features = [
@@ -98,6 +99,7 @@ export function Login() {
       <form onSubmit={submit} className="mt-6 space-y-4">
         <Input label="E-mail" type="email" autoComplete="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         <Input label="Senha" type="password" autoComplete="current-password" required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+        <div className="-mt-2 text-right"><Link to="/esqueci-senha" className="text-xs font-medium text-primary hover:underline" data-forgot-link>Esqueci minha senha</Link></div>
         <button className="btn-primary w-full" disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
       </form>
       <Link to="/cadastro" className="mt-4 flex items-center justify-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -141,6 +143,78 @@ export function Register() {
         <button className="btn-primary w-full" disabled={busy}>{busy ? 'Criando…' : 'Criar minha empresa'}</button>
       </form>
       <DemoCard />
+    </Shell>
+  );
+}
+
+// "Esqueci minha senha": o link chega pelo e-mail de suporte da plataforma e vale por 60 minutos
+export function ForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
+  const [err, setErr] = useState('');
+  const [available, setAvailable] = useState(true);
+  useEffect(() => { api.get('/auth/reset-options').then((r) => setAvailable(r.available !== false)).catch(() => {}); }, []);
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setErr('');
+    try { const r = await api.post('/auth/forgot', { email }); setDone(r.message); }
+    catch (e2) { if (e2.data?.code === 'RESET_UNAVAILABLE') setAvailable(false); else setErr(e2.message); } finally { setBusy(false); }
+  };
+  return (
+    <Shell>
+      <h1 className="text-2xl font-semibold tracking-tight">Esqueci minha senha</h1>
+      {!available ? (
+        <div className="mt-6 space-y-2 rounded-app-sm bg-amber-500/10 p-4 text-sm text-amber-900 dark:text-amber-100" data-reset-unavailable>
+          <p className="font-medium">A recuperação por e-mail ainda não está ativa.</p>
+          <p><b>Funcionário:</b> peça ao administrador da empresa para definir uma nova senha em Usuários.</p>
+          <p><b>Proprietário:</b> fale com o suporte do TORVEN.</p>
+        </div>
+      ) : done ? (
+        <div className="mt-6 rounded-app-sm bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200" data-forgot-done>{done} Confira também a caixa de spam. O e-mail vem de <b>Suporte TORVEN</b>.</div>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-ink-faint">Informe o e-mail de acesso. Enviaremos um link para você criar uma nova senha.</p>
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            {err && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">{err}</div>}
+            <Input label="E-mail" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <button className="btn-primary w-full" disabled={busy}>{busy ? 'Enviando…' : 'Enviar link'}</button>
+          </form>
+        </>
+      )}
+      <p className="mt-6 text-center text-sm"><Link to="/entrar" className="font-medium text-primary hover:underline">Voltar para o login</Link></p>
+    </Shell>
+  );
+}
+
+export function ResetPassword() {
+  const [params] = useSearchParams();
+  const token = params.get('token') || '';
+  const [f, setF] = useState({ password: '', confirm: '' });
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async (e) => {
+    e.preventDefault(); setErr('');
+    if (f.password !== f.confirm) { setErr('As senhas não conferem.'); return; }
+    setBusy(true);
+    try { await api.post('/auth/reset', { token, new_password: f.password }); setDone(true); } catch (e2) { setErr(e2.message); } finally { setBusy(false); }
+  };
+  return (
+    <Shell>
+      <h1 className="text-2xl font-semibold tracking-tight">Criar nova senha</h1>
+      {!token ? <p className="mt-6 text-sm">Link inválido. Peça um novo em <Link to="/esqueci-senha" className="font-medium text-primary hover:underline">Esqueci minha senha</Link>.</p>
+        : done ? (
+          <div className="mt-6 space-y-4"><div className="rounded-app-sm bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-200">Senha alterada. Entre de novo com a nova senha.</div>
+            <Link to="/entrar" className="btn-primary w-full">Entrar</Link></div>
+        ) : (
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            <p className="text-sm text-ink-faint">Use ao menos 8 caracteres, com letras e números.</p>
+            {err && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">{err}</div>}
+            <Input label="Nova senha" type="password" autoComplete="new-password" required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+            <Input label="Repita a nova senha" type="password" autoComplete="new-password" required value={f.confirm} onChange={(e) => setF({ ...f, confirm: e.target.value })} />
+            <button className="btn-primary w-full" disabled={busy}>{busy ? 'Salvando…' : 'Salvar nova senha'}</button>
+          </form>
+        )}
     </Shell>
   );
 }

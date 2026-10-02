@@ -3,7 +3,7 @@ import { useAuth } from './context/AuthContext';
 import { CatalogProvider } from './context/CatalogContext';
 import Layout from './components/Layout';
 import { Loading } from './components/ui';
-import { Login, Register } from './pages/Auth';
+import { Login, Register, ForgotPassword, ResetPassword } from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import OrderNew from './pages/OrderNew';
@@ -61,6 +61,8 @@ export default function App() {
     <Routes>
       <Route path="/p/orcamento/:token" element={<PublicQuote />} />
       <Route path="/p/os/:token" element={<PublicOrder />} />
+      <Route path="/esqueci-senha" element={<ForgotPassword />} />
+      <Route path="/redefinir-senha" element={<ResetPassword />} />
       {loading ? (
         <Route path="*" element={<Loading />} />
       ) : !user ? (

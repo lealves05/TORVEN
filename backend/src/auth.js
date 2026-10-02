@@ -24,11 +24,14 @@ export async function requireAuth(req, _res, next) {
   const payload = verifyToken(req);
   if (!payload) throw new HttpError(401, 'Sessão expirada. Entre novamente.');
   const user = await one(
-    `select u.id, u.company_id, u.name, u.email, u.role, u.technician_id, u.unit_id, u.active, u.preferences, c.settings
+    `select u.id, u.company_id, u.name, u.email, u.role, u.technician_id, u.unit_id, u.active, u.preferences, u.password_changed_at, c.settings
        from users u join companies c on c.id = u.company_id where u.id = $1`,
     [payload.uid],
   );
   if (!user || !user.active) throw new HttpError(401, 'Usuário inativo ou removido.');
+  // senha redefinida depois do login: a sessão antiga deixa de valer
+  if (user.password_changed_at && payload.iat * 1000 < new Date(user.password_changed_at).getTime() - 1000) throw new HttpError(401, 'Senha alterada. Entre novamente.');
+  delete user.password_changed_at;
   req.settings = withDefaults(user.settings);
   delete user.settings;
   req.user = user;
