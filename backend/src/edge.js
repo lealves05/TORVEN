@@ -3,6 +3,7 @@ import express from 'express';
 import { createApp } from './app.js';
 import { migrate } from './migrate.js';
 import { pool } from './db.js';
+import { assertSecret } from './auth.js';
 
 const FN = '/torven-api';
 
@@ -17,6 +18,7 @@ async function boot() {
     const { rows: [r] } = await pool.query("select value from _secrets where key = 'jwt_secret'");
     process.env.JWT_SECRET = r.value;
   }
+  assertSecret(); // F01: segredo fraco impede atender (o valor nunca vai para o log)
 }
 
 let ready = null;

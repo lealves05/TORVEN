@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Sun, Moon, Monitor, Check, Plus, RotateCcw } from 'lucide-react';
 import { COLOR_THEMES, PRESET_COLORS } from '../lib/theme';
-import { api } from '../lib/api';
+import { api, setToken } from '../lib/api';
 import { ROLES } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, Input, Avatar, useAction, FAIL, cx } from '../components/ui';
@@ -17,7 +17,8 @@ export default function Account() {
   const saveName = async () => { if ((await run(() => api.put('/auth/me', { name }), 'Nome atualizado')) !== FAIL) refresh(); };
   const savePw = async () => {
     const r = await run(() => api.put('/auth/me', { currentPassword: pw.currentPassword, newPassword: pw.newPassword }), 'Senha alterada');
-    if (r !== FAIL) setPw({ currentPassword: '', newPassword: '', confirm: '' });
+    // a troca encerra as outras sessões; esta recebe um token novo
+    if (r !== FAIL) { if (r?.token) setToken(r.token); setPw({ currentPassword: '', newPassword: '', confirm: '' }); refresh(); }
   };
 
   return (
@@ -81,11 +82,11 @@ export default function Account() {
         <h3 className="font-semibold">Alterar senha</h3>
         <Input label="Senha atual" type="password" value={pw.currentPassword} onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })} />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Nova senha" type="password" value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} />
+          <Input label="Nova senha" type="password" autoComplete="new-password" hint="Mínimo de 10 caracteres, com letras e números. Ao trocar, as outras sessões são encerradas." value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} />
           <Input label="Confirmar nova senha" type="password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} />
         </div>
         {pw.confirm && pw.confirm !== pw.newPassword && <p className="text-xs text-red-600">As senhas não conferem.</p>}
-        <button className="btn-primary" disabled={busy || pw.newPassword.length < 6 || pw.newPassword !== pw.confirm} onClick={savePw}>Alterar senha</button>
+        <button className="btn-primary" disabled={busy || pw.newPassword.length < 10 || pw.newPassword !== pw.confirm} onClick={savePw}>Alterar senha</button>
       </div>
     </div>
   );

@@ -367,7 +367,7 @@ function Team() {
                 <option value="">{edit.role === 'technician' ? 'Selecione…' : 'Nenhum'}</option>{technicians.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
             )}
-            <Input label={edit.id ? 'Nova senha (opcional)' : 'Senha'} type="password" value={edit.password || ''} onChange={(e) => setEdit({ ...edit, password: e.target.value })} />
+            <Input label={edit.id ? 'Nova senha (opcional)' : 'Senha'} type="password" autoComplete="new-password" hint={edit.id ? 'Ao redefinir, as sessões abertas desse usuário são encerradas. Mínimo de 10 caracteres, com letras e números.' : 'Mínimo de 10 caracteres, com letras e números'} value={edit.password || ''} onChange={(e) => setEdit({ ...edit, password: e.target.value })} />
             {edit.id && <div className="sm:col-span-2"><Toggle checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Acesso ativo" /></div>}
           </div>
         </Modal>

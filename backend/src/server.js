@@ -1,9 +1,11 @@
 import { createApp } from './app.js';
 import { migrate } from './migrate.js';
+import { assertSecret } from './auth.js';
 
 const port = Number(process.env.PORT || 3333);
 
 try {
+  assertSecret();
   await migrate();
 } catch (e) {
   console.error('[boot] falha ao migrar o banco:', e.message);

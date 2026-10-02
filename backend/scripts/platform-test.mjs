@@ -31,6 +31,7 @@ const { pool } = await import('../src/db.js');
 await pool.query('drop schema public cascade; create schema public;');
 const { migrate } = await import('../src/migrate.js');
 await migrate();
+process.env.CORS_ORIGIN = 'https://torven-ebon.vercel.app';
 const { createApp } = await import('../src/app.js');
 const server = createApp().listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -49,7 +50,7 @@ async function central(method, route, payload) {
   return { status: r.status, data: await r.json().catch(() => null) };
 }
 
-const reg = await api('POST', '/auth/register', { companyName: 'Oficina Teste', name: 'Dono', email: 'dono@teste.dev', password: 'Senha123x', demo: false });
+const reg = await api('POST', '/auth/register', { companyName: 'Oficina Teste', name: 'Dono', email: 'dono@teste.dev', password: 'Oficina2026xy', demo: false });
 assert.equal(reg.status, 201, JSON.stringify(reg.data));
 const token = reg.data.token; const cid = reg.data.company.id;
 
@@ -68,7 +69,7 @@ await check('central altera e lê parâmetros do sistema (com validação)', asy
   assert.equal(me.data.notice.text, 'Atualização hoje às 22h');
 });
 await check('empresa nova herda os padrões do sistema', async () => {
-  const r = await api('POST', '/auth/register', { companyName: 'Oficina Dois', name: 'Outro', email: 'dois@teste.dev', password: 'Senha123x', demo: false });
+  const r = await api('POST', '/auth/register', { companyName: 'Oficina Dois', name: 'Outro', email: 'dois@teste.dev', password: 'Oficina2026xy', demo: false });
   assert.equal(r.status, 201);
   assert.equal(r.data.company.settings.orders.defaultWarrantyDays, 180);
 });
@@ -90,14 +91,14 @@ await check('assinatura inválida é recusada', async () => {
 });
 await check('parâmetro fecha cadastros e demonstração', async () => {
   await central('PUT', '/settings', { values: { signup_enabled: false, demo_enabled: false } });
-  assert.equal((await api('POST', '/auth/register', { companyName: 'Fechada', name: 'Xavier', email: 'x@teste.dev', password: 'Senha123x' })).status, 403);
+  assert.equal((await api('POST', '/auth/register', { companyName: 'Fechada', name: 'Xavier', email: 'x@teste.dev', password: 'Oficina2026xy' })).status, 403);
   assert.equal((await api('POST', '/auth/demo')).status, 403);
   await central('PUT', '/settings', { values: { signup_enabled: true, demo_enabled: true, notice_text: '' } });
   assert.equal((await api('POST', '/auth/demo')).status, 201);
 });
 
 await check('esqueci minha senha: link pela central, uso único, derruba a sessão antiga', async () => {
-  const reg = await api('POST', '/auth/register', { companyName: 'Oficina Senha', name: 'Rita Lima', email: 'rita@teste.dev', password: 'Senha123x', demo: false });
+  const reg = await api('POST', '/auth/register', { companyName: 'Oficina Senha', name: 'Rita Lima', email: 'rita@teste.dev', password: 'Oficina2026xy', demo: false });
   assert.equal(reg.status, 201, JSON.stringify(reg.data));
   const oldToken = reg.data.token;
   assert.equal((await api('GET', '/auth/reset-options')).data.available, true);
@@ -112,9 +113,81 @@ await check('esqueci minha senha: link pela central, uso único, derruba a sess�
   assert.equal((await api('POST', '/auth/reset', { token, new_password: 'curta' })).status, 400);
   assert.equal((await api('POST', '/auth/reset', { token, new_password: 'NovaSenha2026' })).status, 200);
   assert.equal((await api('POST', '/auth/reset', { token, new_password: 'NovaSenha2027' })).status, 400);
-  assert.equal((await api('POST', '/auth/login', { email: 'rita@teste.dev', password: 'Senha123x' })).status, 401);
+  assert.equal((await api('POST', '/auth/login', { email: 'rita@teste.dev', password: 'Oficina2026xy' })).status, 401);
   assert.equal((await api('POST', '/auth/login', { email: 'rita@teste.dev', password: 'NovaSenha2026' })).status, 200);
   assert.equal((await api('GET', '/auth/me', null, oldToken)).status, 401);
+});
+
+await check('F02: troca de senha (própria e pelo administrador) derruba tokens antigos', async () => {
+  const reg = await api('POST', '/auth/register', { companyName: 'Oficina Sessao', name: 'Dona', email: 'dona@teste.dev', password: 'Oficina2026xy', demo: false });
+  const ownerA = reg.data.token;
+  const ownerB = (await api('POST', '/auth/login', { email: 'dona@teste.dev', password: 'Oficina2026xy' })).data.token;
+  // própria: a outra sessão cai; a atual recebe token novo
+  const ch = await api('PUT', '/auth/me', { currentPassword: 'Oficina2026xy', newPassword: 'NovaFrase2026ok' }, ownerA);
+  assert.equal(ch.status, 200); assert.ok(ch.data.token);
+  assert.equal((await api('GET', '/auth/me', null, ownerB)).status, 401);
+  assert.equal((await api('GET', '/auth/me', null, ownerA)).status, 401);
+  assert.equal((await api('GET', '/auth/me', null, ch.data.token)).status, 200);
+  const owner = ch.data.token;
+  // pelo administrador: o usuário perde as sessões; nenhum token é emitido em nome dele
+  const u = await api('POST', '/users', { name: 'Atendente', email: 'at@teste.dev', password: 'Atende2026xyz', role: 'attendant' }, owner);
+  assert.equal(u.status, 201, JSON.stringify(u.data));
+  const t1 = (await api('POST', '/auth/login', { email: 'at@teste.dev', password: 'Atende2026xyz' })).data.token;
+  const up = await api('PUT', `/users/${u.data.id}`, { name: 'Atendente', email: 'at@teste.dev', role: 'attendant', password: 'Outra2026xyzw' }, owner);
+  assert.equal(up.status, 200); assert.equal(up.data.token, undefined);
+  assert.equal((await api('GET', '/auth/me', null, t1)).status, 401);
+  // dois tokens emitidos no mesmo segundo: a versão decide, não o relógio
+  const t2 = (await api('POST', '/auth/login', { email: 'at@teste.dev', password: 'Outra2026xyzw' })).data.token;
+  await api('PUT', `/users/${u.data.id}`, { name: 'Atendente', email: 'at@teste.dev', role: 'attendant', password: 'Mais2026xyzwq' }, owner);
+  assert.equal((await api('GET', '/auth/me', null, t2)).status, 401);
+});
+await check('F08: a mesma senha fraca é recusada em todos os fluxos; frase longa e acentos aceitos', async () => {
+  const owner = (await api('POST', '/auth/login', { email: 'dona@teste.dev', password: 'NovaFrase2026ok' })).data.token;
+  for (const pw of ['123456', 'Senha12345', 'abcdefghij', 'a'.repeat(30) + '1']) {
+    assert.equal((await api('POST', '/auth/register', { companyName: 'X Oficina', name: 'Xavier', email: `x${Math.random()}@teste.dev`, password: pw })).status, 400, pw);
+    assert.equal((await api('POST', '/users', { name: 'Xavier', email: `y${Math.random()}@teste.dev`, password: pw, role: 'attendant' }, owner)).status, 400, pw);
+    assert.equal((await api('PUT', '/auth/me', { currentPassword: 'NovaFrase2026ok', newPassword: pw }, owner)).status, 400, pw);
+  }
+  assert.equal((await api('POST', '/auth/register', { companyName: 'X Oficina', name: 'Xavier', email: 'longa@teste.dev', password: 'ção'.repeat(25) + '1' })).status, 400, 'acima de 72 bytes recusada');
+  assert.equal((await api('POST', '/users', { name: 'Zé', email: 'ze@teste.dev', password: 'cação de lá 2026 é boa', role: 'attendant' }, owner)).status, 201);
+  assert.equal((await api('POST', '/auth/login', { email: 'ze@teste.dev', password: 'cação de lá 2026 é boa' })).status, 200);
+});
+await check('F09: técnico/unidade de outra empresa recusados sem alteração parcial', async () => {
+  const owner = (await api('POST', '/auth/login', { email: 'dona@teste.dev', password: 'NovaFrase2026ok' })).data.token;
+  const other = await pool.query("select t.id from technicians t join companies c on c.id = t.company_id where c.name <> 'Oficina Sessao' limit 1");
+  const otherTech = other.rows[0]?.id || (await pool.query("insert into technicians (company_id, name) select id, 'Tec B' from companies where name = 'Oficina Teste' returning id")).rows[0].id;
+  const r = await api('POST', '/users', { name: 'Intruso', email: 'intr@teste.dev', password: 'Intruso2026xy', role: 'technician', technician_id: otherTech }, owner);
+  assert.equal(r.status, 400);
+  assert.equal((await pool.query("select 1 from users where email = 'intr@teste.dev'")).rows.length, 0);
+  const otherUnit = (await pool.query("select u.id from units u join companies c on c.id = u.company_id where c.name <> 'Oficina Sessao' limit 1")).rows[0];
+  if (otherUnit) {
+    const me = (await api('GET', '/users', null, owner)).data.find((x) => x.email === 'ze@teste.dev');
+    assert.equal((await api('PUT', `/users/${me.id}`, { name: 'Zé', email: 'ze@teste.dev', role: 'attendant', unit_id: otherUnit.id }, owner)).status, 400);
+  }
+});
+await check('F07: limite de login compartilhado entre instâncias (Postgres), com Retry-After', async () => {
+  const s2 = createApp().listen(0);
+  const base2 = `http://127.0.0.1:${s2.address().port}`;
+  try {
+    let last;
+    for (let i = 0; i < 12; i++) {
+      const b = i % 2 ? base2 : base;
+      last = await fetch(`${b}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'limite@teste.dev', password: 'errada1234' }) });
+    }
+    assert.equal(last.status, 429); assert.ok(Number(last.headers.get('retry-after')) > 0);
+  } finally { s2.close(); }
+});
+await check('F06/F11: CORS só para origem aprovada; API sem cache', async () => {
+  const ok = await fetch(`${base}/api/health`, { headers: { origin: 'http://localhost:5173' } });
+  const evil = await fetch(`${base}/api/health`, { headers: { origin: 'https://evil.example' } });
+  assert.equal(evil.headers.get('access-control-allow-origin'), null);
+  assert.equal(ok.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+  assert.match(ok.headers.get('cache-control') || '', /no-store/);
+});
+await check('F01: segredo do JWT fraco é recusado em produção', async () => {
+  const { secretProblem } = await import('../src/auth.js');
+  for (const v of [undefined, '', 'x', 'torven-dev-secret-troque-em-producao', 'a'.repeat(64)]) assert.ok(secretProblem(v), String(v));
+  assert.equal(secretProblem(crypto.randomBytes(48).toString('hex')), null);
 });
 
 server.close(); hub.close(); await pool.end();

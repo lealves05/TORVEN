@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { z } from 'zod';
+import { setPassword } from '../security.js';
 import { q, one, tx } from '../db.js';
 import { parse, HttpError, notFound, ROLES } from '../util.js';
 import { FEATURES, verifyHubRequest, tenantPayload, storeAccess, hubCall, accessFor } from '../platform.js';
@@ -68,7 +69,8 @@ platformApi.post('/tenants/:id/owner-reset', async (req, res) => {
     email = d.email;
   }
   const temp = `Tv-${crypto.randomBytes(6).toString('base64url')}-${crypto.randomInt(10, 99)}`;
-  await q('update users set password_hash=$1, active=true where id=$2', [await bcrypt.hash(temp, 10), owner.id]);
+  await q('update users set active = true where id = $1', [owner.id]);
+  await setPassword(null, owner.id, c.id, temp); // derruba as sessões anteriores do responsável
   await q(`insert into audit_log (company_id, user_id, user_name, entity, entity_id, action, summary, data)
            values ($1, null, 'Central da plataforma', 'user', $2, 'platform.owner_reset', 'Senha provisória do responsável criada pela central', $3)`,
   [c.id, owner.id, JSON.stringify({ email })]);

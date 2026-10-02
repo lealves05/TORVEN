@@ -72,7 +72,7 @@ if (process.env.MOCK_FOCUS) {
 
 try {
   const email = `teste${Date.now()}@torven.app`;
-  const reg = await call('POST', '/auth/register', { companyName: 'Serralheria Teste', name: 'Dono', email, password: '123456', demo: true });
+  const reg = await call('POST', '/auth/register', { companyName: 'Serralheria Teste', name: 'Dono', email, password: 'Tecnico2026xy', demo: true });
   token = reg.token;
   ok(reg.company.slug && reg.user.role === 'owner', 'cadastro da empresa + proprietário');
 
@@ -279,9 +279,9 @@ try {
   }
 
   // ---------- perfis de acesso ----------
-  await call('POST', '/users', { name: 'Técnico', email: `tec${Date.now()}@torven.app`, password: '123456', role: 'technician', technician_id: techs[0].id })
+  await call('POST', '/users', { name: 'Técnico', email: `tec${Date.now()}@torven.app`, password: 'Tecnico2026xy', role: 'technician', technician_id: techs[0].id })
     .then(async (u) => {
-      const login = await call('POST', '/auth/login', { email: u.email, password: '123456' });
+      const login = await call('POST', '/auth/login', { email: u.email, password: 'Tecnico2026xy' });
       const ownerToken = token;
       token = login.token;
       const mine = await call('GET', '/orders');
@@ -391,8 +391,8 @@ try {
 
   // perfis
   const mk = async (role) => {
-    const u = await call('POST', '/users', { name: `U ${role}`, email: `${role}${Date.now()}@torven.app`, password: '123456', role });
-    return (await call('POST', '/auth/login', { email: u.email, password: '123456' })).token;
+    const u = await call('POST', '/users', { name: `U ${role}`, email: `${role}${Date.now()}@torven.app`, password: 'Tecnico2026xy', role });
+    return (await call('POST', '/auth/login', { email: u.email, password: 'Tecnico2026xy' })).token;
   };
   const ownerTok = token;
   const tEst = await mk('estimator');
@@ -407,12 +407,12 @@ try {
   token = tView;
   await call('POST', '/requests', { customer_id: c.id, title: 'x' }, [403]);
   ok((await call('GET', '/requests')).length >= 4, 'consulta: lê solicitações, não cria');
-  await call('POST', '/users', { name: 'x', email: 'x@x.com', password: '123456', role: 'admin' }, [403]);
+  await call('POST', '/users', { name: 'x', email: 'x@x.com', password: 'Tecnico2026xy', role: 'admin' }, [403]);
   token = tFin;
   await call('POST', '/requests', { customer_id: c.id, title: 'x' }, [403]);
   ok((await call('GET', '/cash/transactions')).items, 'financeiro: acessa caixa, não cria solicitação');
   token = ownerTok;
-  await call('POST', '/users', { name: 'x', email: `own${Date.now()}@x.com`, password: '123456', role: 'owner' }, [400]);
+  await call('POST', '/users', { name: 'x', email: `own${Date.now()}@x.com`, password: 'Tecnico2026xy', role: 'owner' }, [400]);
   ok(true, 'não cria segundo proprietário');
 
   // ================= FASE 2 — operação técnica =================
@@ -486,8 +486,8 @@ try {
   ok(['time', 'inspection', 'warranty', 'schedule'].every((e) => aud2.rows.some((x) => x.entity === e)), 'auditoria de agenda, apontamentos, inspeções e garantias');
 
   // técnico: só as próprias horas e a própria agenda
-  const tecUser = await call('POST', '/users', { name: 'Téc 2', email: `tec2${Date.now()}@torven.app`, password: '123456', role: 'technician', technician_id: techs[1].id });
-  const tecTok = (await call('POST', '/auth/login', { email: tecUser.email, password: '123456' })).token;
+  const tecUser = await call('POST', '/users', { name: 'Téc 2', email: `tec2${Date.now()}@torven.app`, password: 'Tecnico2026xy', role: 'technician', technician_id: techs[1].id });
+  const tecTok = (await call('POST', '/auth/login', { email: tecUser.email, password: 'Tecnico2026xy' })).token;
   token = tecTok;
   await call('POST', `/production/orders/${rw.order_id}/time/start`, { technician_id: techs[0].id }, [403, 404]);
   const tb = await call('GET', '/production/board');
@@ -642,7 +642,7 @@ try {
   token = ownerTok;
 
   // isolamento entre empresas
-  const other = await call('POST', '/auth/register', { companyName: 'Outra Serralheria', name: 'Outro', email: `outro${Date.now()}@torven.app`, password: '123456' });
+  const other = await call('POST', '/auth/register', { companyName: 'Outra Serralheria', name: 'Outro', email: `outro${Date.now()}@torven.app`, password: 'Tecnico2026xy' });
   token = other.token;
   await call('GET', `/quotes/${q3.id}`, null, [404]);
   await call('GET', `/requests/${rq.id}`, null, [404]);
@@ -683,7 +683,7 @@ try {
   ok((await call('GET', '/orders')).length === 0 && (await call('GET', '/customers')).length === 0, 'dados de exemplo apagados na ativação');
   const relog = await call('POST', '/auth/login', { email: act.user.email, password: 'segredo1' });
   ok(relog.token, 'login com as credenciais definidas na ativação');
-  await call('POST', '/auth/activate', { companyName: 'X', name: 'Y', email: `z${Date.now()}@x.com`, password: '123456' }, [400]);
+  await call('POST', '/auth/activate', { companyName: 'X', name: 'Y', email: `z${Date.now()}@x.com`, password: 'Tecnico2026xy' }, [400]);
   ok(true, 'não reativa empresa normal');
 
   console.log('\nTodos os testes passaram.');

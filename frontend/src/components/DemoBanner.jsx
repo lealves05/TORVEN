@@ -45,7 +45,7 @@ function ActivateModal({ onClose }) {
           <Input label="Telefone / WhatsApp" value={f.phone} onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} />
         </div>
         <Input label="E-mail (será o seu login)" type="email" value={f.email} onChange={set('email')} />
-        <Input label="Senha" type="password" value={f.password} onChange={set('password')} hint="Mínimo de 6 caracteres" autoComplete="new-password" />
+        <Input label="Senha" type="password" value={f.password} onChange={set('password')} hint="Mínimo de 10 caracteres, com letras e números" autoComplete="new-password" />
         <div className="rounded-app-sm border border-line p-3">
           <Toggle checked={f.keepData} onChange={(v) => setF({ ...f, keepData: v })} label="Manter os dados de exemplo"
             hint={f.keepData ? 'Clientes, OS, materiais e lançamentos fictícios continuam no sistema.' : 'Recomendado: começa limpo, mantendo só as configurações e a aparência.'} />

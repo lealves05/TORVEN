@@ -5,6 +5,7 @@ import { q, one } from '../db.js';
 import { need } from '../auth.js';
 import { parse, notFound, HttpError, ROLES } from '../util.js';
 import { audit } from '../audit.js';
+import { passwordSchema, setPassword } from '../security.js';
 
 const r = Router();
 r.use(need('users'));
@@ -26,8 +27,21 @@ const base = {
   active: z.boolean().optional(),
 };
 
+// F09: técnico e unidade precisam ser da mesma empresa da sessão (formato UUID não basta)
+async function assertRefs(companyId, d) {
+  if (d.technician_id) {
+    const t = await one('select 1 from technicians where id = $1 and company_id = $2', [d.technician_id, companyId]);
+    if (!t) throw new HttpError(400, 'Técnico inválido.');
+  }
+  if (d.unit_id) {
+    const u = await one('select 1 from units where id = $1 and company_id = $2', [d.unit_id, companyId]);
+    if (!u) throw new HttpError(400, 'Unidade inválida.');
+  }
+}
+
 r.post('/', async (req, res) => {
-  const d = parse(z.object({ ...base, password: z.string().min(6, 'senha mínima de 6 caracteres') }), req.body);
+  const d = parse(z.object({ ...base, password: passwordSchema }), req.body);
+  await assertRefs(req.companyId, d);
   const u = await one(
     `insert into users (company_id, name, email, password_hash, role, technician_id, unit_id)
      values ($1,$2,$3,$4,$5,$6,$7) returning ${cols}`,
@@ -40,17 +54,21 @@ r.put('/:id', async (req, res) => {
   const d = parse(z.object({
     ...base,
     role: z.enum(Object.keys(ROLES)),
-    password: z.string().min(6).optional().or(z.literal('')),
+    password: passwordSchema.optional().or(z.literal('')),
   }), req.body);
   const cur = await one('select * from users where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
+  await assertRefs(req.companyId, d);
   if (cur.role === 'owner' && d.role !== 'owner') throw new HttpError(400, 'O proprietário não pode ter o papel alterado.');
   if (cur.role !== 'owner' && d.role === 'owner') throw new HttpError(400, 'Só pode haver um proprietário.');
   if (cur.id === req.user.id && d.active === false) throw new HttpError(400, 'Você não pode desativar a si mesmo.');
   const u = await one(
-    `update users set name=$1, email=$2, role=$3, technician_id=$4, active=$5, unit_id=$6 where id=$7 returning ${cols}`,
-    [d.name, d.email, d.role, d.technician_id || null, d.active ?? cur.active, d.unit_id ?? cur.unit_id ?? null, cur.id]);
-  if (d.password) await q('update users set password_hash = $1 where id = $2', [await bcrypt.hash(d.password, 10), cur.id]);
+    `update users set name=$1, email=$2, role=$3, technician_id=$4, active=$5, unit_id=$6,
+       auth_version = auth_version + case when $8::boolean then 1 else 0 end where id=$7 and company_id=$9 returning ${cols}`,
+    [d.name, d.email, d.role, d.technician_id || null, d.active ?? cur.active, d.unit_id ?? cur.unit_id ?? null, cur.id,
+      (d.active === false && cur.active) || cur.role !== d.role, req.companyId]);
+  // senha redefinida pelo administrador: derruba as sessões do usuário (nenhuma sessão é criada em nome dele)
+  if (d.password) await setPassword(null, cur.id, req.companyId, d.password);
   const changes = [];
   if (cur.role !== d.role) changes.push(`perfil ${ROLES[cur.role]} → ${ROLES[d.role]}`);
   if (cur.active !== u.active) changes.push(u.active ? 'reativado' : 'desativado');

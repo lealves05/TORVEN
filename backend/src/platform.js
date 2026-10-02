@@ -140,11 +140,42 @@ export async function accessFor(companyId, { fresh = false } = {}) {
   }
 }
 
+// ---------------- Modo de operação (F13) ----------------
+// standalone: instalação sem cobrança central (acesso livre, explícito). saas_required: a central decide o acesso.
+// Padrão: saas_required em produção, standalone fora dela. Pode ser definido por PLATFORM_MODE ou _secrets.platform_mode.
+const STALE_MAX_MS = 72 * 3600 * 1000; // última situação conhecida vale até 72 h com a central fora do ar
+let modeCache = { at: 0, v: null };
+export async function platformMode() {
+  if (Date.now() - modeCache.at < 60000 && modeCache.v) return modeCache.v;
+  let m = process.env.PLATFORM_MODE || '';
+  if (!m) { try { m = (await one("select value from _secrets where key = 'platform_mode'"))?.value || ''; } catch { /* sem tabela */ } }
+  if (!['standalone', 'saas_required'].includes(m)) m = process.env.NODE_ENV === 'production' ? 'saas_required' : 'standalone';
+  modeCache = { at: Date.now(), v: m };
+  return m;
+}
+const unavailable = () => new HttpError(503, 'Não foi possível confirmar a situação da assinatura agora. Tente de novo em alguns minutos; se continuar, fale com o suporte.', { code: 'PLATFORM_UNAVAILABLE' });
+
 /** Portão: empresa bloqueada → 402 (exceto a regularização); módulo fora do plano → 403. */
 export async function platformGate(req, _res, next) {
+  const mode = await platformMode();
   const access = await accessFor(req.companyId);
   req.access = access;
-  if (!access) return next();
+  if (!access) {
+    if (mode === 'standalone') return next();
+    const c = await one('select is_demo, platform_access, platform_access_at from companies where id=$1', [req.companyId]);
+    if (c?.is_demo) return next(); // demonstração não passa pela central
+    if (!(await platformConfig())) {
+      console.error('[plataforma] modo saas_required sem central configurada');
+      throw new HttpError(503, 'A cobrança central não está configurada nesta instalação. Fale com o suporte.', { code: 'PLATFORM_NOT_CONFIGURED' });
+    }
+    throw unavailable(); // sem nenhuma situação conhecida e central fora do ar
+  }
+  if (mode === 'saas_required') {
+    const c = await one('select platform_access_at from companies where id=$1', [req.companyId]);
+    const age = c?.platform_access_at ? Date.now() - new Date(c.platform_access_at).getTime() : Infinity;
+    // situação velha demais (central fora há mais de 72 h): só a regularização e o bloqueio continuam valendo
+    if (age > STALE_MAX_MS && !access.blocked) throw unavailable();
+  }
   const path = req.path;
   if (access.blocked && !BLOCKED_ALLOWED.some((p) => path === p || path.startsWith(`${p}/`))) {
     throw new HttpError(402, 'O acesso está temporariamente suspenso devido à situação da assinatura. Seus dados permanecem preservados.',

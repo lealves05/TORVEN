@@ -43,17 +43,21 @@ export function createApp() {
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(compression());
 
-  const origins = (process.env.CORS_ORIGIN || '')
+  // CORS (F06): origens exatas por ambiente. O site chama a API pela mesma origem (rewrite da Vercel), então
+  // em produção sem lista nenhuma origem externa recebe permissão. localhost só fora de produção.
+  const prod = process.env.NODE_ENV === 'production';
+  const origins = (process.env.CORS_ORIGIN || (prod ? 'https://torven-ebon.vercel.app' : ''))
     .split(',').map((s) => s.trim()).filter(Boolean);
   app.use(cors({
     origin(origin, cb) {
-      if (!origin || origins.length === 0) return cb(null, true);
-      const ok = origins.some((o) =>
-        o === origin || (o.startsWith('*.') && origin.endsWith(o.slice(1))) ||
-        /^http:\/\/localhost(:\d+)?$/.test(origin));
-      cb(ok ? null : new HttpError(403, 'Origem não permitida'), ok);
+      if (!origin) return cb(null, false);
+      const ok = origins.includes(origin) || (!prod && (origins.length === 0 || /^http:\/\/localhost(:\d+)?$/.test(origin)));
+      cb(null, ok); // origem desconhecida: sem cabeçalho de permissão (o navegador barra); a rota continua exigindo login
     },
   }));
+  // respostas da API não ficam em cache (dados privados, tokens, exportações) — F11
+  app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); res.set('Pragma', 'no-cache'); next(); });
+  app.use((_req, res, next) => { res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); next(); });
   // corpo bruto para conferir a assinatura das chamadas da central da plataforma
   app.use(express.json({ limit: '3mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/')) req.rawBody = buf; } }));
 

@@ -135,7 +135,7 @@ export function Register() {
           <Input label="Telefone / WhatsApp" value={f.phone} onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} />
         </div>
         <Input label="E-mail (login)" type="email" required value={f.email} onChange={set('email')} />
-        <Input label="Senha" type="password" minLength={6} required value={f.password} onChange={set('password')} hint="Mínimo de 6 caracteres" />
+        <Input label="Senha" type="password" minLength={10} required autoComplete="new-password" value={f.password} onChange={set('password')} hint="Mínimo de 10 caracteres, com letras e números" />
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-1" checked={f.demo} onChange={(e) => setF({ ...f, demo: e.target.checked })} />
           <span>Começar com dados de exemplo<span className="block text-xs text-ink-faint">Técnicos, serviços, materiais e OS fictícias para aprender o sistema.</span></span>
@@ -208,7 +208,7 @@ export function ResetPassword() {
             <Link to="/entrar" className="btn-primary w-full">Entrar</Link></div>
         ) : (
           <form onSubmit={submit} className="mt-6 space-y-4">
-            <p className="text-sm text-ink-faint">Use ao menos 8 caracteres, com letras e números.</p>
+            <p className="text-sm text-ink-faint">Use ao menos 10 caracteres, com letras e números.</p>
             {err && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">{err}</div>}
             <Input label="Nova senha" type="password" autoComplete="new-password" required value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
             <Input label="Repita a nova senha" type="password" autoComplete="new-password" required value={f.confirm} onChange={(e) => setF({ ...f, confirm: e.target.value })} />

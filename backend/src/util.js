@@ -312,3 +312,18 @@ export const fiscalWithDefaults = (f = {}) => ({
 /** Token aleatório para links públicos. */
 export const publicToken = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 24);
+
+// ---------------- Política de senha (F08) ----------------
+// Uma regra só para cadastro, ativação, troca própria, redefinição pelo administrador e recuperação por e-mail:
+// 10 a 72 bytes (limite do bcrypt, sem truncar), letras e números, sem sequências/senhas comuns. Colar e autopreencher são permitidos.
+const COMMON_PASSWORDS = ['1234567890', '12345678', 'password', 'senha123', 'senha1234', 'qwerty', 'abc12345', 'torven', '123456789', 'mudar123', 'admin123'];
+export function passwordProblem(p) {
+  const s = String(p ?? '');
+  if (s.length < 10) return 'a senha deve ter ao menos 10 caracteres';
+  if (Buffer.byteLength(s, 'utf8') > 72) return 'a senha deve ter no máximo 72 bytes (cerca de 72 letras sem acento)';
+  if (!/[A-Za-zÀ-ÿ]/.test(s) || !/\d/.test(s)) return 'use letras e números na senha';
+  const low = s.toLowerCase();
+  if (new Set(s).size < 5 || COMMON_PASSWORDS.some((c) => low.includes(c))) return 'esta senha é muito fraca ou comum; escolha outra';
+  return null;
+}
+export const PASSWORD_HINT = 'Mínimo de 10 caracteres, com letras e números';
