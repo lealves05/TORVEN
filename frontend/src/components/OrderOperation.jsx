@@ -11,6 +11,7 @@ import { Input, Textarea, Select, Modal, useAction, FAIL, cx } from './ui';
 import { ACTIVITY, Elapsed, hm } from '../pages/Production';
 import { SCHEDULE_KIND, SCHEDULE_STATUS, ScheduleModal } from '../pages/Agenda';
 import { WarrantyBadge, WarrantyModal } from '../pages/Warranty';
+import VoiceTextarea from './VoiceTextarea';
 
 export const INSPECTION_RESULT = {
   aprovado: { label: 'Aprovada', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
@@ -292,7 +293,7 @@ export function WarrantyCard({ o, onChanged }) {
       {open && (
         <Modal open onClose={() => setOpen(false)} size="sm" title="Abrir garantia" subtitle={within ? 'Dentro do prazo de garantia' : 'Atenção: fora do prazo de garantia'}
           footer={<><button className="btn-ghost" onClick={() => setOpen(false)}>Voltar</button><button className="btn-primary" disabled={busy || text.trim().length < 5} onClick={create}>Abrir</button></>}>
-          <Textarea label="O que o cliente relatou" rows={4} value={text} onChange={(e) => setText(e.target.value)} />
+          <VoiceTextarea label="O que o cliente relatou" rows={4} value={text} onChange={(e) => setText(e.target.value)} />
         </Modal>
       )}
       {view && <WarrantyModal claim={view} onClose={() => { setView(null); onChanged(); }} />}

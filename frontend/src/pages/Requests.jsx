@@ -13,6 +13,7 @@ import { PageHeader, Input, Textarea, Select, Loading, Empty, Modal, useAction, 
 import CustomerPicker, { EquipmentPicker } from '../components/CustomerPicker';
 import Attachments from '../components/Attachments';
 import { useTable, SortTh, Pager } from '../components/Table';
+import VoiceTextarea from '../components/VoiceTextarea';
 
 export const RequestBadge = ({ status }) => <span className={cx('chip whitespace-nowrap', REQUEST_STATUS[status]?.cls)}>{REQUEST_STATUS[status]?.label || status}</span>;
 
@@ -140,7 +141,7 @@ function RequestForm({ initial, onSaved, onCancel }) {
       </section>
       <section className="card space-y-4 p-5">
         <Input label="O que o cliente precisa (resumo)" value={f.title} onChange={set('title')} placeholder="Ex.: Portão basculante não fecha" />
-        <Textarea label="Relato do cliente / detalhes" rows={4} value={f.description} onChange={set('description')} />
+        <VoiceTextarea label="Relato do cliente / detalhes" rows={4} value={f.description} onChange={set('description')} />
         <div className="grid gap-4 sm:grid-cols-3">
           <Select label="Local do serviço" value={f.service_location} onChange={set('service_location')}>
             <option value="oficina">Na oficina</option><option value="externo">No cliente (externo)</option>
@@ -344,7 +345,7 @@ function DiagnosisModal({ r, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} size="md" title="Diagnóstico técnico"
       footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || text.trim().length < 3} onClick={go}>Salvar</button></>}>
-      <Textarea label="Causa, condição encontrada e solução proposta" rows={6} value={text} onChange={(e) => setText(e.target.value)} hint="O diagnóstico vira o escopo técnico do orçamento." />
+      <VoiceTextarea label="Causa, condição encontrada e solução proposta" rows={6} value={text} onChange={(e) => setText(e.target.value)} hint="O diagnóstico vira o escopo técnico do orçamento." />
     </Modal>
   );
 }

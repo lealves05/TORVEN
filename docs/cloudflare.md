@@ -19,3 +19,6 @@ Documento completo da migração (ORBI, TORVEN, RUSTEN e Master): `ORBI/docs/clo
 - Veículos no cadastro do cliente: vários por cliente (placa, marca, modelo, ano, cor). Por padrão cada placa só pode estar em
   um cadastro (conferido no servidor, com trava contra cadastros simultâneos); Configurações › OS › "Um único cadastro por veículo"
   desliga a restrição. Sem migração nova (usa as colunas de `equipment`).
+- Ditado por voz nos campos de texto (computador e celular): microfone dentro dos campos da OS (relato, acessórios, estado,
+  diagnóstico, solução, observações, anotações) e das solicitações. Pontuação falada ("vírgula", "ponto final", "nova linha");
+  "ponto" solto só vira "." no fim da fala (por causa de "ponto de solda"). Desligável em Configurações › OS › "Ditado por voz".

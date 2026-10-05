@@ -5,11 +5,12 @@ import { Save, Wrench, MapPin, RotateCcw, Car } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
-import { PageHeader, Input, Textarea, Select, MoneyInput, useAction, FAIL, cx } from '../components/ui';
+import { PageHeader, Input, Select, MoneyInput, useAction, FAIL, cx } from '../components/ui';
 import { money } from '../lib/format';
 import CustomerPicker, { EquipmentPicker } from '../components/CustomerPicker';
 import PlateCapture from '../components/PlateCapture';
 import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
+import VoiceTextarea from '../components/VoiceTextarea';
 
 export default function OrderNew() {
   const nav = useNavigate();
@@ -112,11 +113,11 @@ export default function OrderNew() {
 
           <section className="card space-y-4 p-5">
             <h2 className="font-semibold">Relato e recebimento</h2>
-            <Textarea label="Problema relatado / serviço solicitado" rows={3} value={f.problem} onChange={set('problem')}
+            <VoiceTextarea label="Problema relatado / serviço solicitado" rows={3} value={f.problem} onChange={set('problem')}
               placeholder="Ex.: trinca na longarina, portão arrastando, máquina não abre arco…" />
             <div className="grid gap-4 sm:grid-cols-2">
-              <Textarea label="Acessórios deixados" rows={2} value={f.accessories} onChange={set('accessories')} placeholder="Tocha, garra, cabo obra, cilindro…" />
-              <Textarea label="Estado / condições do item" rows={2} value={f.condition} onChange={set('condition')} placeholder="Riscos, amassados, peças faltando…" />
+              <VoiceTextarea label="Acessórios deixados" rows={2} value={f.accessories} onChange={set('accessories')} placeholder="Tocha, garra, cabo obra, cilindro…" />
+              <VoiceTextarea label="Estado / condições do item" rows={2} value={f.condition} onChange={set('condition')} placeholder="Riscos, amassados, peças faltando…" />
             </div>
           </section>
 
@@ -183,8 +184,8 @@ export default function OrderNew() {
             </Select>
           </section>
           <section className="card space-y-4 p-5">
-            <Textarea label="Observações (aparecem na OS impressa)" rows={2} value={f.notes} onChange={set('notes')} />
-            <Textarea label="Anotações internas" rows={2} value={f.internal_notes} onChange={set('internal_notes')} />
+            <VoiceTextarea label="Observações (aparecem na OS impressa)" rows={2} value={f.notes} onChange={set('notes')} />
+            <VoiceTextarea label="Anotações internas" rows={2} value={f.internal_notes} onChange={set('internal_notes')} />
           </section>
         </div>
       </div>

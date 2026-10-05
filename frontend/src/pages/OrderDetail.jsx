@@ -11,7 +11,7 @@ import {
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import { useUI } from '../context/UIContext';
-import { Input, Textarea, Select, Modal, Toggle, Loading, useAction, FAIL, cx } from '../components/ui';
+import { Input, Select, Modal, Toggle, Loading, useAction, FAIL, cx } from '../components/ui';
 import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
 import PaymentModal from '../components/PaymentModal';
 import InvoiceModal from '../components/InvoiceModal';
@@ -19,6 +19,7 @@ import TerminalChargeModal from '../components/TerminalChargeModal';
 import { EquipmentPicker } from '../components/CustomerPicker';
 import { StatusBadge } from './Dashboard';
 import { StateChips, ExecutionCard, QualityCard, ScheduleCard, WarrantyCard } from '../components/OrderOperation';
+import VoiceTextarea from '../components/VoiceTextarea';
 
 const EDITABLE = ['customer_id', 'equipment_id', 'technician_id', 'priority', 'service_location', 'service_address', 'promised_at',
   'problem', 'diagnosis', 'solution', 'accessories', 'condition', 'discount', 'warranty_days', 'notes', 'internal_notes'];
@@ -198,12 +199,12 @@ export default function OrderDetail() {
           {o.kind === 'os' && (
             <section className="card space-y-4 p-5">
               <h2 className="font-semibold">Diagnóstico e execução</h2>
-              <Textarea label="Problema relatado" rows={2} value={f.problem} onChange={set('problem')} disabled={!editable} />
-              <Textarea label="Diagnóstico técnico" rows={2} value={f.diagnosis} onChange={set('diagnosis')} disabled={!editable} placeholder="O que foi encontrado na inspeção…" />
-              <Textarea label="Serviço executado / solução" rows={2} value={f.solution} onChange={set('solution')} disabled={!editable} placeholder="O que foi feito…" />
+              <VoiceTextarea label="Problema relatado" rows={2} value={f.problem} onChange={set('problem')} disabled={!editable} />
+              <VoiceTextarea label="Diagnóstico técnico" rows={2} value={f.diagnosis} onChange={set('diagnosis')} disabled={!editable} placeholder="O que foi encontrado na inspeção…" />
+              <VoiceTextarea label="Serviço executado / solução" rows={2} value={f.solution} onChange={set('solution')} disabled={!editable} placeholder="O que foi feito…" />
               <div className="grid gap-4 sm:grid-cols-2">
-                <Textarea label="Acessórios deixados" rows={2} value={f.accessories} onChange={set('accessories')} disabled={!editable} />
-                <Textarea label="Estado na entrada" rows={2} value={f.condition} onChange={set('condition')} disabled={!editable} />
+                <VoiceTextarea label="Acessórios deixados" rows={2} value={f.accessories} onChange={set('accessories')} disabled={!editable} />
+                <VoiceTextarea label="Estado na entrada" rows={2} value={f.condition} onChange={set('condition')} disabled={!editable} />
               </div>
             </section>
           )}
@@ -248,8 +249,8 @@ export default function OrderDetail() {
               {o.warranty_until && <Row k="Garantia até" v={fmt(o.warranty_until)} strong={new Date(o.warranty_until) >= new Date()} />}
               {o.cancelled_at && <Row k="Cancelada" v={fmtDateTime(o.cancelled_at)} />}
             </dl>
-            <Textarea label="Observações (saem na impressão)" rows={2} value={f.notes} onChange={set('notes')} disabled={!editable} />
-            <Textarea label="Anotações internas" rows={2} value={f.internal_notes} onChange={set('internal_notes')} disabled={!editable} />
+            <VoiceTextarea label="Observações (saem na impressão)" rows={2} value={f.notes} onChange={set('notes')} disabled={!editable} />
+            <VoiceTextarea label="Anotações internas" rows={2} value={f.internal_notes} onChange={set('internal_notes')} disabled={!editable} />
           </section>
 
           {o.kind === 'os' && (can('schedule_view', 'schedule_manage')) && <ScheduleCard o={o} onChanged={load} />}

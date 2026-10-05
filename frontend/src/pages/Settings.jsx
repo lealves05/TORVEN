@@ -103,6 +103,8 @@ export default function Settings() {
             <Toggle checked={!!o.requireReceiver} onChange={(v) => setO({ requireReceiver: v })} label="Exigir nome de quem recebeu na entrega" />
             <Toggle checked={o.voiceCommands !== false} onChange={(v) => setO({ voiceCommands: v })} label="Comandos de voz"
               hint="Botão de microfone para abrir OS e apontar horas falando. Sempre pede confirmação antes de executar." />
+            <Toggle checked={o.voiceDictation !== false} onChange={(v) => setO({ voiceDictation: v })} label="Ditado por voz nos campos de texto"
+              hint="Microfone dentro dos campos da OS e das solicitações (relato, acessórios, diagnóstico, observações), no computador e no celular." />
             <Toggle checked={o.plateOnOpen !== false} onChange={(v) => setO({ plateOnOpen: v })} label="Pesquisa por placa na abertura da OS"
               hint="Foto ou digitação da placa: mostra os dados do veículo e coloca o proprietário como cliente. A consulta paga é configurada em Integrações." />
             {o.plateOnOpen !== false && (

@@ -129,6 +129,7 @@ export const DEFAULT_SETTINGS = {
     requireReceiver: false,
     defaultVisitMinutes: 60,
     voiceCommands: true,            // abrir e apontar OS por voz (reconhecimento do navegador)
+    voiceDictation: true,           // microfone nos campos de texto da OS (relato, diagnóstico, observações)
     plateOnOpen: true,              // botão "foto da placa" na abertura da OS
     uniqueVehicle: true,            // uma placa só pode estar em um cadastro (desligável em Configurações)
     plateAutoLookup: false,         // placa sem cadastro: consultar o serviço pago sem pedir clique (consome consulta)
