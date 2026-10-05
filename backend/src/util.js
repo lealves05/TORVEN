@@ -128,6 +128,9 @@ export const DEFAULT_SETTINGS = {
     requireInspection: false,
     requireReceiver: false,
     defaultVisitMinutes: 60,
+    voiceCommands: true,            // abrir e apontar OS por voz (reconhecimento do navegador)
+    plateOnOpen: true,              // botão "foto da placa" na abertura da OS
+    terminalOnClose: 'perguntar',   // ao fechar/entregar com saldo: 'perguntar' | 'automatico' (envia à maquininha padrão) | 'desligado'
     termsOrder:
       'O equipamento/peça deixado para reparo deverá ser retirado em até 90 dias após o aviso de conclusão. '
       + 'A garantia cobre apenas o serviço executado e não cobre mau uso, sobrecarga ou intervenção de terceiros.',
@@ -251,6 +254,7 @@ export const PERMISSIONS = [
   { group: 'Administração', key: 'settings', label: 'Configurações da empresa' },
   { group: 'Administração', key: 'units_manage', label: 'Unidades' },
   { group: 'Administração', key: 'fiscal_settings', label: 'Integração fiscal (certificado/token)' },
+  { group: 'Administração', key: 'integrations', label: 'Integrações: consulta de placa e maquininhas de cartão' },
   { group: 'Administração', key: 'users', label: 'Usuários e perfis de acesso' },
   { group: 'Administração', key: 'audit_view', label: 'Logs e auditoria' },
   { group: 'Administração', key: 'data_export', label: 'Exportar dados' },

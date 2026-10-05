@@ -6,6 +6,7 @@ import {
   Inbox, HeartHandshake, Headset, Boxes, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
+import VoiceCommand from './VoiceCommand';
 import { useAuth } from '../context/AuthContext';
 import { ROLES } from '../lib/format';
 import { cx, Avatar } from './ui';
@@ -85,7 +86,7 @@ export function useNav() {
       can('followups') && feature('relacionamento') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },
     ] },
     { label: 'Configurações', icon: Settings, children: [
-      can('settings', 'users', 'fiscal_settings') && { to: '/configuracoes', label: 'Empresa e sistema', icon: Settings, end: true },
+      can('settings', 'users', 'fiscal_settings', 'integrations') && { to: '/configuracoes', label: 'Empresa e sistema', icon: Settings, end: true },
       can('units_manage', 'settings') && { to: '/configuracoes/unidades', label: 'Unidades', icon: Building2 },
       can('services_manage') && { to: '/servicos', label: 'Serviços e preços', icon: Wrench },
       can('technicians_manage') && { to: '/tecnicos', label: 'Técnicos', icon: HardHat },
@@ -281,7 +282,7 @@ function TopLayout() {
               </NavLink>
             )))}
           </nav>
-          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><Notifications light /><QuickActions light /><UserMenu light /></div>
+          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><VoiceCommand light /><Notifications light /><QuickActions light /><UserMenu light /></div>
         </div>
       </header>
       {open && <MobileDrawer nav={nav} onClose={() => setOpen(false)} />}
@@ -371,6 +372,7 @@ function SideLayout() {
           <div className="hidden min-w-0 flex-1 lg:block"><Breadcrumbs nav={nav} /></div>
           <div className="ml-auto flex items-center gap-1.5">
             <SearchButton />
+            <VoiceCommand />
             <Notifications />
             <QuickActions />
             <div className="hidden sm:block"><UserMenu /></div>

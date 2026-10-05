@@ -37,6 +37,9 @@ import exportRoutes from './routes/export.js';
 import { platformApi, billing } from './routes/platform.js';
 import { platformGate } from './platform.js';
 import { edgeProxyIp } from './edgeProxy.js';
+import integrationRoutes from './routes/integrations.js';
+import vehicleRoutes from './routes/vehicles.js';
+import terminalChargeRoutes from './routes/terminalCharges.js';
 
 export function createApp() {
   const app = express();
@@ -59,7 +62,7 @@ export function createApp() {
   }));
   // respostas da API não ficam em cache (dados privados, tokens, exportações) — F11
   app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); res.set('Pragma', 'no-cache'); next(); });
-  app.use((_req, res, next) => { res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); next(); });
+  app.use((_req, res, next) => { res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); next(); }); // respostas da API (o site define as suas)
   // corpo bruto para conferir a assinatura das chamadas da central da plataforma
   app.use(express.json({ limit: '3mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/')) req.rawBody = buf; } }));
 
@@ -102,6 +105,9 @@ export function createApp() {
   api.use('/finance', financeRoutes);
   api.use('/relationship', relationshipRoutes);
   api.use('/export', exportRoutes);
+  api.use('/integrations', integrationRoutes);   // consulta de placa e maquininhas (configuração)
+  api.use('/vehicles', vehicleRoutes);           // placa → cadastro / consulta / cadastro simples
+  api.use('/terminal-charges', terminalChargeRoutes); // cobrança da OS na maquininha
   api.use('/', workspaceRoutes);
   app.use('/api', api);
 

@@ -86,6 +86,16 @@ r.post('/orders/:id/time/start', need('time_log'), async (req, res) => {
   res.status(201).json(log);
 });
 
+/** Apontamentos em andamento do usuário (o técnico vinculado a ele) — usado por "parar apontamento" por voz. */
+r.get('/time/open', need('time_log'), async (req, res) => {
+  const tech = req.ownTechnician;
+  if (!tech) return res.json([]);
+  const { rows } = await q(`select l.id, l.order_id, o.number as order_number, l.started_at, l.activity, t.name as technician_name
+                              from order_time_logs l join orders o on o.id = l.order_id join technicians t on t.id = l.technician_id
+                             where l.company_id = $1 and l.technician_id = $2 and l.ended_at is null order by l.started_at desc`, [req.companyId, tech]);
+  res.json(rows);
+});
+
 r.post('/time/:logId/stop', need('time_log'), async (req, res) => {
   const d = parse(z.object({ notes: opt }), req.body);
   const log = await tx(async (db) => {

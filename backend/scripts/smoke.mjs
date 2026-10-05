@@ -677,11 +677,11 @@ try {
   ok(demo.company.is_demo && demo.token, 'demonstração criada com um clique');
   token = demo.token;
   ok((await call('GET', '/orders')).length >= 10 && (await call('GET', '/requests?status=')).length === 3, 'demonstração já vem com dados de exemplo (OS e solicitações)');
-  const act = await call('POST', '/auth/activate', { companyName: 'Serralheria Real', name: 'Dono Real', email: `real${Date.now()}@torven.app`, password: 'segredo1', keepData: false });
+  const act = await call('POST', '/auth/activate', { companyName: 'Serralheria Real', name: 'Dono Real', email: `real${Date.now()}@torven.app`, password: 'SegredoReal2026', keepData: false });
   token = act.token;
   ok(!act.company.is_demo && act.company.name === 'Serralheria Real', 'demonstração ativada para uso normal');
   ok((await call('GET', '/orders')).length === 0 && (await call('GET', '/customers')).length === 0, 'dados de exemplo apagados na ativação');
-  const relog = await call('POST', '/auth/login', { email: act.user.email, password: 'segredo1' });
+  const relog = await call('POST', '/auth/login', { email: act.user.email, password: 'SegredoReal2026' });
   ok(relog.token, 'login com as credenciais definidas na ativação');
   await call('POST', '/auth/activate', { companyName: 'X', name: 'Y', email: `z${Date.now()}@x.com`, password: 'Tecnico2026xy' }, [400]);
   ok(true, 'não reativa empresa normal');

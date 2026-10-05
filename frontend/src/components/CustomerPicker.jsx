@@ -6,11 +6,11 @@ import { useAuth } from '../context/AuthContext';
 import { Modal, Input, Select, Textarea, useAction, FAIL, cx } from './ui';
 
 /** Busca de cliente com cadastro rápido. value = objeto do cliente (ou null). */
-export default function CustomerPicker({ value, onChange, label = 'Cliente', optional, autoFocus }) {
+export default function CustomerPicker({ value, onChange, label = 'Cliente', optional, autoFocus, initialText }) {
   const { can } = useAuth();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText || '');
   const [list, setList] = useState([]);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!initialText); // nome falado no comando de voz: já mostra as opções
   const [creating, setCreating] = useState(null);
   const ref = useRef(null);
 
@@ -144,7 +144,7 @@ export function EquipmentPicker({ customerId, value, onChange, newEquipment, onN
             else { onNewEquipment(null); onChange(e.target.value || null); }
           }}>
           <option value="">{customerId ? (list.length ? 'Selecione…' : 'Nenhum cadastrado') : 'Selecione o cliente primeiro'}</option>
-          {list.map((e) => <option key={e.id} value={e.id}>{[e.description, e.brand, e.model, e.serial && `nº ${e.serial}`].filter(Boolean).join(' · ')}</option>)}
+          {list.map((e) => <option key={e.id} value={e.id}>{[e.plate && `Placa ${e.plate}`, e.description, e.brand, e.model, e.serial && `nº ${e.serial}`].filter(Boolean).join(' · ')}</option>)}
           {customerId && <option value="__new">+ Cadastrar novo objeto (equipamento, peça, estrutura…)</option>}
         </Select>
       </div>

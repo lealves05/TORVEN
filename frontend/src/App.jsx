@@ -105,7 +105,7 @@ export default function App() {
             <Route path="notas" element={<Guard perms={['invoices_issue', 'invoices_cancel']}><Invoices /></Guard>} />
             <Route path="relatorios" element={<Guard perms={['reports']}><Reports /></Guard>} />
             <Route path="comissoes" element={<Guard perms={['commissions']}><Commissions /></Guard>} />
-            <Route path="configuracoes" element={<Guard perms={['settings', 'users', 'fiscal_settings']}><Settings /></Guard>} />
+            <Route path="configuracoes" element={<Guard perms={['settings', 'users', 'fiscal_settings', 'integrations']}><Settings /></Guard>} />
             <Route path="configuracoes/unidades" element={<Guard perms={['units_manage', 'settings']}><Units /></Guard>} />
             <Route path="agenda" element={<Guard perms={['schedule_view', 'schedule_manage']}><Agenda /></Guard>} />
             <Route path="producao" element={<Guard perms={['schedule_view', 'time_log']}><Production /></Guard>} />

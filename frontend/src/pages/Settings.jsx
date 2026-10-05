@@ -7,6 +7,7 @@ import { applyTheme, PRESET_COLORS, RADIUS, FONTS } from '../lib/theme';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import FiscalSetup from '../components/FiscalSetup';
+import IntegrationsSetup from '../components/IntegrationsSetup';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, useAction, FAIL, cx } from '../components/ui';
 
@@ -14,7 +15,7 @@ export default function Settings() {
   const { company, setCompany, user, can } = useAuth();
   const full = can('settings');
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') || (full ? 'empresa' : can('fiscal_settings') ? 'fiscal' : 'perfis');
+  const tab = params.get('tab') || (full ? 'empresa' : can('fiscal_settings') ? 'fiscal' : can('integrations') && !can('users') ? 'integracoes' : 'perfis');
   const setTab = (t) => setParams({ tab: t });
   const [f, setF] = useState(() => structuredClone(company));
   const [run, busy] = useAction();
@@ -50,6 +51,7 @@ export default function Settings() {
         ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' },
           { value: 'financeiro', label: 'Financeiro' }, { value: 'categorias', label: 'Categorias' }] : []),
         ...(can('fiscal_settings') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
+        ...(can('integrations') ? [{ value: 'integracoes', label: 'Integrações' }] : []),
         ...(full ? [{ value: 'modulos', label: 'Módulos' }] : []),
         ...(can('users') ? [{ value: 'perfis', label: 'Perfis de acesso' }, { value: 'equipe', label: 'Usuários' }] : []),
         ...(can('data_export') ? [{ value: 'dados', label: 'Dados e exportação' }] : []),
@@ -99,6 +101,16 @@ export default function Settings() {
             <Toggle checked={o.requirePaymentToDeliver} onChange={(v) => setO({ requirePaymentToDeliver: v })} label="Exigir pagamento (ou parcelas lançadas) para entregar" />
             <Toggle checked={!!o.requireInspection} onChange={(v) => setO({ requireInspection: v })} label="Exigir inspeção final aprovada" hint="A OS só pode ficar pronta e ser entregue com checklist de inspeção aprovado." />
             <Toggle checked={!!o.requireReceiver} onChange={(v) => setO({ requireReceiver: v })} label="Exigir nome de quem recebeu na entrega" />
+            <Toggle checked={o.voiceCommands !== false} onChange={(v) => setO({ voiceCommands: v })} label="Comandos de voz"
+              hint="Botão de microfone para abrir OS e apontar horas falando. Sempre pede confirmação antes de executar." />
+            <Toggle checked={o.plateOnOpen !== false} onChange={(v) => setO({ plateOnOpen: v })} label="Placa na abertura da OS"
+              hint="Foto ou digitação da placa para achar o cliente e o veículo. A consulta paga é configurada em Integrações." />
+            <Select label="Maquininha ao fechar a OS" value={o.terminalOnClose || 'perguntar'} onChange={(e) => setO({ terminalOnClose: e.target.value })}
+              hint="Automático: na entrega, envia o saldo para a maquininha padrão e entrega quando o pagamento for aprovado.">
+              <option value="perguntar">Oferecer a opção na entrega</option>
+              <option value="automatico">Enviar automaticamente para a maquininha padrão</option>
+              <option value="desligado">Não usar maquininha integrada</option>
+            </Select>
             <Input label="Duração padrão da visita técnica (min)" type="number" min={15} step={15} value={o.defaultVisitMinutes ?? 60} onChange={(e) => setO({ defaultVisitMinutes: +e.target.value })} />
             <Textarea label="Termos impressos na OS" rows={4} value={o.termsOrder} onChange={(e) => setO({ termsOrder: e.target.value })} />
             <Textarea label="Termos padrão dos orçamentos" rows={4} value={o.termsQuote} onChange={(e) => setO({ termsQuote: e.target.value })} />
@@ -261,6 +273,7 @@ export default function Settings() {
       )}
 
       {tab === 'fiscal' && <FiscalSetup />}
+      {tab === 'integracoes' && <IntegrationsSetup />}
       {tab === 'perfis' && <PermissionsTab s={s} setS={setS} />}
 
       {tab === 'modulos' && (
@@ -276,7 +289,7 @@ export default function Settings() {
       {tab === 'equipe' && <Team />}
       {tab === 'dados' && <DataExport />}
 
-      {dirty && !['equipe', 'fiscal', 'dados'].includes(tab) && (
+      {dirty && !['equipe', 'fiscal', 'dados', 'integracoes'].includes(tab) && (
         <div className="action-bar">
           <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
             <span className="mr-auto text-sm text-ink-soft">Você tem alterações não salvas.</span>

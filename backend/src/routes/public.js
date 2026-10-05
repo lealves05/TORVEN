@@ -6,6 +6,7 @@ import { q, one, tx } from '../db.js';
 import { parse, notFound, bad, withDefaults, round2 } from '../util.js';
 import { logEvent, orderFinance } from '../domain.js';
 import { expireQuotes, applyDecision } from './quotes.js';
+import { settleCharge } from './terminalCharges.js';
 
 const r = Router();
 r.use(rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false, message: { error: 'Muitas requisições.' } }));
@@ -98,6 +99,25 @@ r.post('/order/:token/approve', async (req, res) => {
     await logEvent(db, o.id, { type: 'status', from: o.status, to: 'aprovada', isPublic: true,
       message: `Aprovado pelo cliente (${d.name}) pelo link${d.note ? `: ${d.note}` : ''}` });
   });
+  res.json({ ok: true });
+});
+
+// ---------- Avisos das maquininhas (webhook) ----------
+// O aviso só dispara a consulta ao provedor (settleCharge); nada é lançado com base no conteúdo recebido.
+r.post('/terminals/:provider/webhook', async (req, res) => {
+  const ref = String(req.query.ref || req.body?.order_nsu || req.body?.external_reference || req.body?.data?.external_reference || req.body?.code || '').slice(0, 80);
+  const ext = String(req.body?.data?.id || req.body?.id || '').slice(0, 120);
+  const { rows: [c] } = ref
+    ? await q('select id, provider, status from terminal_charges where external_reference = $1', [ref])
+    : await q('select id, provider, status from terminal_charges where provider = $1 and external_id = $2', [req.params.provider, ext]);
+  if (!c || c.provider !== req.params.provider) return res.json({ ok: true }); // desconhecido: ignora sem revelar nada
+  // InfinitePay: o aviso traz os identificadores necessários para a conferência (payment_check)
+  const tnsu = req.body?.transaction_nsu; const slug = req.body?.invoice_slug || req.body?.slug;
+  if (tnsu && slug && /^[\w-]{1,120}$/.test(String(tnsu)) && /^[\w-]{1,120}$/.test(String(slug))) {
+    await q("update terminal_charges set raw = coalesce(raw, '{}'::jsonb) || $2::jsonb where id = $1 and status in ('pendente','enviada')",
+      [c.id, JSON.stringify({ transaction_nsu: String(tnsu), invoice_slug: String(slug) })]);
+  }
+  try { await settleCharge(c.id); } catch { return res.status(400).json({ ok: false }); } // provedor tenta de novo
   res.json({ ok: true });
 });
 

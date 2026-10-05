@@ -8,6 +8,7 @@ import { useCatalog } from '../context/CatalogContext';
 import { PageHeader, Input, Textarea, Select, MoneyInput, useAction, FAIL, cx } from '../components/ui';
 import { money } from '../lib/format';
 import CustomerPicker, { EquipmentPicker } from '../components/CustomerPicker';
+import PlateCapture from '../components/PlateCapture';
 import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
 
 export default function OrderNew() {
@@ -46,6 +47,23 @@ export default function OrderNew() {
     if (id) api.get(`/customers/${id}`).then(setCustomer).catch(() => {});
   }, [params]);
 
+  // comando de voz ("abrir ordem de serviço para João, placa ABC1D23, problema …"): preenche o que foi falado
+  const [voice] = useState(() => { try { return JSON.parse(params.get('voz') || 'null'); } catch { return null; } });
+  useEffect(() => {
+    if (!voice) return;
+    setF((x) => ({ ...x, problem: voice.problem || x.problem, priority: voice.priority || x.priority }));
+    if (voice.customer && !voice.plate) {
+      api.get(`/customers?search=${encodeURIComponent(voice.customer)}&limit=2`).then((l) => { if (l.length === 1) setCustomer(l[0]); }).catch(() => {});
+    }
+  }, [voice]);
+
+  /** Veículo escolhido/cadastrado pela placa: preenche cliente e objeto de serviço. */
+  const usePlate = async ({ customer_id, equipment_id }) => {
+    const c = await api.get(`/customers/${customer_id}`).catch(() => null);
+    if (c) setCustomer(c);
+    setF((x) => ({ ...x, equipment_id, equipment: null }));
+  };
+
   const save = async () => {
     const body = {
       ...f, kind: 'os', customer_id: customer?.id, technician_id: f.technician_id || null,
@@ -63,7 +81,9 @@ export default function OrderNew() {
         <div className="space-y-6 lg:col-span-2">
           <section className="card space-y-4 p-5">
             <h2 className="font-semibold">Cliente e equipamento</h2>
-            <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setF((x) => ({ ...x, equipment_id: null, equipment: null })); }} autoFocus />
+            {cfg.plateOnOpen !== false && <PlateCapture onSelect={usePlate} initialPlate={voice?.plate} />}
+            <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setF((x) => ({ ...x, equipment_id: null, equipment: null })); }}
+              autoFocus={!voice} initialText={!customer && voice?.customer && !voice?.plate ? voice.customer : undefined} />
             <EquipmentPicker customerId={customer?.id} value={f.equipment_id} onChange={set('equipment_id')}
               newEquipment={f.equipment} onNewEquipment={(e) => setF((x) => ({ ...x, equipment: e }))} />
           </section>

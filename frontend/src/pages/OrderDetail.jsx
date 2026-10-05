@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Printer, MessageCircle, Wallet, PackageCheck, XCircle, RotateCcw, Receipt, Link2, Copy, Phone, Mail, Undo2,
-  ShoppingCart, MapPin, Send, Lock, Globe, FileText, ExternalLink,
+  ShoppingCart, MapPin, Send, Lock, Globe, FileText, ExternalLink, CreditCard,
 } from 'lucide-react';
 import { api, appUrl } from '../lib/api';
 import {
@@ -15,6 +15,7 @@ import { Input, Textarea, Select, Modal, Toggle, Loading, useAction, FAIL, cx } 
 import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
 import PaymentModal from '../components/PaymentModal';
 import InvoiceModal from '../components/InvoiceModal';
+import TerminalChargeModal from '../components/TerminalChargeModal';
 import { EquipmentPicker } from '../components/CustomerPicker';
 import { StatusBadge } from './Dashboard';
 import { StateChips, ExecutionCard, QualityCard, ScheduleCard, WarrantyCard } from '../components/OrderOperation';
@@ -47,6 +48,23 @@ export default function OrderDetail() {
   const apply = useCallback((data) => { setO(data); setF(toForm(data)); }, []);
   const load = useCallback(() => api.get(`/orders/${id}`).then(apply).catch((e) => { toast(e.message, 'error'); nav('/os'); }), [id, apply]); // eslint-disable-line
   useEffect(() => { load(); }, [load]);
+  // comandos de voz e cobranças alteram a OS fora desta tela: recarrega
+  useEffect(() => {
+    const h = (e) => { if (!e.detail?.id || e.detail.id === id) load(); };
+    window.addEventListener('torven:order-changed', h);
+    return () => window.removeEventListener('torven:order-changed', h);
+  }, [id, load]);
+  // retorno do link de pagamento (InfinitePay): repassa os identificadores; o servidor confirma na InfinitePay
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const chargeId = params.get('cobranca');
+    if (!chargeId || !/^[0-9a-f-]{36}$/i.test(chargeId)) return;
+    const body = Object.fromEntries(['transaction_nsu', 'slug', 'invoice_slug'].map((k) => [k, params.get(k) || undefined]));
+    setParams({}, { replace: true });
+    api.post(`/terminal-charges/${chargeId}/return`, body)
+      .then((c) => { toast(c.status === 'paga' ? 'Pagamento confirmado pela InfinitePay' : `Cobrança: ${c.status}`, c.status === 'paga' ? 'success' : 'error'); load(); })
+      .catch((e) => toast(e.message, 'error'));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = useMemo(() => o && f && JSON.stringify(f) !== JSON.stringify(toForm(o)), [o, f]);
   if (!o || !f) return <Loading />;
@@ -117,6 +135,9 @@ export default function OrderDetail() {
             </button>
           )}
           {!closed && can('checkout') && values && o.balance > 0.009 && <button className="btn-outline" onClick={() => setModal('pay')}><Wallet className="h-4 w-4" /> Receber</button>}
+          {!closed && can('checkout') && values && o.balance > 0.009 && settings.orders?.terminalOnClose !== 'desligado' && (
+            <button className="btn-outline" onClick={() => setModal('terminal')}><CreditCard className="h-4 w-4" /> Maquininha</button>
+          )}
           {!closed && can('orders_deliver') && <button className="btn-primary" onClick={() => setModal('deliver')}><PackageCheck className="h-4 w-4" /> Entregar</button>}
           {closed && (can('orders_edit') && (o.status === 'entregue' || can('orders_cancel'))) && <button className="btn-outline" onClick={reopen}><RotateCcw className="h-4 w-4" /> Reabrir</button>}
         </div>
@@ -317,6 +338,7 @@ export default function OrderDetail() {
             if (r !== FAIL) { apply(r.order); setModal(null); toast(r.change > 0 ? `Recebido. Troco: ${money(r.change)}` : 'Pagamento registrado'); }
           }} />
       )}
+      {modal === 'terminal' && <TerminalChargeModal order={o} onClose={() => { setModal(null); load(); }} onPaid={() => load()} />}
       {modal === 'deliver' && <DeliverModal o={o} dirty={dirty} onClose={() => setModal(null)} onDone={(r) => { apply(r); setModal(null); }} />}
       {modal === 'cancel' && <CancelModal o={o} onClose={() => setModal(null)} onDone={(r) => { apply(r); setModal(null); }} />}
       {modal === 'invoice' && <InvoiceModal order={o} onClose={() => setModal(null)} onDone={(inv) => { setModal(null); load(); toast(inv.status === 'erro' ? `Nota rejeitada: ${inv.message}` : `Nota ${INVOICE_STATUS[inv.status]?.label.toLowerCase()}`, inv.status === 'erro' ? 'error' : 'success'); }} />}
@@ -379,6 +401,21 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
     const r = await run(() => api.post(`/orders/${o.id}/deliver`, { ...body, received_by: rec.received_by || null, received_document: rec.received_document || null }), `${o.kind === 'venda' ? 'Venda' : 'OS'} entregue`);
     if (r !== FAIL) onDone(r);
   };
+  // maquininha ao fechar a OS: 'perguntar' (botão), 'automatico' (envia direto à maquininha padrão) ou 'desligado'
+  const termMode = settings.orders?.terminalOnClose || 'perguntar';
+  const [balance, setBalance] = useState(Number(o.balance));
+  const canTerminal = values && can('checkout') && termMode !== 'desligado';
+  const blocked = dirty || needInspection || o.open_logs?.length > 0;
+  const [term, setTerm] = useState(() => (canTerminal && termMode === 'automatico' && !blocked && Number(o.balance) > 0.009 ? 'auto' : null));
+  const afterTerminal = async () => {
+    const fresh = await api.get(`/orders/${o.id}`).catch(() => null);
+    const left = fresh ? Number(fresh.balance) : balance;
+    setBalance(left);
+    if (left <= 0.009) { setTerm(null); await deliver(); } else setTerm(null);
+  };
+  if (term) {
+    return <TerminalChargeModal order={{ ...o, balance }} auto={term === 'auto'} onPaid={afterTerminal} onClose={() => setTerm(null)} />;
+  }
   const warn = (
     <>
       {dirty && <div className="rounded-app-sm bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">Há alterações não salvas nesta OS. Salve antes de entregar.</div>}
@@ -392,11 +429,15 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
       )}
     </>
   );
-  if (values && can('checkout') && o.balance > 0.009) {
+  if (values && can('checkout') && balance > 0.009) {
     return (
-      <PaymentModal open onClose={onClose} balance={o.balance} title="Entregar ao cliente" subtitle={`Receba o saldo de ${money(o.balance)} ou lance como a receber`}
+      <PaymentModal open onClose={onClose} balance={balance} title="Entregar ao cliente" subtitle={`Receba o saldo de ${money(balance)} ou lance como a receber`}
         confirmText="Receber e entregar" busy={busy} allowSkip={!settings.orders?.requirePaymentToDeliver} requireCustomerForLater hasCustomer={!!o.customer_id}
-        extra={<>{warn}{!settings.orders?.requirePaymentToDeliver && <p className="text-xs text-ink-faint">Para entregar sem receber agora, zere os valores e confirme — o saldo fica em aberto na OS.</p>}</>}
+        extra={<>{warn}{canTerminal && (
+          <button type="button" className="btn-outline w-full justify-center" disabled={blocked} onClick={() => setTerm('manual')}>
+            <CreditCard className="h-4 w-4" /> Cobrar {money(balance)} na maquininha e entregar
+          </button>
+        )}{!settings.orders?.requirePaymentToDeliver && <p className="text-xs text-ink-faint">Para entregar sem receber agora, zere os valores e confirme — o saldo fica em aberto na OS.</p>}</>}
         onConfirm={(body) => deliver(body)} />
     );
   }

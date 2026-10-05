@@ -144,7 +144,8 @@ r.get('/', async (req, res) => {
     const i = params.length;
     const num = /^\d+$/.test(t) ? ` or o.number = ${parseInt(t, 10)}` : '';
     where += ` and (lower(coalesce(c.name,'')) like $${i} or lower(coalesce(e.description,'')) like $${i}
-                 or lower(coalesce(e.serial,'')) like $${i} or lower(coalesce(o.problem,'')) like $${i}${num})`;
+                 or lower(coalesce(e.serial,'')) like $${i} or lower(coalesce(o.problem,'')) like $${i}
+                 or replace(lower(coalesce(e.plate,'')), '-', '') like replace($${i}, '-', '')${num})`;
   }
   where += scopeWhere(req, params);
   const { rows } = await q(
@@ -169,6 +170,18 @@ r.get('/', async (req, res) => {
   let out = rows.map((o) => ({ ...o, balance: round2(o.total - o.paid - o.receivable) }));
   if (payment === 'aberto') out = out.filter((o) => o.balance > 0.009 && o.status !== 'cancelada');
   res.json(out.map(stripValues(req)));
+});
+
+/** Localiza a OS pelo número (comandos de voz e atalhos). Respeita o escopo do perfil. */
+r.get('/by-number/:n', async (req, res) => {
+  const n = Number(req.params.n);
+  if (!Number.isInteger(n) || n <= 0) throw bad('Número de OS inválido.');
+  const params = [req.companyId, n];
+  const scope = scopeWhere(req, params);
+  const { rows: [o] } = await q(`select o.id, o.number, o.status, o.kind, c.name as customer_name from orders o
+                                    left join customers c on c.id = o.customer_id where o.company_id = $1 and o.number = $2 ${scope}`, params);
+  if (!o) throw notFound(`OS nº ${n} não encontrada`);
+  res.json(o);
 });
 
 r.get('/:id', async (req, res) => res.json(stripValues(req)(await loadOrder(req, req.params.id))));

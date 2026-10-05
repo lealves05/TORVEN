@@ -21,7 +21,7 @@ export function assertSecret() {
   if (m && isProd()) throw new Error(`[auth] configuração insegura: ${m}`);
   if (m) console.warn(`[auth] desenvolvimento: ${m} — usando segredo local`);
 }
-const secret = () => {
+export const secret = () => {
   const v = process.env.JWT_SECRET;
   if (secretProblem(v)) { if (isProd()) throw new HttpError(503, 'Serviço indisponível: configuração de segurança incompleta.'); return v || DEV_SECRET; }
   return v;
