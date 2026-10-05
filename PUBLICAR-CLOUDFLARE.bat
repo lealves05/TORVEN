@@ -29,8 +29,13 @@ git push -u origin cloudflare >> "%LOG%" 2>&1
 if errorlevel 1 (echo   Aviso: nao foi possivel enviar ao GitHub agora. Seguindo com a publicacao. Veja %LOG%) else (echo   OK)
 
 echo  [2/5] Preparando a copia de trabalho da branch cloudflare...
+rem copia sem prender a branch (assim a branch cloudflare pode receber atualizacoes); sempre na versao mais nova
+rem (arquivos gerados no build anterior vao para um stash da copia de trabalho)
 if not exist "%WT%\.git" (
-  git worktree add "%WT%" cloudflare >> "%LOG%" 2>&1 || (echo   Falhou. Veja %LOG% & pause & exit /b 1)
+  git worktree add --detach "%WT%" cloudflare >> "%LOG%" 2>&1 || (echo   Falhou. Veja %LOG% & pause & exit /b 1)
+) else (
+  git -C "%WT%" stash push -q --include-untracked >> "%LOG%" 2>&1
+  git -C "%WT%" checkout -q --detach cloudflare >> "%LOG%" 2>&1 || (echo   Falhou ao atualizar a copia. Veja %LOG% & pause & exit /b 1)
 )
 echo   %WT%
 
@@ -41,7 +46,11 @@ call npm run build:cloudflare >> "%LOG%" 2>&1 || (echo   build falhou. Veja %LOG
 popd
 echo   OK
 
-echo  [4/5] Chave do repasse do IP (site ^<-^> API)...
+echo  [4/5] API "torven-api-cf" (pacote embutido) e chave do repasse do IP...
+pushd "%WT%\backend"
+call npm ci --no-audit --no-fund >> "%LOG%" 2>&1 || (echo   npm ci da API falhou. Veja %LOG% & popd & pause & exit /b 1)
+call npm run build:edge >> "%LOG%" 2>&1 || (echo   build da API falhou. Veja %LOG% & popd & pause & exit /b 1)
+popd
 if not exist "%KEYS%\edge-dwfb.key" node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))" > "%KEYS%\edge-dwfb.key"
 call npx --yes supabase@2 projects list >nul 2>&1 || (
   echo   Entre na Supabase no navegador que vai abrir...
@@ -50,6 +59,11 @@ call npx --yes supabase@2 projects list >nul 2>&1 || (
 for /f "usebackq delims=" %%K in ("%KEYS%\edge-dwfb.key") do set "EK=%%K"
 call npx --yes supabase@2 secrets set EDGE_PROXY_KEY=%EK% --project-ref %REF% >> "%LOG%" 2>&1 || echo   Aviso: chave nao gravada na Supabase (os limites de tentativa usam o IP da Cloudflare ate isso ser feito).
 set "EK="
+pushd "%WT%\backend"
+call npx --yes supabase@2 functions deploy torven-api-cf --project-ref %REF% --no-verify-jwt --use-api >> "%LOG%" 2>&1
+if errorlevel 1 (echo   Falhou a publicacao da API. Veja %LOG% & popd & pause & exit /b 1)
+popd
+echo   API OK
 
 echo  [5/5] Publicando o site na Cloudflare...
 pushd "%WT%\frontend"

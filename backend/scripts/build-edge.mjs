@@ -65,3 +65,23 @@ if (!res.ok) throw new Error(\`Não foi possível baixar a API (\${res.status})\
 const code = await res.text();
 await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(code));
 `);
+
+// Função com o pacote embutido (site na Cloudflare): não depende do GitHub Pages da main para iniciar.
+// Publicar: npx supabase functions deploy torven-api-cf --project-ref <ref> --no-verify-jwt --use-api
+{
+  const { gzipSync } = await import('node:zlib');
+  const code = fs.readFileSync(path.join(root, 'dist-edge/index.js'));
+  const packed = gzipSync(code, { level: 9 }).toString('base64');
+  const fnDir = path.join(root, 'supabase/functions/torven-api-cf');
+  fs.mkdirSync(fnDir, { recursive: true });
+  fs.writeFileSync(path.join(fnDir, 'index.ts'), `// TORVEN API (site na Cloudflare) — gerado por backend/scripts/build-edge.mjs. Não edite: rode o build de novo.
+// Edge Function "torven-api-cf" com verify_jwt = false (a API faz a própria autenticação).
+${[...used].sort().map((s) => `import '${s}';`).join('\n')}
+
+const PACKED = '${packed}';
+const bytes = Uint8Array.from(atob(PACKED), (c) => c.charCodeAt(0));
+const source = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(source));
+`);
+  console.log(`supabase/functions/torven-api-cf/index.ts (${(packed.length / 1024).toFixed(0)} KB) pronto.`);
+}

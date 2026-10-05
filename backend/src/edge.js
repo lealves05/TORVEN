@@ -5,7 +5,8 @@ import { migrate } from './migrate.js';
 import { pool } from './db.js';
 import { assertSecret } from './auth.js';
 
-const FN = '/torven-api';
+// a Supabase entrega o caminho com o nome da função: torven-api (site anterior) ou torven-api-cf (site na Cloudflare)
+const FN = ['/torven-api-cf', '/torven-api'];
 
 async function boot() {
   await migrate();

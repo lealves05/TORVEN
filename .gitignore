@@ -9,3 +9,4 @@ dist/
 dist-edge/
 .wrangler/
 frontend/public/ocr/
+backend/supabase/functions/torven-api-cf/
