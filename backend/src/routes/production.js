@@ -39,6 +39,8 @@ async function visibleOrder(db, req, orderId, lock = false) {
   return o;
 }
 
+const lockTechnician = (db, techId) => db.query('select pg_advisory_xact_lock(hashtext($1))', [`apontamento:${techId}`]);
+
 const closeLog = async (db, log, endedAt, notes) => {
   const minutes = round2(Math.max(1, (new Date(endedAt) - new Date(log.started_at)) / 60000));
   const { rows: [x] } = await db.query(
@@ -60,11 +62,13 @@ r.get('/orders/:id/time', need('time_log', 'orders_view'), async (req, res) => {
 /** Inicia o cronômetro. Se o técnico tiver outro aberto, ele é encerrado antes. */
 r.post('/orders/:id/time/start', need('time_log'), async (req, res) => {
   const d = parse(z.object({ technician_id: z.string().uuid().nullable().optional(), activity: z.enum(Object.keys(ACTIVITY)).default('execucao'), notes: opt }), req.body);
+  const techId = resolveTechnician(req, d.technician_id);
   const log = await tx(async (db) => {
+    // um cronômetro por técnico: inícios/paradas do mesmo técnico em série (antes de travar a OS, para não cruzar travas)
+    await lockTechnician(db, techId);
     const o = await visibleOrder(db, req, req.params.id, true);
     if (!OPEN_STATUSES.includes(o.status)) throw bad('OS entregue ou cancelada: reabra para apontar horas.');
     if (o.status === 'aguardando_aprovacao' && d.activity === 'execucao') throw bad('Execução só depois da aprovação do cliente. Aponte como diagnóstico, se for o caso.');
-    const techId = resolveTechnician(req, d.technician_id);
     const { rows: [tech] } = await db.query('select id, name, hourly_cost from technicians where id = $1 and company_id = $2 and active', [techId, req.companyId]);
     if (!tech) throw notFound('Técnico não encontrado ou inativo');
     const { rows: [open] } = await db.query('select * from order_time_logs where technician_id = $1 and ended_at is null for update', [techId]);
@@ -99,6 +103,9 @@ r.get('/time/open', need('time_log'), async (req, res) => {
 r.post('/time/:logId/stop', need('time_log'), async (req, res) => {
   const d = parse(z.object({ notes: opt }), req.body);
   const log = await tx(async (db) => {
+    const { rows: [pre] } = await db.query('select technician_id from order_time_logs where id = $1 and company_id = $2', [req.params.logId, req.companyId]);
+    if (!pre) throw notFound('Apontamento não encontrado');
+    await lockTechnician(db, pre.technician_id);
     const { rows: [cur] } = await db.query('select * from order_time_logs where id = $1 and company_id = $2 for update', [req.params.logId, req.companyId]);
     if (!cur) throw notFound('Apontamento não encontrado');
     if (cur.ended_at) throw bad('Apontamento já encerrado.');

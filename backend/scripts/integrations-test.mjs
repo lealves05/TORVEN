@@ -291,6 +291,54 @@ await check('técnico não configura integrações nem cobra', async () => {
   assert.equal((await api('POST', '/terminal-charges', { order_id: orderId, method: 'debito' }, TT)).status, 403);
 });
 
+// ---------------- disputas (regressões do teste de carga) ----------------
+await check('cobrança em andamento: receber e entregar são recusados (409)', async () => {
+  const o = await api('POST', '/orders', { customer_id: quick.customer_id, items: [{ kind: 'servico', description: 'Solda', qty: 1, unit_price: 100 }] }, T);
+  const c = await api('POST', '/terminal-charges', { order_id: o.data.id, terminal_id: device.id, method: 'debito' }, T);
+  assert.equal(c.status, 201, JSON.stringify(c.data));
+  const p = await api('POST', `/orders/${o.data.id}/payments`, { payments: [{ method: 'dinheiro', amount: 100 }] }, T);
+  assert.equal(p.status, 409); assert.match(p.data.error, /maquininha em andamento/);
+  const d = await api('POST', `/orders/${o.data.id}/deliver`, { payments: [{ method: 'dinheiro', amount: 100 }] }, T);
+  assert.equal(d.status, 409);
+  assert.equal((await api('GET', `/orders/${o.data.id}`, null, T)).data.payments.length, 0);
+  await api('POST', `/terminal-charges/${c.data.id}/cancel`, {}, T);
+});
+await check('maquininha paga acima do saldo (OS já recebida): fica divergente, sem lançar o excedente', async () => {
+  const o = await api('POST', '/orders', { customer_id: quick.customer_id, items: [{ kind: 'servico', description: 'Solda', qty: 1, unit_price: 100 }] }, T);
+  const c = await api('POST', '/terminal-charges', { order_id: o.data.id, terminal_id: device.id, method: 'credito' }, T);
+  assert.equal(c.status, 201);
+  // recebimento por outro meio gravado no meio da cobrança (simula a disputa que existia antes da trava)
+  const { rows: [co] } = await pool.query('select company_id from orders where id = $1', [o.data.id]);
+  await pool.query(`insert into transactions (company_id, type, category, amount, method, due_date, paid_at, order_id) values ($1,'entrada','Ordens de serviço',100,'dinheiro',current_date,now(),$2)`, [co.company_id, o.data.id]);
+  await api('GET', `/terminal-charges/${c.data.id}`, null, T);
+  const r = await api('GET', `/terminal-charges/${c.data.id}`, null, T);
+  assert.equal(r.data.status, 'divergente', JSON.stringify(r.data)); assert.match(r.data.message, /estorne/);
+  const od = await api('GET', `/orders/${o.data.id}`, null, T);
+  assert.equal(od.data.paid, 100); assert.equal(od.data.balance, 0);
+});
+await check('OS quitada: novo "receber" em dinheiro é recusado sem registrar evento', async () => {
+  const o = await api('POST', '/orders', { customer_id: quick.customer_id, items: [{ kind: 'servico', description: 'Solda', qty: 1, unit_price: 50 }] }, T);
+  const rs = await Promise.all([1, 2].map(() => api('POST', `/orders/${o.data.id}/payments`, { payments: [{ method: 'dinheiro', amount: 50 }] }, T)));
+  assert.deepEqual(rs.map((x) => x.status).sort(), [200, 400]);
+  const od = await api('GET', `/orders/${o.data.id}`, null, T);
+  assert.equal(od.data.paid, 50);
+  assert.equal(od.data.events.filter((e) => e.type === 'pagamento').length, 1);
+});
+await check('abrir caixa duas vezes ao mesmo tempo: um só caixa aberto (409 no segundo)', async () => {
+  const rs = await Promise.all([1, 2].map(() => api('POST', '/cash/session/open', { opening_amount: 10 }, T)));
+  assert.deepEqual(rs.map((x) => x.status).sort(), [201, 409]);
+  const { rows: [n] } = await pool.query("select count(*)::int n from cash_sessions s join users u on u.company_id = s.company_id where u.email = 'dono@int.dev' and s.closed_at is null");
+  assert.equal(n.n, 1);
+});
+await check('cronômetro iniciado em duas OS ao mesmo tempo pelo mesmo técnico: sem erro, um só aberto', async () => {
+  const tech = await api('POST', '/technicians', { name: 'Técnico Disputa' }, T);
+  const os = await Promise.all([1, 2].map(() => api('POST', '/orders', { customer_id: quick.customer_id, technician_id: tech.data.id, items: [] }, T)));
+  const rs = await Promise.all(os.map((o) => api('POST', `/production/orders/${o.data.id}/time/start`, { technician_id: tech.data.id }, T)));
+  assert.ok(rs.every((x) => x.status === 201 || x.status === 409), rs.map((x) => x.status).join(','));
+  const { rows: [n] } = await pool.query('select count(*)::int n from order_time_logs where technician_id = $1 and ended_at is null', [tech.data.id]);
+  assert.equal(n.n, 1);
+});
+
 console.log(`\n${passed} verificações OK, ${fails.length} falhas`);
 server.close(); fake.close(); await pool.end();
 if (fails.length) { fails.forEach((f) => console.log(' -', f)); process.exit(1); }

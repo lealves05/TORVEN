@@ -117,7 +117,7 @@ export async function getTenantParams(companyId) {
 export async function setTenantParams(db, companyId, values) {
   const clean = pick(TENANT_FIELDS, values);
   if (clean.trade_name != null && clean.trade_name.length < 2) throw bad('Nome fantasia muito curto.');
-  const { rows: [c] } = await db.query('select settings from companies where id = $1 for update', [companyId]);
+  const { rows: [c] } = await db.query('select settings from companies where id = $1 for no key update', [companyId]);
   const s = c?.settings && typeof c.settings === 'object' ? JSON.parse(JSON.stringify(c.settings)) : {};
   for (const [k, path] of Object.entries(PATHS)) {
     if (!(k in clean)) continue;

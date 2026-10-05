@@ -68,7 +68,7 @@ r.get('/:id', need('invoices_issue', 'invoices_cancel', 'cash'), async (req, res
 r.post('/', need('invoices_issue'), async (req, res) => {
   const d = parse(z.object({ order_id: z.string().uuid(), kind: z.enum(['nfse', 'nfe']), prepare_only: z.boolean().default(false) }), req.body);
   const inv = await tx(async (db) => {
-    await db.query('select id from companies where id = $1 for update', [req.companyId]);
+    await db.query('select id from companies where id = $1 for no key update', [req.companyId]);
     const ctx = await context(req.companyId, d.order_id);
     const { rows: dup } = await db.query(
       "select id, status from invoices where order_id = $1 and kind = $2 and status in ('processando','autorizada')", [d.order_id, d.kind]);

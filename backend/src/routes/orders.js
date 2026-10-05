@@ -5,7 +5,7 @@ import { q, tx } from '../db.js';
 import { need, can } from '../auth.js';
 import { parse, notFound, bad, round2, publicToken, OPEN_STATUSES, HttpError } from '../util.js';
 import {
-  nextNumber, itemSchema, prepareItems, insertItems, syncOrderStock, logEvent, orderFinance, STATUS_LABEL, refreshLabor,
+  nextNumber, itemSchema, prepareItems, insertItems, syncOrderStock, logEvent, orderFinance, STATUS_LABEL, refreshLabor, assertNoOpenCharge,
 } from '../domain.js';
 
 const r = Router();
@@ -328,6 +328,7 @@ async function registerPayments(db, req, order, d) {
   const settings = req.settings;
   const fin = await orderFinance(db, order.id);
   const balance = round2(order.total - (Number(fin.paid) - Number(fin.refunded)) - Number(fin.receivable));
+  if (balance <= 0.009) throw bad('OS já está quitada.');
   const payNow = round2(d.payments.reduce((a, p) => a + p.amount, 0));
   const later = round2(d.installments.reduce((a, p) => a + p.amount, 0));
   const cashPaid = round2(d.payments.filter((p) => p.method === 'dinheiro').reduce((a, p) => a + p.amount, 0));
@@ -376,6 +377,7 @@ r.post('/:id/payments', need('checkout'), async (req, res) => {
     const { rows: [o] } = await db.query('select * from orders where id = $1 and company_id = $2 for update', [req.params.id, req.companyId]);
     if (!o) throw notFound();
     if (o.status === 'cancelada') throw bad('OS cancelada.');
+    await assertNoOpenCharge(db, o.id);
     return registerPayments(db, req, o, d);
   });
   res.json({ change, order: await loadOrder(req, req.params.id) });
@@ -407,6 +409,7 @@ r.post('/:id/deliver', need('orders_deliver'), async (req, res) => {
     const { rows: [o] } = await db.query('select * from orders where id = $1 and company_id = $2 for update', [req.params.id, req.companyId]);
     if (!o) throw notFound();
     if (['entregue', 'cancelada'].includes(o.status)) throw bad('OS já entregue ou cancelada.');
+    await assertNoOpenCharge(db, o.id);
     const cfgO = req.settings.orders;
     if (o.kind === 'os' && cfgO.requireInspection && !['aprovado', 'aprovado_ressalva'].includes(o.inspection_result)) {
       throw bad('Registre a inspeção final aprovada antes de entregar.');

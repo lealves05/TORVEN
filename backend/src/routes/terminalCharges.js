@@ -69,6 +69,18 @@ export async function settleCharge(chargeId, { userId = null } = {}) {
       return u;
     }
     const { rows: [o] } = await db.query('select * from orders where id = $1 for update', [c.order_id]);
+    // a OS pode ter sido recebida por outro meio enquanto o cliente passava o cartão: o excedente não vira pagamento
+    const fin = await orderFinance(db, o.id);
+    const balance = round2(Number(o.total) - (Number(fin.paid) - Number(fin.refunded)) - Number(fin.receivable));
+    if (paid > balance + 0.009) {
+      const { rows: [u] } = await db.query(
+        `update terminal_charges set status = 'divergente', paid_amount = $2, nsu = $3, card_brand = $4, raw = $5, updated_at = now(),
+                message = $6 where id = $1 returning *`,
+        [c.id, paid, st.nsu || null, st.card_brand || null, raw,
+          `Valor pago na maquininha (${paid.toFixed(2)}) maior que o saldo da OS (${Math.max(balance, 0).toFixed(2)}): a OS já foi recebida por outro meio. Confira e estorne ao cliente.`]);
+      await logEvent(db, o.id, { type: 'pagamento', message: `Maquininha: pago ${paid.toFixed(2).replace('.', ',')} acima do saldo (${Math.max(balance, 0).toFixed(2).replace('.', ',')}) — não lançado, conferir e estornar`, userId });
+      return u;
+    }
     const { rows: [co] } = await db.query('select settings from companies where id = $1', [c.company_id]);
     const settings = withDefaults(co.settings);
     const method = st.method || c.method;
@@ -134,20 +146,25 @@ r.post('/', need('checkout'), async (req, res) => {
   const cfg = await loadIntegration(req.companyId, 'maquininha', term.provider);
   if (!cfg?.enabled) throw bad(`Integração ${prov.name} desligada. Ative em Configurações › Integrações.`);
 
-  // valor: saldo da OS (servidor calcula; o navegador só pode pedir valor menor, ex.: pagamento dividido)
-  const fin = await orderFinance({ query: q }, o.id);
-  const balance = round2(Number(o.total) - (Number(fin.paid) - Number(fin.refunded)) - Number(fin.receivable));
-  const amount = round2(d.amount ?? balance);
-  if (balance <= 0) throw bad('Esta OS não tem saldo a receber.');
-  if (amount > balance + 0.009) throw bad(`Valor maior que o saldo da OS (${balance.toFixed(2).replace('.', ',')}).`);
-
+  // valor: saldo da OS (servidor calcula; o navegador só pode pedir valor menor, ex.: pagamento dividido).
+  // Saldo conferido e cobrança registrada com a OS travada: não cruza com "receber"/"entregar" simultâneos.
   const reference = newReference();
-  let charge;
+  let charge; let amount;
   try {
-    ({ rows: [charge] } = await q(
-      `insert into terminal_charges (company_id, order_id, terminal_id, provider, amount, method, installments, external_reference, created_by)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *`,
-      [req.companyId, o.id, term.id, term.provider, amount, d.method, d.method === 'credito' ? d.installments : 1, reference, req.user.id]));
+    charge = await tx(async (db) => {
+      const { rows: [lo] } = await db.query('select * from orders where id = $1 and company_id = $2 for update', [o.id, req.companyId]);
+      if (lo.status === 'cancelada') throw bad('OS cancelada.');
+      const fin = await orderFinance(db, lo.id);
+      const balance = round2(Number(lo.total) - (Number(fin.paid) - Number(fin.refunded)) - Number(fin.receivable));
+      amount = round2(d.amount ?? balance);
+      if (balance <= 0) throw bad('Esta OS não tem saldo a receber.');
+      if (amount > balance + 0.009) throw bad(`Valor maior que o saldo da OS (${balance.toFixed(2).replace('.', ',')}).`);
+      const { rows: [row] } = await db.query(
+        `insert into terminal_charges (company_id, order_id, terminal_id, provider, amount, method, installments, external_reference, created_by)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *`,
+        [req.companyId, lo.id, term.id, term.provider, amount, d.method, d.method === 'credito' ? d.installments : 1, reference, req.user.id]);
+      return row;
+    });
   } catch (e) {
     if (e.code === '23505') throw new HttpError(409, 'Já existe uma cobrança em andamento para esta OS. Aguarde ou cancele antes de enviar outra.');
     throw e;

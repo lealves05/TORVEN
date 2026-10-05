@@ -1,10 +1,14 @@
 // Regras de negócio compartilhadas: numeração, itens, estoque, financeiro da OS.
 import { z } from 'zod';
-import { round2, bad, withDefaults } from './util.js';
+import { round2, bad, withDefaults, HttpError } from './util.js';
 
-/** Próximo número sequencial por empresa (orders, quotes, purchases). Deve rodar dentro de tx. */
+/**
+ * Próximo número sequencial por empresa (orders, quotes, purchases). Deve rodar dentro de tx.
+ * "for no key update" serializa a numeração da empresa sem bloquear as chaves estrangeiras (FOR KEY SHARE)
+ * de outras transações que gravam linhas da mesma empresa (ex.: stock_movements) — "for update" causava deadlock.
+ */
 export async function nextNumber(db, table, companyId) {
-  await db.query('select id from companies where id = $1 for update', [companyId]);
+  await db.query('select id from companies where id = $1 for no key update', [companyId]);
   const { rows: [r] } = await db.query(`select coalesce(max(number), 0) + 1 as n from ${table} where company_id = $1`, [companyId]);
   return r.n;
 }
@@ -149,6 +153,12 @@ export async function logEvent(db, orderId, { type = 'nota', from = null, to = n
   await db.query(
     `insert into order_events (order_id, type, from_status, to_status, message, public, user_id)
      values ($1,$2,$3,$4,$5,$6,$7)`, [orderId, type, from, to, message, isPublic, userId]);
+}
+
+/** Recusa receber/entregar enquanto a OS tem cobrança na maquininha em andamento (chamar com a OS travada). */
+export async function assertNoOpenCharge(db, orderId) {
+  const { rows: [c] } = await db.query("select id from terminal_charges where order_id = $1 and status in ('pendente','enviada') limit 1", [orderId]);
+  if (c) throw new HttpError(409, 'Há uma cobrança na maquininha em andamento para esta OS. Aguarde ou cancele a cobrança.', { charge_id: c.id });
 }
 
 /** Resumo financeiro de uma OS a partir dos lançamentos. */

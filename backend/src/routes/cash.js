@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { q, one, tx } from '../db.js';
 import { need } from '../auth.js';
-import { parse, notFound, bad, round2, withDefaults } from '../util.js';
+import { parse, notFound, bad, round2, withDefaults, HttpError } from '../util.js';
 
 const r = Router();
 r.use(need('cash'));
@@ -48,10 +48,15 @@ r.get('/sessions', async (req, res) => {
 
 r.post('/session/open', async (req, res) => {
   const d = parse(z.object({ opening_amount: z.coerce.number().min(0).default(0) }), req.body);
-  const open = await one('select id from cash_sessions where company_id=$1 and closed_at is null', [req.companyId]);
-  if (open) throw bad('Já existe um caixa aberto.');
-  const s = await one('insert into cash_sessions (company_id, opened_by, opening_amount) values ($1,$2,$3) returning *',
-    [req.companyId, req.user.id, d.opening_amount]);
+  // trava por empresa: dois "abrir caixa" simultâneos não criam dois caixas abertos
+  const s = await tx(async (db) => {
+    await db.query('select id from companies where id = $1 for no key update', [req.companyId]);
+    const { rows: [open] } = await db.query('select id from cash_sessions where company_id=$1 and closed_at is null limit 1', [req.companyId]);
+    if (open) throw new HttpError(409, 'Já existe um caixa aberto.');
+    const { rows: [row] } = await db.query('insert into cash_sessions (company_id, opened_by, opening_amount) values ($1,$2,$3) returning *',
+      [req.companyId, req.user.id, d.opening_amount]);
+    return row;
+  });
   res.status(201).json(await sessionSummary(s));
 });
 
