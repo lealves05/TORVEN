@@ -20,6 +20,8 @@ const npmExternals = {
   setup(b) {
     b.onResolve({ filter: /^[^./]/ }, (args) => {
       const id = args.path;
+      // no Windows o ponto de entrada chega como caminho absoluto (D:\...): não é pacote npm
+      if (args.kind === 'entry-point' || path.isAbsolute(id) || /^[A-Za-z]:[\\/]/.test(id)) return undefined;
       if (id.startsWith('node:')) return { path: id, external: true };
       if (builtinModules.includes(id.split('/')[0])) return { path: `node:${id}`, external: true };
       const parts = id.split('/');
