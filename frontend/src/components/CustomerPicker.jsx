@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, UserPlus, X, Building2, User } from 'lucide-react';
+import { Search, UserPlus, X, Building2, User, Car, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { api, qs } from '../lib/api';
 import { maskPhone, maskDoc, maskCep, lookupCep } from '../lib/format';
+import { normalizePlate, formatPlate } from '../lib/plate';
 import { useAuth } from '../context/AuthContext';
 import { Modal, Input, Select, Textarea, useAction, FAIL, cx } from './ui';
 
@@ -75,9 +76,74 @@ export default function CustomerPicker({ value, onChange, label = 'Cliente', opt
   );
 }
 
+/** Linhas de veículos do cadastro do cliente: placa, marca, modelo, ano e cor (vários por cliente). */
+function VehiclesEditor({ rows, setRows, customerId, unique }) {
+  const live = rows.filter((v) => !v.remove);
+  const upd = (key, patch) => setRows((l) => l.map((v) => (v.key === key ? { ...v, ...patch } : v)));
+  const repeated = (v) => {
+    const n = normalizePlate(v.plate);
+    return unique && n && live.filter((x) => normalizePlate(x.plate) === n).length > 1;
+  };
+  // placa completa: confere no cadastro se o veículo já pertence a outro cliente
+  const check = async (v) => {
+    const n = normalizePlate(v.plate);
+    if (!v.plate) return upd(v.key, { warn: null });
+    if (!n) return upd(v.key, { warn: 'Placa inválida (ABC1D23 ou ABC-1234)' });
+    upd(v.key, { plate: formatPlate(n) });
+    if (!unique) return upd(v.key, { warn: null });
+    const r = await api.get(`/vehicles/plate/${n}`).catch(() => null);
+    const other = r?.found && r.matches.find((m) => m.id !== v.id && m.customer_id !== customerId);
+    upd(v.key, { warn: other ? `Já cadastrado para ${other.customer_name}` : null });
+  };
+  return (
+    <div className="space-y-2 sm:col-span-6">
+      <div className="flex items-center gap-2">
+        <Car className="h-4 w-4 text-primary" />
+        <span className="text-sm font-semibold">Veículos</span>
+        <span className="text-xs text-ink-faint">{unique ? 'cada placa pode estar em um único cadastro' : 'a mesma placa pode estar em mais de um cadastro'}</span>
+        <button type="button" className="btn-ghost ml-auto h-8 border border-line px-2 text-xs"
+          onClick={() => setRows((l) => [...l, { key: `n${Date.now()}`, plate: '', brand: '', model: '', year: '', color: '' }])}>
+          <Plus className="h-3.5 w-3.5" /> Adicionar veículo
+        </button>
+      </div>
+      {live.length === 0 && <p className="rounded-app-sm border border-dashed border-line px-3 py-2 text-xs text-ink-faint">Nenhum veículo. Use “Adicionar veículo” para cadastrar carro, moto ou utilitário do cliente.</p>}
+      {live.map((v) => (
+        <div key={v.key} className="rounded-app-sm border border-line p-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[7.5rem_1fr_1fr_5.5rem_6.5rem_auto]">
+            <Input label="Placa *" value={v.plate} maxLength={8} placeholder="ABC1D23" aria-label="Placa"
+              onChange={(e) => upd(v.key, { plate: e.target.value.toUpperCase(), warn: null })} onBlur={() => check(v)} />
+            <Input label="Marca" value={v.brand} placeholder="Ex.: Fiat" onChange={(e) => upd(v.key, { brand: e.target.value })} />
+            <Input label="Modelo" value={v.model} placeholder="Ex.: Strada" onChange={(e) => upd(v.key, { model: e.target.value })} />
+            <Input label="Ano" value={v.year} inputMode="numeric" maxLength={9} placeholder="2022" onChange={(e) => upd(v.key, { year: e.target.value })} />
+            <Input label="Cor" value={v.color} onChange={(e) => upd(v.key, { color: e.target.value })} />
+            <button type="button" className="btn-ghost btn-icon self-end text-red-600" title="Remover veículo"
+              onClick={() => setRows((l) => (v.id ? l.map((x) => (x.key === v.key ? { ...x, remove: true } : x)) : l.filter((x) => x.key !== v.key)))}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+          {(v.warn || repeated(v)) && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-red-600"><AlertTriangle className="h-3 w-3" />{v.warn || 'Placa repetida neste cadastro'}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CustomerForm({ customer, onClose, onSaved }) {
   const [run, busy] = useAction();
+  const { company } = useAuth();
+  const unique = company?.settings?.orders?.uniqueVehicle !== false;
   const [f, setF] = useState({ kind: 'pf', ...customer });
+  const [vehicles, setVehicles] = useState([]);
+  useEffect(() => {
+    if (!customer?.id) return;
+    api.get(`/customers/${customer.id}/equipment`).then((l) => setVehicles(l.filter((e) => e.plate).map((e) => ({
+      key: e.id, id: e.id, plate: e.plate || '', brand: e.brand || '', model: e.model || '', year: e.year || '', color: e.color || '',
+    })))).catch(() => {});
+  }, [customer?.id]);
+  const vehiclesOk = vehicles.filter((v) => !v.remove).every((v) => normalizePlate(v.plate) && !v.warn)
+    && (!unique || new Set(vehicles.filter((v) => !v.remove).map((v) => normalizePlate(v.plate))).size === vehicles.filter((v) => !v.remove).length);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
   const pj = f.kind === 'pj';
   const cep = async (v) => {
@@ -91,12 +157,15 @@ export function CustomerForm({ customer, onClose, onSaved }) {
   const save = async () => {
     const body = { ...f };
     for (const k of ['id', 'created_at', 'orders_count', 'total_spent', 'last_order_at', 'equipment_count', 'company_id', 'equipment', 'orders', 'quotes', 'finance']) delete body[k];
+    body.vehicles = vehicles.filter((v) => v.id || !v.remove).map(({ key, warn, ...v }) => ({
+      ...v, plate: formatPlate(normalizePlate(v.plate) || v.plate), brand: v.brand || null, model: v.model || null, year: v.year || null, color: v.color || null,
+    }));
     const r = await run(() => (f.id ? api.put(`/customers/${f.id}`, body) : api.post('/customers', body)), 'Cliente salvo');
     if (r !== FAIL) onSaved(r);
   };
   return (
     <Modal open onClose={onClose} size="lg" title={f.id ? 'Editar cliente' : 'Novo cliente'}
-      footer={<><button className="btn-ghost" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={busy || !f.name} onClick={save}>Salvar</button></>}>
+      footer={<><button className="btn-ghost" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={busy || !f.name || !vehiclesOk} onClick={save}>Salvar</button></>}>
       <div className="grid gap-4 sm:grid-cols-6">
         <div className="grid grid-cols-2 gap-2 sm:col-span-6">
           {[['pf', 'Pessoa física', User], ['pj', 'Pessoa jurídica', Building2]].map(([k, l, I]) => (
@@ -119,6 +188,7 @@ export function CustomerForm({ customer, onClose, onSaved }) {
         <Input label="Bairro" value={f.district} onChange={set('district')} className="sm:col-span-2" />
         <Input label="Cidade" value={f.city} onChange={set('city')} className="sm:col-span-1" />
         <Input label="UF" value={f.uf} maxLength={2} onChange={(e) => setF({ ...f, uf: e.target.value.toUpperCase() })} className="sm:col-span-1" />
+        <VehiclesEditor rows={vehicles} setRows={setVehicles} customerId={f.id} unique={unique} />
         <Textarea label="Observações" value={f.notes} onChange={set('notes')} className="sm:col-span-6" rows={2} />
       </div>
     </Modal>
@@ -144,7 +214,9 @@ export function EquipmentPicker({ customerId, value, onChange, newEquipment, onN
             else { onNewEquipment(null); onChange(e.target.value || null); }
           }}>
           <option value="">{customerId ? (list.length ? 'Selecione…' : 'Nenhum cadastrado') : 'Selecione o cliente primeiro'}</option>
-          {list.map((e) => <option key={e.id} value={e.id}>{[e.plate && `Placa ${e.plate}`, e.description, e.brand, e.model, e.serial && `nº ${e.serial}`].filter(Boolean).join(' · ')}</option>)}
+          {list.map((e) => <option key={e.id} value={e.id}>{[e.plate && `Placa ${e.plate}`, e.description,
+            ...[e.brand, e.model].filter((x) => x && !String(e.description || '').toLowerCase().includes(String(x).toLowerCase())),
+            e.year, e.serial && `nº ${e.serial}`].filter(Boolean).join(' · ')}</option>)}
           {customerId && <option value="__new">+ Cadastrar novo objeto (equipamento, peça, estrutura…)</option>}
         </Select>
       </div>

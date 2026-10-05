@@ -130,6 +130,8 @@ export const DEFAULT_SETTINGS = {
     defaultVisitMinutes: 60,
     voiceCommands: true,            // abrir e apontar OS por voz (reconhecimento do navegador)
     plateOnOpen: true,              // botão "foto da placa" na abertura da OS
+    uniqueVehicle: true,            // uma placa só pode estar em um cadastro (desligável em Configurações)
+    plateAutoLookup: false,         // placa sem cadastro: consultar o serviço pago sem pedir clique (consome consulta)
     terminalOnClose: 'perguntar',   // ao fechar/entregar com saldo: 'perguntar' | 'automatico' (envia à maquininha padrão) | 'desligado'
     termsOrder:
       'O equipamento/peça deixado para reparo deverá ser retirado em até 90 dias após o aviso de conclusão. '

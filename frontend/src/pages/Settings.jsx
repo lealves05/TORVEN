@@ -103,8 +103,14 @@ export default function Settings() {
             <Toggle checked={!!o.requireReceiver} onChange={(v) => setO({ requireReceiver: v })} label="Exigir nome de quem recebeu na entrega" />
             <Toggle checked={o.voiceCommands !== false} onChange={(v) => setO({ voiceCommands: v })} label="Comandos de voz"
               hint="Botão de microfone para abrir OS e apontar horas falando. Sempre pede confirmação antes de executar." />
-            <Toggle checked={o.plateOnOpen !== false} onChange={(v) => setO({ plateOnOpen: v })} label="Placa na abertura da OS"
-              hint="Foto ou digitação da placa para achar o cliente e o veículo. A consulta paga é configurada em Integrações." />
+            <Toggle checked={o.plateOnOpen !== false} onChange={(v) => setO({ plateOnOpen: v })} label="Pesquisa por placa na abertura da OS"
+              hint="Foto ou digitação da placa: mostra os dados do veículo e coloca o proprietário como cliente. A consulta paga é configurada em Integrações." />
+            {o.plateOnOpen !== false && (
+              <Toggle checked={!!o.plateAutoLookup} onChange={(v) => setO({ plateAutoLookup: v })} label="Consultar o serviço de placas automaticamente"
+                hint="Placa fora do cadastro: busca marca/modelo sem pedir clique. Cada consulta nova conta no limite mensal do serviço pago." />
+            )}
+            <Toggle checked={o.uniqueVehicle !== false} onChange={(v) => setO({ uniqueVehicle: v })} label="Um único cadastro por veículo"
+              hint="Impede cadastrar a mesma placa em dois clientes. Desligue se a mesma placa puder aparecer em mais de um cadastro (ex.: frota e motorista)." />
             <Select label="Maquininha ao fechar a OS" value={o.terminalOnClose || 'perguntar'} onChange={(e) => setO({ terminalOnClose: e.target.value })}
               hint="Automático: na entrega, envia o saldo para a maquininha padrão e entrega quando o pagamento for aprovado.">
               <option value="perguntar">Oferecer a opção na entrega</option>

@@ -134,6 +134,64 @@ await check('limite mensal de consultas respeitado (429)', async () => {
   assert.equal(r.status, 429);
 });
 
+// ---------------- veículos no cadastro do cliente (um cadastro por veículo, desligável) ----------------
+let fleet;
+await check('cliente novo com vários veículos (placa, marca, modelo, ano) num único cadastro', async () => {
+  const r = await api('POST', '/customers', { kind: 'pj', name: 'Transportes Frota', vehicles: [
+    { plate: 'frt1a23', brand: 'VW', model: 'Delivery', year: '2020', color: 'Branca' },
+    { plate: 'FRT-4567', brand: 'Ford', model: 'Cargo', year: '2018' }] }, T);
+  assert.equal(r.status, 201, JSON.stringify(r.data)); fleet = r.data;
+  const eq = await api('GET', `/customers/${fleet.id}/equipment`, null, T);
+  assert.deepEqual(eq.data.map((e) => e.plate).sort(), ['FRT-4567', 'FRT1A23']);
+  assert.equal(eq.data.find((e) => e.plate === 'FRT1A23').description, 'VW Delivery');
+});
+await check('placa achada pela busca: traz veículo e proprietário (cliente)', async () => {
+  const r = await api('GET', '/vehicles/plate/FRT1A23', null, T);
+  assert.equal(r.data.found, true); assert.equal(r.data.matches[0].customer_name, 'Transportes Frota'); assert.equal(r.data.matches[0].model, 'Delivery');
+});
+await check('restrição ligada: mesma placa em outro cliente é recusada (cadastro, objeto e cadastro simples)', async () => {
+  const a = await api('POST', '/customers', { name: 'Motorista', vehicles: [{ plate: 'FRT1A23', brand: 'VW' }] }, T);
+  assert.equal(a.status, 409, JSON.stringify(a.data)); assert.match(a.data.error || a.data.message || '', /Transportes Frota/);
+  assert.equal((await api('GET', '/customers?search=Motorista', null, T)).data.length, 0, 'cliente não pode ficar criado pela metade');
+  const b = await api('POST', `/customers/${quick.customer_id}/equipment`, { description: 'Caminhão', plate: 'FRT-4567' }, T);
+  assert.equal(b.status, 409);
+  const c = await api('POST', '/vehicles/quick', { customer: { name: 'Outro' }, vehicle: { plate: 'FRT4567' } }, T);
+  assert.equal(c.status, 409);
+});
+await check('placa repetida no mesmo formulário e placa inválida são recusadas', async () => {
+  assert.equal((await api('POST', '/customers', { name: 'Dup', vehicles: [{ plate: 'DUP1A11' }, { plate: 'dup-1a11' }] }, T)).status, 400);
+  assert.equal((await api('POST', '/customers', { name: 'Inv', vehicles: [{ plate: '12' }] }, T)).status, 400);
+});
+await check('edição do cliente: altera, inclui e remove veículos', async () => {
+  const eq = (await api('GET', `/customers/${fleet.id}/equipment`, null, T)).data;
+  const del = eq.find((e) => e.plate === 'FRT-4567'); const keep = eq.find((e) => e.plate === 'FRT1A23');
+  const r = await api('PUT', `/customers/${fleet.id}`, { vehicles: [
+    { id: keep.id, plate: 'FRT1A23', brand: 'VW', model: 'Delivery Express', year: '2021' },
+    { id: del.id, plate: del.plate, remove: true }, { plate: 'NEW9B87', brand: 'Fiat', model: 'Fiorino', year: '2023' }] }, T);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const after = (await api('GET', `/customers/${fleet.id}/equipment`, null, T)).data;
+  assert.deepEqual(after.map((e) => e.plate).sort(), ['FRT1A23', 'NEW9B87']);
+  assert.equal(after.find((e) => e.plate === 'FRT1A23').model, 'Delivery Express');
+});
+await check('restrição desligada em Configurações: a mesma placa pode ter outro cadastro', async () => {
+  const co = (await api('GET', '/company', null, T)).data;
+  const off = await api('PUT', '/company', { settings: { orders: { ...co.settings.orders, uniqueVehicle: false } } }, T);
+  assert.equal(off.status, 200); assert.equal(off.data.settings.orders.uniqueVehicle, false);
+  const r = await api('POST', '/customers', { name: 'Motorista da frota', vehicles: [{ plate: 'FRT1A23', brand: 'VW' }] }, T);
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  const p = await api('GET', '/vehicles/plate/FRT1A23', null, T);
+  assert.equal(p.data.matches.length, 2);
+  await api('PUT', '/company', { settings: { orders: { ...co.settings.orders, uniqueVehicle: true } } }, T);
+  assert.equal((await api('POST', '/customers', { name: 'Terceiro', vehicles: [{ plate: 'FRT1A23' }] }, T)).status, 409);
+});
+await check('liga/desliga a pesquisa por placa (configuração da empresa)', async () => {
+  const co = (await api('GET', '/company', null, T)).data;
+  assert.equal(co.settings.orders.plateOnOpen, true); assert.equal(co.settings.orders.plateAutoLookup, false);
+  const r = await api('PUT', '/company', { settings: { orders: { ...co.settings.orders, plateOnOpen: false } } }, T);
+  assert.equal(r.data.settings.orders.plateOnOpen, false);
+  await api('PUT', '/company', { settings: { orders: { ...co.settings.orders, plateOnOpen: true } } }, T);
+});
+
 // ---------------- OS para cobrar ----------------
 const os = await api('POST', '/orders', { customer_id: quick.customer_id, equipment_id: quick.equipment_id, problem: 'Solda no para-choque',
   items: [{ kind: 'servico', description: 'Solda', qty: 1, unit_price: 150 }] }, T);

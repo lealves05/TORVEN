@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { q, one } from '../db.js';
+import { q, one, tx } from '../db.js';
 import { need, can } from '../auth.js';
 import { parse, notFound, onlyDigits, bad } from '../util.js';
 import { audit } from '../audit.js';
+import { checkVehiclePlate, assertNoRepeatedPlates } from '../vehicleRules.js';
 
 const r = Router();
 r.use(need('customers_view', 'orders_create', 'quotes', 'requests_manage'));
@@ -76,24 +77,74 @@ r.get('/:id', async (req, res) => {
   });
 });
 
+// ---------- Veículos no próprio cadastro do cliente (vários por cliente; placa única conforme configuração) ----------
+const vehicleSchema = z.object({
+  id: z.string().uuid().optional(),
+  plate: s.min(1, 'informe a placa').max(10), brand: s.max(60).nullable().optional(), model: s.max(80).nullable().optional(),
+  year: s.max(20).nullable().optional(), color: s.max(40).nullable().optional(), remove: z.boolean().optional(),
+});
+const vehiclesSchema = z.array(vehicleSchema).max(30, 'no máximo 30 veículos por cadastro').optional();
+
+/** Grava a lista de veículos do cliente: novos (sem id), alterados (com id) e removidos (remove: true). */
+async function saveVehicles(db, req, customerId, list = []) {
+  const live = list.filter((v) => !v.remove);
+  assertNoRepeatedPlates(live, req.settings);
+  const out = [];
+  for (const v of list.filter((x) => x.remove && x.id)) {
+    await db.query('update equipment set active = false where id = $1 and customer_id = $2 and company_id = $3', [v.id, customerId, req.companyId]);
+  }
+  for (const v of live) {
+    const plate = await checkVehiclePlate(db, req, v.plate, v.id || null);
+    const description = ([v.brand, v.model].filter(Boolean).join(' ') || `Veículo ${plate}`).slice(0, 160);
+    const vals = [description, v.brand || null, v.model || null, v.year || null, plate, v.color || null];
+    if (v.id) {
+      const { rows: [e] } = await db.query(
+        `update equipment set description = $4, brand = $5, model = $6, year = $7, plate = $8, color = $9
+          where id = $1 and customer_id = $2 and company_id = $3 and active returning id`, [v.id, customerId, req.companyId, ...vals]);
+      if (!e) throw notFound('Veículo não encontrado neste cliente');
+      out.push(e.id);
+    } else {
+      const { rows: [e] } = await db.query(
+        `insert into equipment (company_id, customer_id, category, description, brand, model, year, plate, color)
+         values ($1,$2,'Veículo',$3,$4,$5,$6,$7,$8) returning id`, [req.companyId, customerId, ...vals]);
+      out.push(e.id);
+    }
+  }
+  return out;
+}
+
 r.post('/', need('customers_edit', 'orders_create'), async (req, res) => {
   const d = parse(schema, req.body);
+  const vehicles = req.body?.vehicles == null ? [] : parse(vehiclesSchema, req.body.vehicles);
   const keys = COLS.filter((k) => d[k] !== undefined);
-  const c = await one(
-    `insert into customers (company_id, ${keys.join(',')}) values ($1, ${keys.map((_, i) => `$${i + 2}`).join(',')}) returning *`,
-    [req.companyId, ...keys.map((k) => (d[k] === '' ? null : d[k]))]);
-  await audit(null, req, { entity: 'customer', entityId: c.id, action: 'create', summary: `Cliente ${c.name} cadastrado` });
+  const c = await tx(async (db) => {
+    const { rows: [x] } = await db.query(
+      `insert into customers (company_id, ${keys.join(',')}) values ($1, ${keys.map((_, i) => `$${i + 2}`).join(',')}) returning *`,
+      [req.companyId, ...keys.map((k) => (d[k] === '' ? null : d[k]))]);
+    await saveVehicles(db, req, x.id, vehicles.filter((v) => !v.id));
+    return x;
+  });
+  await audit(null, req, { entity: 'customer', entityId: c.id, action: 'create',
+    summary: `Cliente ${c.name} cadastrado${vehicles.length ? ` com ${vehicles.length} veículo(s)` : ''}` });
   res.status(201).json(c);
 });
 
 r.put('/:id', need('customers_edit'), async (req, res) => {
   const d = parse(schema.partial(), req.body);
+  const vehicles = req.body?.vehicles == null ? null : parse(vehiclesSchema, req.body.vehicles);
   const keys = COLS.filter((k) => d[k] !== undefined);
-  const c = await one(
-    `update customers set ${keys.map((k, i) => `${k} = $${i + 3}`).join(', ')} where id = $1 and company_id = $2 returning *`,
-    [req.params.id, req.companyId, ...keys.map((k) => (d[k] === '' ? null : d[k]))]);
-  if (!c) throw notFound();
-  await audit(null, req, { entity: 'customer', entityId: c.id, action: 'update', summary: `Cliente ${c.name} alterado: ${keys.join(', ')}` });
+  const c = await tx(async (db) => {
+    const { rows: [x] } = keys.length
+      ? await db.query(
+        `update customers set ${keys.map((k, i) => `${k} = $${i + 3}`).join(', ')} where id = $1 and company_id = $2 returning *`,
+        [req.params.id, req.companyId, ...keys.map((k) => (d[k] === '' ? null : d[k]))])
+      : await db.query('select * from customers where id = $1 and company_id = $2', [req.params.id, req.companyId]);
+    if (!x) throw notFound();
+    if (vehicles) await saveVehicles(db, req, x.id, vehicles);
+    return x;
+  });
+  await audit(null, req, { entity: 'customer', entityId: c.id, action: 'update',
+    summary: `Cliente ${c.name} alterado: ${[...keys, ...(vehicles?.length ? ['veículos'] : [])].join(', ')}` });
   res.json(c);
 });
 
@@ -108,9 +159,9 @@ r.delete('/:id', need('customers_edit'), async (req, res) => {
 const eqSchema = z.object({
   customer_id: z.string().uuid(),
   category: opt, description: s.min(2, 'descreva o objeto de serviço'), brand: opt, model: opt, serial: opt, year: opt, notes: opt,
-  quantity: z.coerce.number().positive().optional(), dimensions: opt, material: opt, asset_tag: opt, plate: opt, condition: opt,
+  quantity: z.coerce.number().positive().optional(), dimensions: opt, material: opt, asset_tag: opt, plate: opt, condition: opt, color: opt,
 });
-const EQ = ['category', 'description', 'brand', 'model', 'serial', 'year', 'notes', 'quantity', 'dimensions', 'material', 'asset_tag', 'plate', 'condition'];
+const EQ = ['category', 'description', 'brand', 'model', 'serial', 'year', 'notes', 'quantity', 'dimensions', 'material', 'asset_tag', 'plate', 'condition', 'color'];
 const eqVals = (d) => EQ.map((k) => (k === 'quantity' ? d.quantity ?? 1 : d[k] || null));
 
 r.get('/:id/equipment', async (req, res) => {
@@ -122,17 +173,23 @@ r.post('/:id/equipment', need('customers_edit', 'orders_create', 'requests_manag
   const d = parse(eqSchema, { ...req.body, customer_id: req.params.id });
   const c = await one('select id from customers where id = $1 and company_id = $2', [d.customer_id, req.companyId]);
   if (!c) throw notFound('Cliente não encontrado');
-  const e = await one(
-    `insert into equipment (company_id, customer_id, ${EQ.join(', ')}) values ($1,$2,${EQ.map((_, i) => `$${i + 3}`).join(',')}) returning *`,
-    [req.companyId, d.customer_id, ...eqVals(d)]);
+  const e = await tx(async (db) => {
+    d.plate = await checkVehiclePlate(db, req, d.plate);
+    return (await db.query(
+      `insert into equipment (company_id, customer_id, ${EQ.join(', ')}) values ($1,$2,${EQ.map((_, i) => `$${i + 3}`).join(',')}) returning *`,
+      [req.companyId, d.customer_id, ...eqVals(d)])).rows[0];
+  });
   res.status(201).json(e);
 });
 
 r.put('/equipment/:eid', need('customers_edit', 'orders_edit'), async (req, res) => {
   const d = parse(eqSchema.omit({ customer_id: true }), req.body);
-  const e = await one(
-    `update equipment set ${EQ.map((k, i) => `${k} = $${i + 3}`).join(', ')} where id=$1 and company_id=$2 returning *`,
-    [req.params.eid, req.companyId, ...eqVals(d)]);
+  const e = await tx(async (db) => {
+    d.plate = await checkVehiclePlate(db, req, d.plate, req.params.eid);
+    return (await db.query(
+      `update equipment set ${EQ.map((k, i) => `${k} = $${i + 3}`).join(', ')} where id=$1 and company_id=$2 returning *`,
+      [req.params.eid, req.companyId, ...eqVals(d)])).rows[0];
+  });
   if (!e) throw notFound();
   res.json(e);
 });

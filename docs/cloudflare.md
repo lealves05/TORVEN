@@ -13,3 +13,9 @@ Documento completo da migração (ORBI, TORVEN, RUSTEN e Master): `ORBI/docs/clo
 - Novidades desta branch (só no site da Cloudflare): OS por voz, placa por foto com consulta paga configurável
   (Configurações › Integrações) e cobrança na maquininha ao fechar a OS (Mercado Pago Point, Stone, Cielo LIO,
   InfinitePay; PagBank e Getnet preparados). Migração `013_voz_placa_maquininha.sql` (só acrescenta tabelas e colunas).
+- Placa na abertura da OS: a busca é automática ao completar a placa; achou um veículo, mostra marca/modelo/ano/cor e o
+  proprietário, que entra como cliente da OS. Liga/desliga na própria tela (chave "Pesquisa por placa") ou em Configurações › OS,
+  onde também fica a consulta automática ao serviço pago (desligada por padrão, pois consome consulta).
+- Veículos no cadastro do cliente: vários por cliente (placa, marca, modelo, ano, cor). Por padrão cada placa só pode estar em
+  um cadastro (conferido no servidor, com trava contra cadastros simultâneos); Configurações › OS › "Um único cadastro por veículo"
+  desliga a restrição. Sem migração nova (usa as colunas de `equipment`).

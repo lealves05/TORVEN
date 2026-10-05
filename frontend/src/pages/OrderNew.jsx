@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
-import { Save, Wrench, MapPin, RotateCcw } from 'lucide-react';
+import { Save, Wrench, MapPin, RotateCcw, Car } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
@@ -14,7 +14,7 @@ import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
 export default function OrderNew() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const { company, can, user } = useAuth();
+  const { company, setCompany, can, user } = useAuth();
   const { technicians, services } = useCatalog();
   const showValues = can('orders_values');
   const cfg = company.settings.orders;
@@ -63,6 +63,15 @@ export default function OrderNew() {
     if (c) setCustomer(c);
     setF((x) => ({ ...x, equipment_id, equipment: null }));
   };
+  const clearPlate = () => setF((x) => ({ ...x, equipment_id: null, equipment: null }));
+
+  // liga/desliga a pesquisa por placa direto na tela (grava nas configurações da empresa)
+  const plateOn = cfg.plateOnOpen !== false;
+  const togglePlate = async () => {
+    const r = await run(() => api.put('/company', { settings: { orders: { ...cfg, plateOnOpen: !plateOn } } }),
+      plateOn ? 'Pesquisa por placa desligada' : 'Pesquisa por placa ligada');
+    if (r !== FAIL) setCompany(r);
+  };
 
   const save = async () => {
     const body = {
@@ -77,11 +86,24 @@ export default function OrderNew() {
   return (
     <div className="pb-2">
       <PageHeader title="Nova ordem de serviço" subtitle="Registre o que o cliente trouxe e o problema relatado" />
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <section className="card space-y-4 p-5">
-            <h2 className="font-semibold">Cliente e equipamento</h2>
-            {cfg.plateOnOpen !== false && <PlateCapture onSelect={usePlate} initialPlate={voice?.plate} />}
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-semibold">Cliente e equipamento</h2>
+              {can('settings') && (
+                <button type="button" role="switch" aria-checked={plateOn} disabled={busy} onClick={togglePlate}
+                  title="Liga ou desliga a pesquisa por placa na abertura da OS (vale para toda a empresa)"
+                  className="ml-auto inline-flex items-center gap-2 rounded-full border border-line px-3 py-1 text-xs text-ink-soft hover:border-primary">
+                  <Car className="h-3.5 w-3.5" /> Pesquisa por placa
+                  <span className={cx('relative h-4 w-7 rounded-full transition', plateOn ? 'bg-primary' : 'bg-line')}>
+                    <span className={cx('absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition', plateOn ? 'left-[14px]' : 'left-0.5')} />
+                  </span>
+                  <b className={plateOn ? 'text-primary' : ''}>{plateOn ? 'ligada' : 'desligada'}</b>
+                </button>
+              )}
+            </div>
+            {plateOn && <PlateCapture onSelect={usePlate} onClear={clearPlate} customer={customer} autoLookup={!!cfg.plateAutoLookup} initialPlate={voice?.plate} />}
             <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setF((x) => ({ ...x, equipment_id: null, equipment: null })); }}
               autoFocus={!voice} initialText={!customer && voice?.customer && !voice?.plate ? voice.customer : undefined} />
             <EquipmentPicker customerId={customer?.id} value={f.equipment_id} onChange={set('equipment_id')}

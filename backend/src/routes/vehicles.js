@@ -6,6 +6,7 @@ import { need, can } from '../auth.js';
 import { parse, bad, HttpError, validDocument, onlyDigits } from '../util.js';
 import { listIntegrations, loadIntegration } from '../integrations/store.js';
 import { normalizePlate, formatPlate, lookupPlate, PLATE_PROVIDERS } from '../integrations/plates.js';
+import { checkVehiclePlate } from '../vehicleRules.js';
 
 const r = Router();
 r.use(need('customers_edit', 'orders_create', 'customers_view'));
@@ -16,8 +17,8 @@ const plateSql = "upper(replace(e.plate, '-', ''))";
 
 async function findByPlate(companyId, plate) {
   const { rows } = await q(
-    `select e.id, e.customer_id, e.description, e.brand, e.model, e.year, e.color, e.plate, e.category,
-            c.name as customer_name, c.phone as customer_phone, c.document as customer_document, c.kind as customer_kind
+    `select e.id, e.customer_id, e.description, e.brand, e.model, e.year, e.color, e.plate, e.category, e.vehicle_data,
+            c.name as customer_name, c.phone as customer_phone, c.document as customer_document, c.email as customer_email, c.kind as customer_kind
        from equipment e join customers c on c.id = e.customer_id
       where e.company_id = $1 and e.active and ${plateSql} = $2
       order by e.created_at desc limit 5`, [companyId, plate]);
@@ -35,7 +36,7 @@ r.get('/plate/:plate', async (req, res) => {
   const hideContact = !can(req, 'customers_contact');
   if (found.length) {
     return res.json({ plate: formatPlate(plate), found: true,
-      matches: found.map((m) => (hideContact ? { ...m, customer_phone: null, customer_document: null } : m)) });
+      matches: found.map((m) => (hideContact ? { ...m, customer_phone: null, customer_document: null, customer_email: null } : m)) });
   }
   const active = (await listIntegrations(req.companyId, 'placa')).find((x) => x.enabled);
   const base = { plate: formatPlate(plate), found: false, lookup_available: !!active, provider: active ? PLATE_PROVIDERS[active.provider]?.name : null };
@@ -91,8 +92,7 @@ r.post('/quick', need('customers_edit', 'orders_create'), async (req, res) => {
   const doc = d.customer?.document ? onlyDigits(d.customer.document) : '';
   if (doc && !validDocument(doc)) throw bad('CPF/CNPJ inválido.');
   const out = await tx(async (db) => {
-    const { rows: [dup] } = await db.query(`select e.id from equipment e where e.company_id = $1 and e.active and ${plateSql} = $2 limit 1`, [req.companyId, plate]);
-    if (dup) throw new HttpError(409, 'Esta placa já está cadastrada. Use o veículo existente.', { equipment_id: dup.id });
+    await checkVehiclePlate(db, req, plate);
     let customerId = d.customer_id || null;
     if (customerId) {
       const { rows: [c] } = await db.query('select id from customers where id = $1 and company_id = $2', [customerId, req.companyId]);
