@@ -2,10 +2,11 @@
 // Uso: node scripts/build-edge.mjs   → depois publique a pasta dist-edge como função "torven-api".
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { builtinModules } from 'node:module';
 import { build } from 'esbuild';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
 const version = (name) => lock.packages?.[`node_modules/${name}`]?.version || pkg.dependencies[name].replace(/^[^\d]*/, '');

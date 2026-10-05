@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 // Copia os arquivos do leitor de texto (OCR da placa) para public/ocr, servidos pelo próprio site (sem CDN externo).
 // Roda antes do build/dev. public/ocr fica fora do Git (são arquivos das dependências).
 import fs from 'node:fs';
@@ -5,7 +6,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'public', 'ocr');
 fs.mkdirSync(out, { recursive: true });
 const dir = (pkg) => path.dirname(require.resolve(`${pkg}/package.json`));
