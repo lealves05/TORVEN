@@ -36,10 +36,12 @@ import relationshipRoutes from './routes/relationship.js';
 import exportRoutes from './routes/export.js';
 import { platformApi, billing } from './routes/platform.js';
 import { platformGate } from './platform.js';
+import { edgeProxyIp } from './edgeProxy.js';
 
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
+  app.use(edgeProxyIp); // IP real quando o site (Cloudflare) encaminha /api
   app.use(helmet({ crossOriginResourcePolicy: false }));
   app.use(compression());
 

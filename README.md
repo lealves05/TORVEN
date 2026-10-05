@@ -225,3 +225,7 @@ TORVEN/
 - Auditoria de preços, aprovações, estoque, caixa, pagamentos, documentos fiscais, permissões e configurações
 - Nenhuma autorização fiscal, número ou protocolo é simulado; nenhuma mensagem externa é enviada sem ação do usuário
 - Links públicos com token aleatório; anexos só de tipos permitidos (JPG, PNG, WEBP, PDF) e com confirmação de autorização do cliente
+
+## Cloudflare (lorler.com.br)
+
+Branch `cloudflare`: site + `/api` publicados na Cloudflare, com endereço próprio em `lorler.com.br`. Ver `docs/cloudflare.md` e `PUBLICAR-CLOUDFLARE.bat`.
