@@ -81,6 +81,8 @@ try {
 
   const dash = await call('GET', '/dashboard');
   ok(dash.open >= 5 && dash.finance.series.length === 30 && dash.quotes.n === 2, `dashboard (abertas ${dash.open}, prontas ${dash.ready})`);
+  ok(dash.setup && dash.setup.technicians === true && dash.setup.customers === true && typeof dash.setup.company === 'boolean'
+    && dash.upcoming.every((o) => 'customer_phone' in o && o.public_token), 'dashboard com primeiros passos e contato do cliente nas próximas entregas');
 
   // ---------- cliente + equipamento ----------
   const c = await call('POST', '/customers', { kind: 'pj', name: 'Cliente Novo Ltda', document: '11.444.777/0001-61', phone: '(19) 98888-0000',
@@ -428,9 +430,14 @@ try {
   await call('POST', '/schedule', { kind: 'outro', title: 'x', starts_at: tomorrow(10), ends_at: tomorrow(9) }, [400]);
   ok(true, 'conflito confirmado grava; intervalo inválido bloqueado');
 
+  const minToday = async () => Number((await call('GET', '/production/board')).technicians.find((t) => t.id === techs[0].id).minutes_today);
   let tl = await call('POST', `/production/orders/${os3.id}/time/start`, { technician_id: techs[0].id });
   let x3 = await call('GET', `/orders/${os3.id}`);
   ok(tl.id && x3.status === 'em_execucao' && x3.open_logs.length === 1, 'cronômetro iniciado e OS passa a "em execução"');
+  const before = await minToday();
+  await new Promise((s) => setTimeout(s, 1500));
+  const during = await minToday();
+  ok(during - before > 0.015 && during - before < 1, `horas de hoje no painel contam o cronômetro em andamento (${before.toFixed(2)} → ${during.toFixed(2)} min)`);
   await call('POST', `/orders/${os3.id}/status`, { status: 'pronta' }, [400]);
   ok(true, 'não marca pronta com cronômetro aberto');
   tl = await call('POST', `/production/time/${tl.id}/stop`, { notes: 'Soldagem das dobradiças' });

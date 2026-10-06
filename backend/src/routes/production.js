@@ -174,8 +174,11 @@ r.get('/board', need('schedule_view', 'time_log'), async (req, res) => {
     `select t.id, t.name, t.color, t.specialty,
             l.id as log_id, l.started_at as log_started_at, l.activity as log_activity, o.id as order_id, o.number as order_number,
             c.name as customer_name, e.description as equipment_description,
-            (select coalesce(sum(minutes), 0) from order_time_logs x where x.technician_id = t.id and x.ended_at is not null
-               and (x.started_at at time zone $2)::date = (now() at time zone $2)::date) as minutes_today
+            (select coalesce(sum(case when x.ended_at is not null then x.minutes
+                    -- cronômetro em andamento conta até agora (só a parte de hoje, se começou ontem)
+                    else extract(epoch from now() - greatest(x.started_at, date_trunc('day', now() at time zone $2) at time zone $2)) / 60 end), 0)
+               from order_time_logs x where x.technician_id = t.id
+                and ((x.ended_at is not null and (x.started_at at time zone $2)::date = (now() at time zone $2)::date) or x.ended_at is null)) as minutes_today
        from technicians t
        left join order_time_logs l on l.technician_id = t.id and l.ended_at is null
        left join orders o on o.id = l.order_id left join customers c on c.id = o.customer_id left join equipment e on e.id = o.equipment_id

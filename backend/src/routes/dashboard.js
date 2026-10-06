@@ -19,7 +19,7 @@ r.get('/', async (req, res) => {
       where company_id = $1 and kind = 'os' and status <> all(array['entregue','cancelada']) ${scope} group by status`, params);
   const { rows: upcoming } = await q(
     `select o.id, o.number, o.status, o.priority, o.promised_at, o.total, c.name as customer_name, e.description as equipment_description,
-            t.name as technician_name, t.color as technician_color
+            t.name as technician_name, t.color as technician_color, c.phone as customer_phone, o.public_token
        from orders o left join customers c on c.id = o.customer_id left join equipment e on e.id = o.equipment_id
        left join technicians t on t.id = o.technician_id
       where o.company_id = $1 and o.kind = 'os' and o.status = any($${params.length + 1}) ${scope}
@@ -72,6 +72,19 @@ r.get('/', async (req, res) => {
         order by (stock / nullif(min_stock,0)) nulls first limit 8`, [cid]);
     out.lowStock = low;
   }
+  // primeiros passos da conta (só para quem configura a empresa)
+  if (can(req, 'settings')) {
+    const { rows: [st] } = await q(
+      `select (c.phone is not null and c.phone <> '' and c.document is not null and c.document <> '') as company,
+              exists (select 1 from technicians where company_id = $1 and active) as technicians,
+              exists (select 1 from services where company_id = $1) as services,
+              exists (select 1 from customers where company_id = $1) as customers,
+              exists (select 1 from orders where company_id = $1 and kind = 'os') as orders,
+              exists (select 1 from quotes where company_id = $1 and status <> 'rascunho') as quotes
+         from companies c where c.id = $1`, [cid]);
+    out.setup = st || null;
+  }
+  if (!can(req, 'customers_view')) out.upcoming = out.upcoming.map((o) => ({ ...o, customer_phone: null }));
   if (!can(req, 'orders_values')) out.upcoming = out.upcoming.map((o) => ({ ...o, total: null }));
   res.json(out);
 });
