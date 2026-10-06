@@ -24,6 +24,27 @@ export const ORDER_STATUS = {
 };
 export const OPEN_STATUSES = ['aberta', 'diagnostico', 'aguardando_aprovacao', 'aprovada', 'aguardando_material', 'em_execucao', 'pronta'];
 
+/** Próximo passo natural de cada etapa (botão principal da OS e do quadro). */
+export const NEXT_STEP = {
+  aberta: { to: 'diagnostico', label: 'Iniciar diagnóstico' },
+  diagnostico: { to: 'aguardando_aprovacao', label: 'Enviar p/ aprovação' },
+  aguardando_aprovacao: { to: 'aprovada', label: 'Cliente aprovou' },
+  aprovada: { to: 'em_execucao', label: 'Iniciar execução' },
+  aguardando_material: { to: 'em_execucao', label: 'Material chegou' },
+  em_execucao: { to: 'pronta', label: 'Marcar pronta' },
+};
+
+/** Explicação em linguagem simples de cada etapa. */
+export const STATUS_HINT = {
+  aberta: 'O item chegou e foi registrado; ninguém começou a mexer ainda.',
+  diagnostico: 'O técnico está avaliando o defeito para saber o que fazer e quanto custa.',
+  aguardando_aprovacao: 'O orçamento foi passado ao cliente; aguarda o "pode fazer".',
+  aprovada: 'O cliente autorizou; o serviço pode começar.',
+  aguardando_material: 'O serviço está parado esperando peça ou material.',
+  em_execucao: 'O técnico está fazendo o serviço.',
+  pronta: 'Serviço terminado; falta avisar o cliente e entregar.',
+};
+
 export const PRIORITY = {
   baixa: { label: 'Baixa', cls: 'text-ink-faint' },
   normal: { label: 'Normal', cls: 'text-ink-soft' },
@@ -87,6 +108,14 @@ export function docNumber(settings, kind, n) {
   const cfg = { request: 'SOL', quote: 'ORC', order: 'OS', purchase: 'ENT', digits: 5, ...(settings?.numbering || {}) };
   return `${cfg[kind] || ''}-${String(n).padStart(Number(cfg.digits) || 1, '0')}`;
 }
+
+/** Número da OS como aparece em todo o sistema (OS-00012) — venda de balcão mantém "Venda nº". */
+export const orderNo = (settings, o) => (o && typeof o === 'object'
+  ? (o.kind === 'venda' ? `Venda nº ${o.number}` : docNumber(settings, 'order', o.number))
+  : docNumber(settings, 'order', o));
+
+/** Usuário de chão de fábrica: técnico, ou supervisor vinculado a um técnico. */
+export const isTechnician = (user) => user?.role === 'technician' || (!!user?.technician_id && user?.role === 'supervisor');
 
 export const onlyDigits = (s) => String(s || '').replace(/\D/g, '');
 

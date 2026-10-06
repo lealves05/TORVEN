@@ -25,6 +25,7 @@ import Audit from './pages/Audit';
 import Units from './pages/Units';
 import Agenda from './pages/Agenda';
 import Production from './pages/Production';
+import MyWork from './pages/MyWork';
 import Warranty from './pages/Warranty';
 import Procurement, { QuotationDetail, PurchaseOrderDetail, Picking } from './pages/Procurement';
 import Finance from './pages/Finance';
@@ -108,6 +109,7 @@ export default function App() {
             <Route path="configuracoes" element={<Guard perms={['settings', 'users', 'fiscal_settings', 'integrations']}><Settings /></Guard>} />
             <Route path="configuracoes/unidades" element={<Guard perms={['units_manage', 'settings']}><Units /></Guard>} />
             <Route path="agenda" element={<Guard perms={['schedule_view', 'schedule_manage']}><Agenda /></Guard>} />
+            <Route path="meu-trabalho" element={<Guard perms={['time_log']}><MyWork /></Guard>} />
             <Route path="producao" element={<Guard perms={['schedule_view', 'time_log']}><Production /></Guard>} />
             <Route path="garantias" element={<Guard perms={['warranty_manage']}><Warranty /></Guard>} />
             <Route path="compras" element={<Guard perms={['purchases']}><Procurement /></Guard>} />

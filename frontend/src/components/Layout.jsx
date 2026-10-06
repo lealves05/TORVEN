@@ -8,7 +8,7 @@ import {
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
 import VoiceCommand from './VoiceCommand';
 import { useAuth } from '../context/AuthContext';
-import { ROLES } from '../lib/format';
+import { ROLES, isTechnician } from '../lib/format';
 import { cx, Avatar } from './ui';
 import DemoBanner from './DemoBanner';
 import { BillingNotices } from './Billing';
@@ -49,19 +49,25 @@ export function Logo({ company, compact, light }) {
 export function useNav() {
   const { company, can, scope, feature, access, user } = useAuth();
   const mods = company?.settings?.modules || {};
+  const tech = isTechnician(user);
+  const myWork = can('time_log') && { to: '/meu-trabalho', label: 'Meu trabalho', icon: HardHat };
+  // atalhos do dia a dia ficam fixos no topo; o resto fica agrupado
+  const pinned = [
+    tech && myWork,
+    can('orders_view', 'orders_create') && { to: '/os', label: 'Ordens de serviço', icon: ClipboardList },
+    can('quotes_view', 'quotes', 'quotes_approve') && feature('comercial') && { to: '/orcamentos', label: 'Orçamentos', icon: FileText },
+    can('customers_view') && { to: '/clientes', label: 'Clientes e veículos', icon: Users },
+    can('schedule_view', 'time_log') && feature('producao') && { to: '/producao', label: 'Painel de produção', icon: Timer },
+  ].filter(Boolean);
   const groups = [
-    { label: 'Atendimento e comercial', icon: Headset, children: [
+    { label: 'Atendimento', icon: Headset, children: [
       can('requests_view', 'requests_manage') && feature('comercial') && { to: '/solicitacoes', label: 'Solicitações', icon: Inbox },
-      can('quotes_view', 'quotes', 'quotes_approve') && feature('comercial') && { to: '/orcamentos', label: 'Orçamentos', icon: FileText },
-      can('customers_view') && { to: '/clientes', label: 'Clientes e objetos', icon: Users },
-    ] },
-    { label: 'Ordens de serviço', icon: ClipboardList, children: [
-      can('orders_view', 'orders_create') && { to: '/os', label: 'Ordens de serviço', icon: ClipboardList },
       can('orders_create') && can('checkout') && { to: '/venda', label: 'Venda de balcão', icon: ShoppingCart },
+      can('followups') && feature('relacionamento') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },
     ] },
-    { label: 'Agenda e produção', icon: CalendarDays, children: [
+    { label: 'Agenda e qualidade', icon: CalendarDays, children: [
       can('schedule_view', 'schedule_manage') && feature('agenda') && { to: '/agenda', label: 'Agenda', icon: CalendarDays },
-      can('schedule_view', 'time_log') && feature('producao') && { to: '/producao', label: 'Painel de produção', icon: Timer },
+      !tech && myWork,
       can('warranty_manage') && feature('qualidade') && { to: '/garantias', label: 'Garantias', icon: ShieldAlert },
     ] },
     { label: 'Materiais', icon: Boxes, children: [
@@ -71,34 +77,31 @@ export function useNav() {
       can('purchases') && mods.purchases && feature('compras') && { to: '/estoque/entradas', label: 'Entrada de materiais', icon: PackagePlus },
       can('suppliers', 'purchases') && { to: '/fornecedores', label: 'Fornecedores', icon: Truck },
     ] },
-    { label: 'Financeiro', icon: Landmark, children: [
+    { label: 'Financeiro e fiscal', icon: Landmark, children: [
       can('cash') && { to: '/financeiro', label: 'Caixa e lançamentos', icon: Wallet, end: true },
       can('cash', 'reports') && feature('financeiro') && { to: '/financeiro/gestao', label: 'Contas, conciliação e DRE', icon: Landmark },
       mods.commissions && scope('commissions') !== 'none' && { to: '/comissoes', label: 'Comissões', icon: BadgePercent },
-    ] },
-    { label: 'Fiscal', icon: Receipt, children: [
-      can('invoices_issue', 'invoices_cancel') && mods.invoices && feature('fiscal') && { to: '/notas', label: 'Documentos fiscais', icon: Receipt },
+      can('invoices_issue', 'invoices_cancel') && mods.invoices && feature('fiscal') && { to: '/notas', label: 'Notas fiscais', icon: Receipt },
     ] },
     { label: 'Relatórios', icon: BarChart3, children: [
-      can('reports') && feature('relatorios') && { to: '/relatorios', label: 'Relatórios gerenciais', icon: FileSpreadsheet },
-    ] },
-    { label: 'Relacionamento', icon: HeartHandshake, children: [
-      can('followups') && feature('relacionamento') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },
+      can('reports') && feature('relatorios') && { to: '/relatorios', label: 'Relatórios', icon: FileSpreadsheet },
     ] },
     { label: 'Configurações', icon: Settings, children: [
       can('settings', 'users', 'fiscal_settings', 'integrations') && { to: '/configuracoes', label: 'Empresa e sistema', icon: Settings, end: true },
       can('units_manage', 'settings') && { to: '/configuracoes/unidades', label: 'Unidades', icon: Building2 },
       can('services_manage') && { to: '/servicos', label: 'Serviços e preços', icon: Wrench },
       can('technicians_manage') && { to: '/tecnicos', label: 'Técnicos', icon: HardHat },
-      can('audit_view') && { to: '/auditoria', label: 'Logs e auditoria', icon: ShieldCheck },
+      can('audit_view') && { to: '/auditoria', label: 'Histórico de alterações', icon: ShieldCheck },
       access && ['owner', 'admin'].includes(user?.role) && { to: '/assinatura', label: 'Assinatura e plano', icon: CreditCard },
     ] },
-    { label: 'Minha Torven', icon: UserRound, children: [
+    { label: 'Minha conta e ajuda', icon: UserRound, children: [
       { to: '/conta', label: 'Minha conta e aparência', icon: UserRound },
       { to: '/suporte', label: 'Suporte e treinamento', icon: LifeBuoy },
     ] },
-  ].map((g) => ({ ...g, children: g.children.filter(Boolean) })).filter((g) => g.children.length);
-  return [{ to: '/', label: 'Início', icon: LayoutDashboard, end: true }, ...groups];
+  ].map((g) => ({ ...g, children: g.children.filter(Boolean) })).filter((g) => g.children.length)
+    // grupo com uma tela só vira item direto (menos cliques)
+    .map((g) => (g.children.length === 1 ? g.children[0] : g));
+  return [{ to: '/', label: 'Início', icon: LayoutDashboard, end: true }, ...pinned, ...groups];
 }
 
 /** Trilha de navegação a partir do menu. */
@@ -114,6 +117,7 @@ function Breadcrumbs({ nav }) {
       if (hit && (!item || c.to.length > item.to.length)) { item = c; group = n.children ? n : null; }
     }
   }
+  if (group && item && group.label === item.label) group = null; // sem "Ordens de serviço › Ordens de serviço"
   const rest = item ? path.slice(item.to.length).split('/').filter(Boolean) : [];
   const tail = rest.length ? (['novo', 'nova'].includes(rest[0]) ? 'Novo registro' : 'Detalhe') : null;
   return (
@@ -126,7 +130,7 @@ function Breadcrumbs({ nav }) {
   );
 }
 
-function QuickActions({ light, collapsed }) {
+function QuickActions({ light, collapsed, bottom }) {
   const { can } = useAuth();
   const nav = useNavigate();
   const [open, setOpen] = useState(false);
@@ -146,15 +150,22 @@ function QuickActions({ light, collapsed }) {
   ].filter(Boolean);
   if (!items.length) return null;
   return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setOpen((o) => !o)}
-        className={cx('btn h-9 gap-1.5 rounded-full px-3 text-xs', light ? 'bg-primary-fg text-primary hover:brightness-95' : 'bg-primary text-primary-fg')}>
-        <Plus className="h-4 w-4" /><span className={cx('hidden sm:inline', collapsed && 'sm:hidden')}>Novo</span>
-      </button>
+    <div ref={ref} className={cx('relative', !bottom && 'hidden lg:block')}>
+      {bottom ? (
+        <button onClick={() => setOpen((o) => !o)} aria-label="Criar novo" aria-expanded={open}
+          className="my-1 grid h-12 w-12 place-items-center rounded-full bg-primary text-primary-fg shadow-md active:brightness-95">
+          <Plus className={cx('h-6 w-6 transition', open && 'rotate-45')} />
+        </button>
+      ) : (
+        <button onClick={() => setOpen((o) => !o)} aria-expanded={open}
+          className={cx('btn h-9 gap-1.5 rounded-full px-3 text-xs', light ? 'bg-primary-fg text-primary hover:brightness-95' : 'bg-primary text-primary-fg')}>
+          <Plus className="h-4 w-4" /><span className={cx('hidden sm:inline', collapsed && 'sm:hidden')}>Novo</span>
+        </button>
+      )}
       {open && (
-        <div className="card animate-pop absolute right-0 top-full z-50 mt-2 w-64 p-1.5 text-sm text-ink">
+        <div className={cx('card animate-pop absolute z-50 w-64 p-1.5 text-sm text-ink', bottom ? 'bottom-full left-1/2 mb-3 -translate-x-1/2' : 'right-0 top-full mt-2')}>
           {items.map((i) => (
-            <button key={i.to} onClick={() => { setOpen(false); nav(i.to); }} className="flex w-full items-center gap-2.5 rounded-app-sm px-3 py-2 text-left hover:bg-muted">
+            <button key={i.to} onClick={() => { setOpen(false); nav(i.to); }} className={cx('flex w-full items-center gap-2.5 rounded-app-sm px-3 text-left hover:bg-muted', bottom ? 'py-3' : 'py-2')}>
               <i.icon className="h-4 w-4 text-ink-faint" /><span className="flex-1">{i.label}</span>
               {i.key && <kbd className="hidden text-[10px] text-ink-faint sm:inline">{i.key}</kbd>}
             </button>
@@ -162,6 +173,35 @@ function QuickActions({ light, collapsed }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Navegação inferior do celular: Início · OS · + · Produção (ou Meu trabalho) · Mais. */
+function BottomNav({ onMore }) {
+  const { can, feature, user } = useAuth();
+  const tech = isTechnician(user);
+  const work = can('time_log') && tech ? { to: '/meu-trabalho', label: 'Meu trabalho', icon: HardHat }
+    : can('schedule_view', 'time_log') && feature('producao') ? { to: '/producao', label: 'Produção', icon: Timer }
+      : can('quotes_view', 'quotes') && feature('comercial') ? { to: '/orcamentos', label: 'Orçamentos', icon: FileText } : null;
+  const items = [
+    { to: '/', label: 'Início', icon: LayoutDashboard, end: true },
+    can('orders_view', 'orders_create') && { to: '/os', label: 'OS', icon: ClipboardList },
+    'plus',
+    work,
+  ].filter(Boolean);
+  const link = (i) => (
+    <NavLink key={i.to} to={i.to} end={i.end}
+      className={({ isActive }) => cx('flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium', isActive ? 'text-primary' : 'text-ink-soft')}>
+      <i.icon className="h-5 w-5" />{i.label}
+    </NavLink>
+  );
+  return (
+    <nav aria-label="Navegação rápida" className="bottom-nav z-30 flex shrink-0 items-stretch border-t border-line bg-surface lg:hidden">
+      {items.map((i) => (i === 'plus' ? <div key="plus" className="flex flex-1 justify-center"><QuickActions bottom /></div> : link(i)))}
+      <button onClick={onMore} className="flex min-h-[3.25rem] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-ink-soft">
+        <Menu className="h-5 w-5" />Mais
+      </button>
+    </nav>
   );
 }
 
@@ -249,7 +289,7 @@ function MobileDrawer({ nav, onClose }) {
             ? <div key={i} className="px-3 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wider text-ink-faint">{n.section}</div>
             : (
               <NavLink key={n.to} to={n.to} end={n.end} onClick={onClose}
-                className={({ isActive }) => cx('flex items-center gap-3 rounded-app-sm px-3 py-2.5 text-sm font-medium', isActive ? 'bg-primary/10 text-primary' : 'text-ink-soft hover:bg-muted')}>
+                className={({ isActive }) => cx('flex items-center gap-3 rounded-app-sm px-3 py-3 text-sm font-medium', isActive ? 'bg-primary/10 text-primary' : 'text-ink-soft hover:bg-muted')}>
                 <n.icon className="h-[18px] w-[18px]" />{n.label}
               </NavLink>
             )))}
@@ -294,6 +334,7 @@ function TopLayout() {
           <Outlet />
         </div>
       </main>
+      <BottomNav onMore={() => setOpen(true)} />
     </div>
   );
 }
@@ -386,6 +427,7 @@ function SideLayout() {
             <Outlet />
           </div>
         </main>
+        <BottomNav onMore={() => setOpen(true)} />
       </div>
     </div>
   );

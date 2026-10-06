@@ -25,7 +25,8 @@ export default function Production() {
   const [tab, setTab] = useState('painel');
   return (
     <div>
-      <PageHeader title="Produção" subtitle="Quem está trabalhando em quê, fila de execução e horas apontadas" />
+      <PageHeader title="Produção" subtitle="Quem está trabalhando em quê, fila de execução e horas apontadas"
+        actions={can('time_log') && <Link to="/meu-trabalho" className="btn-outline"><HardHat className="h-4 w-4" /> Meu trabalho</Link>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ value: 'painel', label: 'Painel' }, ...(can('time_log', 'reports') ? [{ value: 'horas', label: 'Folha de horas' }] : [])]} />
       {tab === 'painel' ? <Board /> : <Timesheet />}
     </div>
@@ -63,7 +64,7 @@ function Board() {
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><Timer className="h-4 w-4" /><Elapsed since={t.log_started_at} /> · {ACTIVITY[t.log_activity]}</div>
                 <Link to={`/os/${t.order_id}`} className="block truncate text-primary">{docNumber(settings, 'order', t.order_number)} · {t.customer_name}</Link>
                 <div className="truncate text-xs text-ink-faint">{t.equipment_description}</div>
-                {can('time_log') && <button className="btn-outline mt-2 h-8 text-xs" onClick={() => stop(t)}><Square className="h-3.5 w-3.5" /> Encerrar</button>}
+                {can('time_log') && <button className="btn-outline mt-2 h-10 text-sm" onClick={() => stop(t)}><Square className="h-4 w-4" /> Encerrar cronômetro</button>}
               </div>
             ) : <div className="mt-3 text-sm text-ink-faint">Sem apontamento em andamento.</div>}
             <div className="mt-3 space-y-1 border-t border-line pt-2">
