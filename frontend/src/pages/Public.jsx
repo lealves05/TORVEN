@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, XCircle, Phone, Clock, ShieldCheck, Printer, Circle } from 'lucide-react';
 import { api, appPath } from '../lib/api';
-import { money, fmt, fmtDateTime, qty, ORDER_STATUS, QUOTE_STATUS, OPEN_STATUSES, waLink } from '../lib/format';
+import { money, fmt, fmtDateTime, qty, ORDER_STATUS, QUOTE_STATUS, OPEN_STATUSES, waLink, docNumber } from '../lib/format';
 import { applyTheme } from '../lib/theme';
-import { Loading, Input, Textarea, Modal, useAction, FAIL, cx } from '../components/ui';
+import { Loading, Input, Textarea, Modal, ActionButton, highlight, useAction, FAIL, cx } from '../components/ui';
 import { Mark } from '../components/Layout';
 
 function Shell({ company, children }) {
@@ -24,7 +24,7 @@ function Shell({ company, children }) {
           {company.phone && <a href={waLink(company.phone, 'Olá!') || `tel:${company.phone}`} target="_blank" rel="noreferrer" className="btn h-9 rounded-full bg-primary-fg/15 px-3 text-xs"><Phone className="h-4 w-4" /> Contato</a>}
         </div>
       </header>
-      <main className="mx-auto max-w-3xl space-y-4 p-4 pb-16">{children}</main>
+      <main className="mx-auto max-w-3xl space-y-4 p-4 pb-28 sm:pb-16">{children}</main>
       <footer className="pb-8 text-center text-xs text-ink-faint">Sistema TORVEN</footer>
     </div>
   );
@@ -76,9 +76,10 @@ function Respond({ title, confirmText, danger, onClose, onSubmit }) {
   return (
     <Modal open onClose={onClose} size="sm" title={title}
       footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className={danger ? 'btn-danger' : 'btn-primary'} disabled={busy || name.trim().length < 2} onClick={async () => { if ((await run(() => onSubmit({ name, note }))) !== FAIL) onClose(true); }}>{confirmText}</button></>}>
+        <ActionButton className={cx(danger ? 'btn-danger' : 'btn-primary', 'h-11')} disabled={busy} blocked={name.trim().length < 2 ? 'Escreva seu nome para registrar a resposta.' : null}
+          onBlocked={() => highlight('#resp-nome')} onClick={async () => { if ((await run(() => onSubmit({ name, note }))) !== FAIL) onClose(true); }}>{confirmText}</ActionButton></>}>
       <div className="space-y-4">
-        <Input label="Seu nome" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <div id="resp-nome"><Input label="Seu nome" hint="Fica registrado como sua assinatura nesta resposta." value={name} onChange={(e) => setName(e.target.value)} autoFocus autoComplete="name" /></div>
         <Textarea label="Comentário (opcional)" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
       </div>
     </Modal>
@@ -104,7 +105,7 @@ export function PublicQuote() {
       <div className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <div className="text-xs uppercase tracking-wider text-ink-faint">Orçamento nº {q.number}{q.revision > 1 && ` · revisão ${q.revision}`}</div>
+            <div className="text-xs uppercase tracking-wider text-ink-faint">Orçamento {docNumber({ numbering: company.numbering }, 'quote', q.number)}{q.revision > 1 && ` · revisão ${q.revision}`}</div>
             <h1 className="mt-1 text-xl font-semibold">{q.title}</h1>
             <div className="mt-1 text-sm text-ink-soft">Para {q.customer_name}{q.equipment_description && ` · ${[q.equipment_description, q.equipment_brand, q.equipment_model].filter(Boolean).join(' ')}`}</div>
           </div>
@@ -128,10 +129,21 @@ export function PublicQuote() {
         {q.terms && <p className="whitespace-pre-wrap text-xs text-ink-soft sm:col-span-2">{q.terms}</p>}
       </div>
       {open ? (
-        <div className="card flex flex-col gap-2 p-4 sm:flex-row">
-          <button className="btn-primary h-12 flex-1 text-base" onClick={() => setAct('approve')}><CheckCircle2 className="h-5 w-5" /> Aprovar orçamento</button>
-          <button className="btn-outline h-12 text-red-600 sm:w-48" onClick={() => setAct('refuse')}><XCircle className="h-5 w-5" /> Recusar</button>
-        </div>
+        <>
+          <div className="card flex flex-col gap-2 p-4 sm:flex-row">
+            {/* h-12 + w-full: em coluna (celular) o flex-1 achatava o botão de aprovar */}
+            <button className="btn-primary h-12 w-full text-base sm:w-auto sm:flex-1" onClick={() => setAct('approve')}><CheckCircle2 className="h-5 w-5" /> Aprovar orçamento</button>
+            <button className="btn-outline h-12 w-full text-red-600 sm:w-48" onClick={() => setAct('refuse')}><XCircle className="h-5 w-5" /> Recusar</button>
+          </div>
+          {/* celular: total e "Aprovar" sempre à mão no rodapé */}
+          <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur sm:hidden print:hidden" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="text-[11px] text-ink-faint">Total</div>
+              <div className="text-lg font-semibold tabular-nums">{money(q.total)}</div>
+            </div>
+            <button className="btn-primary h-12 px-5 text-base" onClick={() => setAct('approve')}><CheckCircle2 className="h-5 w-5" /> Aprovar</button>
+          </div>
+        </>
       ) : (
         <div className={cx('card p-4 text-center text-sm', approvedLike ? 'text-emerald-700' : 'text-ink-soft')}>
           {approvedLike ? `Orçamento aprovado${q.approved_at ? ` em ${fmtDateTime(q.approved_at)}` : ''}. Obrigado!`
@@ -163,7 +175,7 @@ export function PublicOrder() {
       <div className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <div className="text-xs uppercase tracking-wider text-ink-faint">{o.kind === 'venda' ? 'Venda' : 'Ordem de serviço'} nº {o.number}</div>
+            <div className="text-xs uppercase tracking-wider text-ink-faint">{o.kind === 'venda' ? `Venda nº ${o.number}` : `Ordem de serviço ${docNumber({ numbering: company.numbering }, 'order', o.number)}`}</div>
             <h1 className="mt-1 text-xl font-semibold">{o.equipment_description || 'Seu serviço'}</h1>
             <div className="text-sm text-ink-soft">{[o.equipment_brand, o.equipment_model, o.equipment_serial && `nº ${o.equipment_serial}`].filter(Boolean).join(' · ')}</div>
           </div>

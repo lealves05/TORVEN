@@ -18,7 +18,7 @@ async function companyInfo(id) {
   const s = withDefaults(c.settings);
   if (!s.modules.publicLinks) throw notFound('Link indisponível');
   delete c.settings;
-  return { ...c, primaryColor: s.primaryColor, paymentMethods: s.paymentMethods.filter((m) => m.active !== false).map((m) => m.name) };
+  return { ...c, primaryColor: s.primaryColor, numbering: s.numbering || null, paymentMethods: s.paymentMethods.filter((m) => m.active !== false).map((m) => m.name) };
 }
 
 r.get('/quote/:token', async (req, res) => {

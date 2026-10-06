@@ -256,7 +256,18 @@ export function QuoteEditor() {
             <section className="card space-y-2 p-5 text-sm">
               <div className="font-semibold">Link para o cliente</div>
               <p className="text-xs text-ink-faint">Mostra a revisão enviada; o cliente aprova (com os opcionais que quiser) ou recusa.</p>
-              <a href={link} target="_blank" rel="noreferrer" className="flex items-center gap-1 break-all text-xs text-primary">{link} <ExternalLink className="h-3 w-3 shrink-0" /></a>
+              <div className="flex gap-2">
+                <input readOnly className="input text-xs" value={link} aria-label="Link do orçamento para o cliente" onFocus={(e) => e.target.select()} />
+                <button type="button" className="btn-outline btn-icon" title="Copiar link" aria-label="Copiar link" onClick={() => { navigator.clipboard?.writeText(link); toast('Link copiado'); }}><Copy className="h-4 w-4" /></button>
+                <a className="btn-outline btn-icon" href={link} target="_blank" rel="noreferrer" title="Abrir como o cliente vê" aria-label="Abrir como o cliente vê"><ExternalLink className="h-4 w-4" /></a>
+              </div>
+              {canSend ? (
+                <button type="button" className="btn-outline w-full" onClick={() => setModal('send')}><MessageCircle className="h-4 w-4 text-emerald-600" /> Enviar pelo WhatsApp</button>
+              ) : q.customer_phone && waLink(q.customer_phone, link) && (
+                <a className="btn-outline w-full" href={waLink(q.customer_phone, fillTemplate(settings.whatsapp?.quote, { cliente: q.customer_name?.split(' ')[0], numero: docNumber(settings, 'quote', q.number), total: money(q.total), link }))} target="_blank" rel="noreferrer">
+                  <MessageCircle className="h-4 w-4 text-emerald-600" /> Enviar pelo WhatsApp
+                </a>
+              )}
             </section>
           )}
           {q && (q.versions?.length > 0 || q.approvals?.length > 0) && <HistoryCard q={q} />}
