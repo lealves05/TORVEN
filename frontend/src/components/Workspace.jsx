@@ -123,12 +123,12 @@ export function GlobalSearch() {
                   <span className="block truncate text-xs text-ink-faint">{T.label}{r.subtitle ? ` · ${r.subtitle}` : ''}</span>
                 </span>
                 {st && <span className={cx('chip hidden sm:inline-flex', st.cls)}>{st.label}</span>}
-                {i === sel && <CornerDownLeft className="h-3.5 w-3.5 shrink-0 text-ink-faint" />}
+                {i === sel && <CornerDownLeft className="hidden h-3.5 w-3.5 shrink-0 text-ink-faint [@media(hover:hover)_and_(pointer:fine)]:block" />}
               </button>
             );
           })}
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-[11px] text-ink-faint">
+        <div className="hidden flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-[11px] text-ink-faint [@media(hover:hover)_and_(pointer:fine)]:flex">
           <span>↑↓ navegar · Enter abrir</span>
           <span>Alt+S solicitação · Alt+O OS · Alt+Q orçamento</span>
         </div>

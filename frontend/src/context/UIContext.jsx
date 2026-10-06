@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 
 const Ctx = createContext(null);
@@ -19,30 +19,49 @@ export function UIProvider({ children }) {
   }), []);
 
   const close = (v) => { confirmState?.resolve(v); setConfirm(null); };
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  const dlg = useRef(null);
+  useEffect(() => {
+    if (!confirmState) return undefined;
+    const prev = document.activeElement;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeRef.current(false); return; }
+      if (e.key === 'Tab' && dlg.current) {
+        const b = [...dlg.current.querySelectorAll('button')];
+        const i = b.indexOf(document.activeElement);
+        e.preventDefault();
+        b[(i + (e.shiftKey ? -1 : 1) + b.length) % b.length]?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => { window.removeEventListener('keydown', onKey, true); if (prev?.focus && document.contains(prev)) prev.focus({ preventScroll: true }); };
+  }, [confirmState]);
 
   return (
     <Ctx.Provider value={{ toast, confirm }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[80] flex flex-col gap-2 w-[min(92vw,380px)]">
+      <div role="status" aria-live="polite" className="fixed bottom-20 right-4 z-[80] flex w-[min(92vw,380px)] flex-col gap-2 lg:bottom-4">
         {toasts.map((t) => (
           <div key={t.id} className="card animate-pop flex items-start gap-3 p-3.5 text-sm">
             {t.type === 'error'
               ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
               : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />}
             <span className="flex-1">{t.message}</span>
-            <button onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))} className="text-ink-faint hover:text-ink">
+            <button onClick={() => setToasts((l) => l.filter((x) => x.id !== t.id))} className="-m-2 p-2 text-ink-faint hover:text-ink" aria-label="Fechar aviso">
               <X className="h-4 w-4" />
             </button>
           </div>
         ))}
       </div>
       {confirmState && (
-        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 animate-fade" onClick={() => close(false)}>
-          <div className="card animate-pop w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-base font-semibold">{confirmState.title}</h3>
-            {confirmState.message && <p className="mt-1.5 text-sm text-ink-soft">{confirmState.message}</p>}
-            <div className="mt-5 flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => close(false)}>Voltar</button>
+        <div data-confirm-dialog className="fixed inset-0 z-[70] grid place-items-center bg-black/40 p-4 animate-fade" onClick={() => close(false)}>
+          <div ref={dlg} role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby={confirmState.message ? 'confirm-msg' : undefined}
+            className="card animate-pop w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 id="confirm-title" className="text-base font-semibold">{confirmState.title}</h3>
+            {confirmState.message && <p id="confirm-msg" className="mt-1.5 text-sm text-ink-soft">{confirmState.message}</p>}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button className="btn-ghost" onClick={() => close(false)}>{confirmState.cancelText || 'Voltar'}</button>
               <button autoFocus className={confirmState.danger ? 'btn-danger' : 'btn-primary'} onClick={() => close(true)}>
                 {confirmState.confirmText}
               </button>
