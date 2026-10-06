@@ -3,7 +3,7 @@ import { Sparkles, Rocket } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { maskPhone } from '../lib/format';
-import { Modal, Input, Toggle, useAction, FAIL } from './ui';
+import { Modal, Input, Toggle, ActionButton, useAction, FAIL } from './ui';
 
 /** Faixa exibida na versão de demonstração, com a ativação do uso normal. */
 export default function DemoBanner() {
@@ -25,19 +25,25 @@ export default function DemoBanner() {
 }
 
 function ActivateModal({ onClose }) {
-  const { activate } = useAuth();
+  const { activate, user } = useAuth();
+  // demonstração antiga (login gerado automaticamente) precisa definir e-mail e senha; as novas já têm
+  const legacy = /@demo\.torven\.app$/i.test(user?.email || '');
   const { toast } = useUI();
   const [run, busy] = useAction();
-  const [f, setF] = useState({ companyName: '', name: '', email: '', password: '', phone: '', keepData: false });
+  const [f, setF] = useState({ companyName: '', name: legacy ? '' : user?.name || '', email: legacy ? '' : user?.email || '', password: '', phone: '', keepData: false });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const go = async () => {
-    const r = await run(() => activate(f));
+    const r = await run(() => activate({ ...f, password: f.password || undefined }));
     if (r !== FAIL) { onClose(); toast('Sistema ativado! Use o e-mail e a senha que você definiu para entrar.'); }
   };
   return (
     <Modal open onClose={onClose} title="Ativar o uso normal" subtitle="Transforme a demonstração na conta da sua empresa"
       footer={<><button className="btn-ghost" onClick={onClose}>Continuar testando</button>
-        <button className="btn-primary" disabled={busy || !f.companyName || !f.name || !f.email || f.password.length < 6} onClick={go}><Rocket className="h-4 w-4" /> Ativar</button></>}>
+        <ActionButton disabled={busy} onClick={go}
+          blocked={!f.companyName.trim() ? 'Informe o nome da empresa.' : !f.name.trim() ? 'Informe seu nome.' : !f.email.trim() ? 'Informe o e-mail do login.'
+            : (legacy || f.password) && f.password.length < 10 ? 'A senha precisa ter ao menos 10 caracteres, com letras e números.' : null}>
+          <Rocket className="h-4 w-4" /> Ativar
+        </ActionButton></>}>
       <div className="space-y-4">
         <Input label="Nome da empresa" value={f.companyName} onChange={set('companyName')} autoFocus />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -45,7 +51,8 @@ function ActivateModal({ onClose }) {
           <Input label="Telefone / WhatsApp" value={f.phone} onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} />
         </div>
         <Input label="E-mail (será o seu login)" type="email" value={f.email} onChange={set('email')} />
-        <Input label="Senha" type="password" value={f.password} onChange={set('password')} hint="Mínimo de 10 caracteres, com letras e números" autoComplete="new-password" />
+        <Input label={legacy ? 'Senha' : 'Nova senha (opcional)'} type="password" value={f.password} onChange={set('password')}
+          hint={legacy ? 'Mínimo de 10 caracteres, com letras e números' : 'Deixe em branco para continuar com a senha da demonstração.'} autoComplete="new-password" />
         <div className="rounded-app-sm border border-line p-3">
           <Toggle checked={f.keepData} onChange={(v) => setF({ ...f, keepData: v })} label="Manter os dados de exemplo"
             hint={f.keepData ? 'Clientes, OS, materiais e lançamentos fictícios continuam no sistema.' : 'Recomendado: começa limpo, mantendo só as configurações e a aparência.'} />

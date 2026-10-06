@@ -49,8 +49,8 @@ export function AuthProvider({ children }) {
       setToken(s.token);
       setState({ loading: false, ...s });
     },
-    async demo() {
-      const s = await api.post('/auth/demo', {});
+    async demo(data) {
+      const s = await api.post('/auth/demo', data);
       setToken(s.token);
       setState({ loading: false, ...s });
     },

@@ -57,26 +57,68 @@ function ModeTabs({ mode }) {
 }
 
 function DemoCard() {
-  const { demo } = useAuth();
-  const { toast } = useUI();
-  const [busy, setBusy] = useState(false);
-  const start = async () => {
-    setBusy(true);
-    try { await demo(); toast('Demonstração pronta! Explore à vontade — nada aqui é real.'); } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-  };
   return (
     <div className="mt-6 rounded-app border border-dashed border-primary/40 bg-primary/5 p-4">
       <div className="flex items-start gap-3">
         <PlayCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold">Quer só conhecer o sistema?</div>
-          <p className="mt-0.5 text-xs text-ink-soft">Abra uma demonstração com OS, orçamentos, estoque e financeiro de exemplo, sem cadastro. Quando quiser, é só ativar o uso normal com os seus dados.</p>
-          <button className="btn-outline mt-3 w-full border-primary/40 text-primary" disabled={busy} onClick={start}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />} {busy ? 'Preparando a demonstração…' : 'Experimentar a demonstração'}
-          </button>
+          <p className="mt-0.5 text-xs text-ink-soft">Crie seu acesso de teste com e-mail e senha e explore OS, orçamentos, estoque e financeiro de exemplo. Quando quiser, é só ativar o uso normal com os seus dados.</p>
+          <Link to="/demonstracao" className="btn-outline mt-3 w-full border-primary/40 text-primary"><PlayCircle className="h-4 w-4" /> Experimentar a demonstração</Link>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Problema da senha pela mesma regra do servidor (o servidor valida de novo). */
+const passwordIssue = (p) => {
+  if (p.length < 10) return 'A senha precisa ter ao menos 10 caracteres.';
+  if (!/[A-Za-zÀ-ÿ]/.test(p) || !/\d/.test(p)) return 'Use letras e números na senha.';
+  if (new Set(p).size < 5) return 'Senha muito fraca: varie mais os caracteres.';
+  return null;
+};
+
+/** Demonstração: exige nome, e-mail e senha — vira um login de verdade, marcado como demonstração. */
+export function DemoSignup() {
+  const { demo } = useAuth();
+  const { toast } = useUI();
+  const nav = useNavigate();
+  const [f, setF] = useState({ name: '', email: '', password: '', confirm: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const submit = async (e) => {
+    e.preventDefault();
+    const problem = f.name.trim().length < 2 ? 'Informe seu nome.'
+      : !/^\S+@\S+\.\S+$/.test(f.email.trim()) ? 'Informe um e-mail válido — ele será o seu login.'
+        : passwordIssue(f.password) || (f.password !== f.confirm ? 'A confirmação não confere com a senha.' : null);
+    if (problem) { setErr(problem); return; }
+    setErr(''); setBusy(true);
+    try {
+      await demo({ name: f.name.trim(), email: f.email.trim(), password: f.password });
+      toast('Demonstração pronta! Para voltar depois, entre com este e-mail e senha.');
+      nav('/');
+    } catch (e2) { setErr(e2.message); } finally { setBusy(false); }
+  };
+  return (
+    <Shell>
+      <ModeTabs mode="/demonstracao" />
+      <h1 className="text-2xl font-semibold tracking-tight">Experimente o TORVEN</h1>
+      <p className="mt-1 text-sm text-ink-faint">Crie seu acesso de teste. A oficina vem com OS, orçamentos e estoque de exemplo; nada aqui é real.</p>
+      <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
+        <Input label="Seu nome" required autoComplete="name" value={f.name} onChange={set('name')} autoFocus />
+        <Input label="E-mail (será o seu login)" type="email" required autoComplete="email" value={f.email} onChange={set('email')} />
+        <Input label="Senha" type="password" required autoComplete="new-password" value={f.password} onChange={set('password')} hint="Mínimo de 10 caracteres, com letras e números" />
+        <Input label="Confirme a senha" type="password" required autoComplete="new-password" value={f.confirm} onChange={set('confirm')} />
+        {err && <p role="alert" className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">{err}</p>}
+        <button className="btn-primary w-full" disabled={busy}>{busy ? <><Loader2 className="h-4 w-4 animate-spin" /> Preparando a demonstração…</> : <><PlayCircle className="h-4 w-4" /> Criar acesso e entrar</>}</button>
+        <p className="text-xs text-ink-faint">A demonstração é apagada após alguns dias sem ativação. Ao ativar o uso normal, você pode manter este e-mail e senha.</p>
+      </form>
+      <Link to="/entrar" className="mt-4 flex items-center justify-center gap-1 text-sm font-medium text-primary hover:underline">
+        Já tem acesso? Entrar <ArrowRight className="h-4 w-4" />
+      </Link>
+    </Shell>
   );
 }
 

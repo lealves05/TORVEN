@@ -680,8 +680,18 @@ try {
 
   // ---------- versão de demonstração ----------
   token = '';
-  const demo = await call('POST', '/auth/demo', {});
-  ok(demo.company.is_demo && demo.token, 'demonstração criada com um clique');
+  await call('POST', '/auth/demo', {}, [400]);
+  await call('POST', '/auth/demo', { name: 'Visitante', email: 'nao-e-email', password: 'Demo2026segura' }, [400]);
+  await call('POST', '/auth/demo', { name: 'Visitante', email: `fraca${Date.now()}@torven.app`, password: '123' }, [400]);
+  ok(true, 'demonstração sem e-mail e senha válidos é recusada (nada é criado anonimamente)');
+  const demoEmail = `teste.demo${Date.now()}@torven.app`;
+  const demo = await call('POST', '/auth/demo', { name: 'Ana Teste', email: demoEmail, password: 'Demo2026segura' });
+  ok(demo.company.is_demo && demo.token && demo.user.email === demoEmail && demo.user.name === 'Ana Teste', 'demonstração criada com nome, e-mail e senha da pessoa');
+  await call('POST', '/auth/demo', { name: 'Outra', email: demoEmail, password: 'Demo2026segura' }, [409]);
+  await call('POST', '/auth/register', { companyName: 'Dup', name: 'Dup', email: demoEmail, password: 'Demo2026segura' }, [409]);
+  ok(true, 'e-mail da demonstração é único (demonstração e cadastro)');
+  const demoRelog = await call('POST', '/auth/login', { email: demoEmail, password: 'Demo2026segura' });
+  ok(demoRelog.token && demoRelog.company.is_demo, 'volta a entrar na demonstração com o mesmo e-mail e senha');
   token = demo.token;
   ok((await call('GET', '/orders')).length >= 10 && (await call('GET', '/requests?status=')).length === 3, 'demonstração já vem com dados de exemplo (OS e solicitações)');
   const act = await call('POST', '/auth/activate', { companyName: 'Serralheria Real', name: 'Dono Real', email: `real${Date.now()}@torven.app`, password: 'SegredoReal2026', keepData: false });
@@ -690,6 +700,14 @@ try {
   ok((await call('GET', '/orders')).length === 0 && (await call('GET', '/customers')).length === 0, 'dados de exemplo apagados na ativação');
   const relog = await call('POST', '/auth/login', { email: act.user.email, password: 'SegredoReal2026' });
   ok(relog.token, 'login com as credenciais definidas na ativação');
+  // ativação mantendo o e-mail e a senha já usados na demonstração
+  token = '';
+  const demo2Email = `teste.demo2${Date.now()}@torven.app`;
+  const demo2 = await call('POST', '/auth/demo', { name: 'Bia Teste', email: demo2Email, password: 'Demo2026segura' });
+  token = demo2.token;
+  const act2 = await call('POST', '/auth/activate', { companyName: 'Oficina da Bia', name: 'Bia Teste', email: demo2Email, keepData: true });
+  ok(!act2.company.is_demo && (await call('POST', '/auth/login', { email: demo2Email, password: 'Demo2026segura' })).token, 'ativação pode manter o e-mail e a senha da demonstração');
+  token = act.token;
   await call('POST', '/auth/activate', { companyName: 'X', name: 'Y', email: `z${Date.now()}@x.com`, password: 'Tecnico2026xy' }, [400]);
   ok(true, 'não reativa empresa normal');
 

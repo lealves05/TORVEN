@@ -92,9 +92,11 @@ await check('assinatura inválida é recusada', async () => {
 await check('parâmetro fecha cadastros e demonstração', async () => {
   await central('PUT', '/settings', { values: { signup_enabled: false, demo_enabled: false } });
   assert.equal((await api('POST', '/auth/register', { companyName: 'Fechada', name: 'Xavier', email: 'x@teste.dev', password: 'Oficina2026xy' })).status, 403);
-  assert.equal((await api('POST', '/auth/demo')).status, 403);
+  const demoBody = () => ({ name: 'Visitante Teste', email: `demo${Date.now()}${Math.random().toString(36).slice(2, 6)}@teste.dev`, password: 'Oficina2026xy' });
+  assert.equal((await api('POST', '/auth/demo', demoBody())).status, 403);
   await central('PUT', '/settings', { values: { signup_enabled: true, demo_enabled: true, notice_text: '' } });
-  assert.equal((await api('POST', '/auth/demo')).status, 201);
+  assert.equal((await api('POST', '/auth/demo', {})).status, 400);
+  assert.equal((await api('POST', '/auth/demo', demoBody())).status, 201);
 });
 
 await check('esqueci minha senha: link pela central, uso único, derruba a sessão antiga', async () => {

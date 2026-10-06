@@ -3,7 +3,7 @@ import { useAuth } from './context/AuthContext';
 import { CatalogProvider } from './context/CatalogContext';
 import Layout from './components/Layout';
 import { Loading } from './components/ui';
-import { Login, Register, ForgotPassword, ResetPassword } from './pages/Auth';
+import { Login, Register, DemoSignup, ForgotPassword, ResetPassword } from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import OrderNew from './pages/OrderNew';
@@ -70,6 +70,7 @@ export default function App() {
         <>
           <Route path="/entrar" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />
+          <Route path="/demonstracao" element={<DemoSignup />} />
           <Route path="*" element={<Navigate to="/entrar" replace />} />
         </>
       ) : access?.blocked ? (

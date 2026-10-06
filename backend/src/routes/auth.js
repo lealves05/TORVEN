@@ -123,7 +123,8 @@ r.post('/forgot', forgotLimiter, async (req, res) => {
   try { await limitByKey('forgot', d.email, 3, 60 * 60); } catch { return res.json(GENERIC_FORGOT); }
   const u = await one(`select u.id, u.name, u.email, u.company_id, c.name as company_name, c.is_demo from users u join companies c on c.id = u.company_id
      where u.email = $1 and u.active`, [d.email]);
-  if (!u || u.is_demo) return res.json(GENERIC_FORGOT);
+  // demonstrações antigas (login gerado, sem e-mail real) não recebem link; as novas têm e-mail próprio
+  if (!u || (u.is_demo && /@demo\.torven\.app$/i.test(u.email))) return res.json(GENERIC_FORGOT);
   const token = crypto.randomBytes(32).toString('hex');
   await q('update password_resets set used_at = now() where user_id = $1 and used_at is null', [u.id]);
   await q(`insert into password_resets (user_id, token_hash, expires_at, ip) values ($1,$2, now() + make_interval(mins => $3), $4)`,
@@ -183,24 +184,38 @@ r.put('/me', requireAuth, async (req, res) => {
 // ---------- Versão de demonstração ----------
 const demoLimiter = limitByIp('demo', 10, 60 * 60, 'Muitas demonstrações criadas a partir deste endereço. Tente mais tarde.');
 
-/** Cria uma empresa de demonstração com dados de exemplo e entra direto. */
-r.post('/demo', demoLimiter, async (_req, res) => {
+const demoSchema = z.object({
+  name: z.string().trim().min(2, 'informe seu nome').max(120),
+  email: z.string().trim().toLowerCase().email('e-mail inválido').max(200),
+  password: passwordSchema,
+  companyName: z.string().trim().max(120).optional(),
+});
+
+/**
+ * Cria uma empresa de demonstração com dados de exemplo para quem se identificou com e-mail e senha.
+ * O login é de verdade (volta a entrar com o mesmo e-mail e senha); a empresa continua marcada como demonstração
+ * até "Ativar uso normal". Sem e-mail + senha válidos nada é criado.
+ */
+r.post('/demo', demoLimiter, async (req, res) => {
   const sys = await getSystemParams();
   if (sys.demo_enabled === false) throw new HttpError(403, 'A demonstração está desativada no momento.');
+  const d = parse(demoSchema, req.body || {});
   // demonstrações abandonadas são apagadas (prazo definido pela central)
   await q('delete from companies where is_demo and created_at < now() - make_interval(days => $1)', [Number(sys.demo_days) || 7]).catch(() => {});
+  const exists = await one('select 1 from users where email = $1', [d.email]);
+  if (exists) throw new HttpError(409, 'Este e-mail já está cadastrado. Entre com ele ou use "Esqueci minha senha".');
   const rand = Math.random().toString(36).slice(2, 10);
-  const email = `demo-${rand}@demo.torven.app`;
-  const hash = await bcrypt.hash(`${rand}${Date.now()}`, 8);
+  const hash = await bcrypt.hash(d.password, 10);
+  const companyName = d.companyName || 'Oficina Demonstração';
   const userId = await tx(async (db) => {
     const { rows: [company] } = await db.query(
       `insert into companies (name, trade_name, slug, email, settings, fiscal, is_demo)
-       values ('Oficina Demonstração', 'Oficina Demonstração', $1, null, $2, $3, true) returning id`,
-      [`demo-${rand}`, DEFAULT_SETTINGS, DEFAULT_FISCAL]);
+       values ($1, $1, $2, $3, $4, $5, true) returning id`,
+      [companyName, `demo-${rand}`, d.email, DEFAULT_SETTINGS, DEFAULT_FISCAL]);
     await ensureCompanyDefaults(db, company.id);
     const { rows: [user] } = await db.query(
-      `insert into users (company_id, name, email, password_hash, role) values ($1, 'Visitante', $2, $3, 'owner') returning id`,
-      [company.id, email, hash]);
+      `insert into users (company_id, name, email, password_hash, role) values ($1, $2, $3, $4, 'owner') returning id`,
+      [company.id, d.name, d.email, hash]);
     await seedDemo(db, company.id, user.id);
     return user.id;
   });
@@ -213,10 +228,13 @@ r.post('/activate', activateLimiter, requireAuth, async (req, res) => {
     companyName: z.string().trim().min(2, 'informe o nome da empresa'),
     name: z.string().trim().min(2, 'informe seu nome'),
     email: z.string().trim().toLowerCase().email('e-mail inválido'),
-    password: passwordSchema,
+    // demonstração criada com e-mail e senha: a senha atual pode ser mantida
+    password: passwordSchema.optional().or(z.literal('').transform(() => undefined)),
     phone: z.string().trim().optional(),
     keepData: z.boolean().default(false),
   }), req.body);
+  // demonstrações antigas (anônimas, login gerado) precisam definir uma senha ao ativar
+  if (!d.password && /@demo\.torven\.app$/i.test(req.user.email || '')) throw new HttpError(400, 'Defina uma senha para o seu login.');
   if ((await getSystemParams()).signup_enabled === false) throw signupClosed();
   if (req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode ativar o sistema.');
   const c = await one('select is_demo from companies where id = $1', [req.companyId]);
@@ -238,7 +256,7 @@ r.post('/activate', activateLimiter, requireAuth, async (req, res) => {
       'update companies set name = $2, trade_name = $2, slug = $3, email = $4, phone = coalesce($5, phone), is_demo = false where id = $1',
       [req.companyId, d.companyName, slug, d.email, d.phone || null]);
     await db.query('update users set name = $2, email = $3 where id = $1', [req.user.id, d.name, d.email]);
-    await setPassword(db, req.user.id, req.companyId, d.password);
+    if (d.password) await setPassword(db, req.user.id, req.companyId, d.password);
   });
   // demonstração virou empresa de verdade: entra na central da plataforma (período de teste e assinatura)
   await registerCompany(req.companyId).catch((e) => console.warn('[plataforma] cadastro na central adiado:', e.message));
