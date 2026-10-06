@@ -36,14 +36,18 @@ export const cleanItems = (items) => items.map((i) => ({
  */
 export default function ItemsEditor({
   items, onChange, discount = 0, onDiscount, showTechnician, hideValues, readOnly, allowDiscount = true,
-  quoteMode, surcharge = 0, onSurcharge, taxRate = 0, showCost, editCost,
+  quoteMode, surcharge = 0, onSurcharge, taxRate = 0, showCost, editCost, initialTab,
 }) {
   const { services, technicians } = useCatalog();
   const { can } = useAuth();
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('servico');
+  const [tab, setTab] = useState(initialTab || 'servico');
+  // custo/margem e opcional/grupo por item ficam recolhidos para a tabela respirar (lembrado por usuário)
+  const [details, setDetailsState] = useState(() => { try { return localStorage.getItem('torven:itens-detalhes') === '1'; } catch { return false; } });
+  const setDetails = (v) => { setDetailsState(v); try { localStorage.setItem('torven:itens-detalhes', v ? '1' : '0'); } catch { /* sem armazenamento */ } };
+  const hasDetails = !readOnly && (editCost || quoteMode);
   const [freeOpen, setFreeOpen] = useState(false);
   const ref = useRef(null);
   const freeRef = useRef(null);
@@ -135,6 +139,12 @@ export default function ItemsEditor({
         </div>
       )}
 
+      {hasDetails && items.length > 0 && (
+        <label className="flex w-fit cursor-pointer items-center gap-2 text-xs text-ink-soft">
+          <input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} />
+          Mostrar {[editCost && 'custo e margem', quoteMode && 'opcional/grupo'].filter(Boolean).join(' e ')} em cada item
+        </label>
+      )}
       {items.length === 0 ? (
         <div className="rounded-app-sm border border-dashed border-line px-4 py-6 text-center text-sm text-ink-faint">Nenhum item lançado.</div>
       ) : (
@@ -165,7 +175,10 @@ export default function ItemsEditor({
                         {readOnly && quoteMode && i.approved === true && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" title="Aprovado" />}
                         {readOnly && quoteMode && i.approved === false && <XCircle className="h-4 w-4 shrink-0 text-ink-faint" title="Não aprovado" />}
                         {readOnly ? <span>{i.description}</span> : (
-                          <input className="input h-8 min-w-[150px] flex-1 basis-40" value={i.description} onChange={(e) => set(idx, { description: e.target.value })} placeholder="Descrição" />
+                          // descrição quebra linha em vez de ficar cortada
+                          <textarea className="input min-h-8 w-full resize-none py-1.5 leading-snug" aria-label="Descrição do item" placeholder="Descrição"
+                            rows={Math.min(3, Math.max(1, Math.ceil(String(i.description || '').length / 20)))}
+                            value={i.description} onChange={(e) => set(idx, { description: e.target.value.replace(/\n/g, ' ') })} />
                         )}
                       </div>
                       {showTechnician && i.kind === 'servico' && (
@@ -176,7 +189,7 @@ export default function ItemsEditor({
                           </select>
                         )
                       )}
-                      {quoteMode && (readOnly ? (i.group_label && <div className="mt-1 text-xs text-ink-faint">Grupo: {i.group_label}</div>) : (
+                      {quoteMode && (readOnly || !details ? (i.group_label && <div className="mt-1 text-xs text-ink-faint">Grupo: {i.group_label}</div>) : (
                         <div className="mt-1.5 flex flex-wrap items-center gap-3">
                           <label className="flex items-center gap-1.5 text-xs text-ink-soft">
                             <input type="checkbox" checked={!!i.optional} onChange={(e) => set(idx, { optional: e.target.checked })} /> Opcional / alternativa
@@ -200,7 +213,7 @@ export default function ItemsEditor({
                         <div className="flex flex-col items-end">
                         {readOnly ? <span className="tabular-nums">{money(i.unit_price)}</span>
                           : <MoneyInput value={i.unit_price} onChange={(v) => set(idx, { unit_price: v })} className="w-[7rem] shrink-0 [&_input]:h-8 [&_input]:text-right" aria-label="Preço unitário" />}
-                        {editCost && (
+                        {editCost && (details || readOnly) && (
                           <div className="mt-1.5">
                             {readOnly ? <div className="text-xs tabular-nums text-ink-faint">custo {money(i.unit_cost || 0)}</div> : (
                               <label className="flex items-center justify-end gap-1.5 text-[11px] text-ink-faint">
@@ -227,7 +240,7 @@ export default function ItemsEditor({
                     {!hideValues && <td className="whitespace-nowrap px-2 py-2 text-right font-medium tabular-nums">{money(itemTotal(i))}</td>}
                     {!readOnly && (
                       <td className="py-2 pr-1 text-right">
-                        <button type="button" className="btn-ghost btn-icon h-8 w-8 text-red-600" onClick={() => remove(idx)}><Trash2 className="h-4 w-4" /></button>
+                        <button type="button" className="btn-ghost btn-icon h-8 w-8 text-red-600" onClick={() => remove(idx)} aria-label={`Remover ${i.description || 'item'}`} title="Remover item"><Trash2 className="h-4 w-4" /></button>
                       </td>
                     )}
                   </tr>

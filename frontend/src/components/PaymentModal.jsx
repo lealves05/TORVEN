@@ -3,7 +3,7 @@ import { Plus, Trash2, CalendarClock } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { money } from '../lib/format';
 import { useSettings } from '../context/AuthContext';
-import { Modal, MoneyInput, Input, Select, Toggle } from './ui';
+import { Modal, MoneyInput, Input, Select, Toggle, ActionButton } from './ui';
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -11,7 +11,11 @@ const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
  * Recebimento: várias formas de pagamento + saldo parcelado "a receber".
  * onConfirm({ payments, installments }) → Promise
  */
-export default function PaymentModal({ open, onClose, balance, title = 'Receber pagamento', subtitle, confirmText = 'Confirmar recebimento', onConfirm, busy, allowSkip, requireCustomerForLater = false, hasCustomer = true, extra }) {
+/**
+ * blocked: mensagem do que impede a confirmação (o botão continua clicável e explica o motivo).
+ * skipText: com allowSkip, mostra um botão explícito para confirmar sem receber agora (saldo fica em aberto).
+ */
+export default function PaymentModal({ open, onClose, balance, title = 'Receber pagamento', subtitle, confirmText = 'Confirmar recebimento', onConfirm, busy, allowSkip, requireCustomerForLater = false, hasCustomer = true, extra, blocked, skipText }) {
   const settings = useSettings();
   const methods = (settings.paymentMethods || []).filter((m) => m.active !== false);
   const [pays, setPays] = useState([{ method: 'pix', amount: round2(balance) }]);
@@ -35,16 +39,23 @@ export default function PaymentModal({ open, onClose, balance, title = 'Receber 
   }, [later, rest, inst]);
 
   const setP = (i, patch) => setPays(pays.map((p, k) => (k === i ? { ...p, ...patch } : p)));
-  const valid = !invalidChange && (paid > 0 || installments.length > 0 || allowSkip) && !(later && requireCustomerForLater && !hasCustomer);
+  const missing = blocked
+    || (invalidChange && 'Valor acima do saldo: troco só é possível em dinheiro.')
+    || (later && requireCustomerForLater && !hasCustomer && 'Identifique o cliente para lançar "a receber".')
+    || (!(paid > 0 || installments.length > 0 || allowSkip) && 'Informe o valor recebido ou lance o saldo como "a receber".')
+    || null;
 
   return (
     <Modal open={open} onClose={onClose} title={title} subtitle={subtitle} size="md"
       footer={<>
         <button className="btn-ghost" onClick={onClose}>Voltar</button>
-        <button className="btn-primary" disabled={busy || !valid}
+        {allowSkip && skipText && (
+          <ActionButton className="btn-outline" blocked={blocked} disabled={busy} onClick={() => onConfirm({ payments: [], installments: [] })}>{skipText}</ActionButton>
+        )}
+        <ActionButton blocked={missing} disabled={busy}
           onClick={() => onConfirm({ payments: pays.filter((p) => Number(p.amount) > 0).map((p) => ({ method: p.method, amount: Number(p.amount) })), installments })}>
           {confirmText}
-        </button>
+        </ActionButton>
       </>}>
       <div className="space-y-4">
         {extra}
@@ -59,7 +70,7 @@ export default function PaymentModal({ open, onClose, balance, title = 'Receber 
                 {methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </Select>
               <MoneyInput label={i === 0 ? 'Valor' : undefined} value={p.amount} onChange={(v) => setP(i, { amount: v })} className="w-36" />
-              {pays.length > 1 && <button className="btn-ghost btn-icon text-red-600" onClick={() => setPays(pays.filter((_, k) => k !== i))}><Trash2 className="h-4 w-4" /></button>}
+              {pays.length > 1 && <button className="btn-ghost btn-icon text-red-600" aria-label="Remover esta forma de pagamento" onClick={() => setPays(pays.filter((_, k) => k !== i))}><Trash2 className="h-4 w-4" /></button>}
             </div>
           ))}
           <button className="btn-ghost text-primary" onClick={() => setPays([...pays, { method: 'dinheiro', amount: rest }])}><Plus className="h-4 w-4" /> Dividir pagamento</button>

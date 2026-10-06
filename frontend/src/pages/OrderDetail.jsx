@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Printer, MessageCircle, Wallet, PackageCheck, XCircle, RotateCcw, Receipt, Link2, Copy, Phone, Mail, Undo2,
-  ShoppingCart, MapPin, Send, Lock, Globe, FileText, ExternalLink, CreditCard,
+  ShoppingCart, MapPin, Send, Lock, Globe, FileText, ExternalLink, CreditCard, ChevronRight, Square, Timer,
 } from 'lucide-react';
 import { api, appUrl } from '../lib/api';
 import {
   money, fmt, fmtDateTime, ORDER_STATUS, OPEN_STATUSES, PRIORITY, INVOICE_STATUS, methodName, fillTemplate, waLink, toLocalInput,
+  NEXT_STEP, STATUS_HINT, orderNo, docNumber,
 } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import { useUI } from '../context/UIContext';
-import { Input, Select, Modal, Toggle, Loading, useAction, FAIL, cx } from '../components/ui';
+import { Input, Select, Modal, Toggle, Loading, ActionButton, useAction, FAIL, cx } from '../components/ui';
+import Attachments from '../components/Attachments';
 import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
 import PaymentModal from '../components/PaymentModal';
 import InvoiceModal from '../components/InvoiceModal';
@@ -67,6 +69,25 @@ export default function OrderDetail() {
       .catch((e) => toast(e.message, 'error'));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // atalhos vindos de "Meu trabalho": #itens (lançar material), #fotos, #horas
+  const loc = useLocation();
+  const ready = !!o;
+  useEffect(() => {
+    if (!ready || !loc.hash) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(loc.hash.slice(1));
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (loc.hash === '#itens') el.querySelector('input')?.focus({ preventScroll: true });
+    }, 150);
+    return () => clearTimeout(t);
+  }, [ready, loc.hash]);
+  const stepper = useRef(null);
+  const status = o?.status;
+  useEffect(() => {
+    stepper.current?.querySelector('[aria-current="step"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [status]);
+
   const dirty = useMemo(() => o && f && JSON.stringify(f) !== JSON.stringify(toForm(o)), [o, f]);
   if (!o || !f) return <Loading />;
 
@@ -87,12 +108,26 @@ export default function OrderDetail() {
     const r = await run(() => api.put(`/orders/${o.id}`, body), 'Alterações salvas');
     if (r !== FAIL) apply(r);
   };
-  const setStatus = async (status) => {
+  const setStatus = async (status, { ask = true } = {}) => {
+    if (status === o.status) return;
+    const from = OPEN_STATUSES.indexOf(o.status);
+    const to = OPEN_STATUSES.indexOf(status);
+    // pular etapas ou voltar pede confirmação (evita toque acidental na barra de etapas)
+    if (ask && (to < from || to - from > 1)) {
+      const ok = await confirm({
+        title: to < from ? `Voltar para "${ORDER_STATUS[status].label}"?` : `Pular para "${ORDER_STATUS[status].label}"?`,
+        message: to < from ? 'A OS volta para uma etapa anterior.' : `A OS sai de "${ORDER_STATUS[o.status].label}" sem passar pelas etapas do meio.`,
+        confirmText: to < from ? 'Voltar etapa' : 'Pular etapas', danger: false,
+      });
+      if (!ok) return;
+    }
     const r = await run(() => api.post(`/orders/${o.id}/status`, { status }), `Etapa: ${ORDER_STATUS[status].label}`);
     if (r !== FAIL) apply(r);
   };
+  const next = !closed && o.kind === 'os' && can('orders_edit') ? NEXT_STEP[o.status] : null;
+  const docNo = orderNo(settings, o);
   const reopen = async () => {
-    if (!(await confirm({ title: `Reabrir ${label} nº ${o.number}?`, message: o.status === 'cancelada' ? 'Os materiais voltam a ser baixados do estoque.' : 'A OS volta para "em execução".', confirmText: 'Reabrir', danger: false }))) return;
+    if (!(await confirm({ title: `Reabrir ${docNo}?`, message: o.status === 'cancelada' ? 'Os materiais voltam a ser baixados do estoque.' : 'A OS volta para "em execução".', confirmText: 'Reabrir', danger: false }))) return;
     const r = await run(() => api.post(`/orders/${o.id}/reopen`), 'OS reaberta');
     if (r !== FAIL) apply(r);
   };
@@ -116,7 +151,7 @@ export default function OrderDetail() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-              {o.kind === 'venda' && <ShoppingCart className="mr-1.5 inline h-5 w-5 text-ink-faint" />}{label} nº {o.number}
+              {o.kind === 'venda' && <ShoppingCart className="mr-1.5 inline h-5 w-5 text-ink-faint" />}{docNo}
             </h1>
             <StatusBadge status={o.status} />
             {o.priority !== 'normal' && <span className={cx('chip bg-muted', PRIORITY[o.priority].cls)}>{PRIORITY[o.priority].label}</span>}
@@ -124,7 +159,7 @@ export default function OrderDetail() {
           </div>
           <p className="mt-0.5 text-sm text-ink-faint">
             Aberta em {fmtDateTime(o.received_at)} por {o.created_by_name || '—'}
-            {o.quote_number && <> · <Link to={`/orcamentos/${o.quote_id}`} className="text-primary">orçamento nº {o.quote_number}</Link></>}
+            {o.quote_number && <> · <Link to={`/orcamentos/${o.quote_id}`} className="text-primary">orçamento {docNumber(settings, 'quote', o.quote_number)}</Link></>}
           </p>
           <StateChips o={o} />
         </div>
@@ -139,19 +174,20 @@ export default function OrderDetail() {
           {!closed && can('checkout') && values && o.balance > 0.009 && settings.orders?.terminalOnClose !== 'desligado' && (
             <button className="btn-outline" onClick={() => setModal('terminal')}><CreditCard className="h-4 w-4" /> Maquininha</button>
           )}
-          {!closed && can('orders_deliver') && <button className="btn-primary" onClick={() => setModal('deliver')}><PackageCheck className="h-4 w-4" /> Entregar</button>}
+          {next && <button className="btn-primary" disabled={busy} onClick={() => setStatus(next.to, { ask: false })} title={`Mover para "${ORDER_STATUS[next.to].label}"`}>{next.label} <ChevronRight className="h-4 w-4" /></button>}
+          {!closed && can('orders_deliver') && <button className={next ? 'btn-outline' : 'btn-primary'} onClick={() => setModal('deliver')}><PackageCheck className="h-4 w-4" /> Entregar</button>}
           {closed && (can('orders_edit') && (o.status === 'entregue' || can('orders_cancel'))) && <button className="btn-outline" onClick={reopen}><RotateCcw className="h-4 w-4" /> Reabrir</button>}
         </div>
       </div>
 
       {!closed && o.kind === 'os' && can('orders_edit') && (
-        <div className="card mb-6 overflow-x-auto p-1.5">
+        <div ref={stepper} className="card mb-6 overflow-x-auto p-1.5" role="group" aria-label="Etapas da OS">
           <div className="flex min-w-max gap-1">
             {OPEN_STATUSES.map((s, i) => {
               const idx = OPEN_STATUSES.indexOf(o.status);
               return (
-                <button key={s} onClick={() => setStatus(s)} disabled={busy}
-                  className={cx('flex items-center gap-2 rounded-app-sm px-3 py-2 text-xs font-medium transition',
+                <button key={s} onClick={() => setStatus(s)} disabled={busy} title={STATUS_HINT[s]} aria-current={s === o.status ? 'step' : undefined}
+                  className={cx('flex min-h-[2.5rem] items-center gap-2 rounded-app-sm px-3 py-2 text-xs font-medium transition',
                     s === o.status ? 'bg-primary text-primary-fg' : i < idx ? 'text-ink-soft hover:bg-muted' : 'text-ink-faint hover:bg-muted')}>
                   <span className={cx('grid h-5 w-5 place-items-center rounded-full text-[10px]', s === o.status ? 'bg-primary-fg/20' : i < idx ? 'bg-emerald-500/15 text-emerald-700' : 'bg-muted')}>{i + 1}</span>
                   {ORDER_STATUS[s].label}
@@ -209,13 +245,14 @@ export default function OrderDetail() {
             </section>
           )}
 
-          <section className="card space-y-4 p-5">
+          <section id="itens" className="card scroll-mt-4 space-y-4 p-5">
             <h2 className="font-semibold">Serviços e materiais</h2>
             <ItemsEditor items={f.items} onChange={set('items')} discount={f.discount} onDiscount={set('discount')}
-              showTechnician={o.kind === 'os'} hideValues={!values} readOnly={!editable} editCost={values} showCost={values} />
+              showTechnician={o.kind === 'os'} hideValues={!values} readOnly={!editable} editCost={values} showCost={values} initialTab={loc.hash === '#itens' ? 'material' : undefined} />
           </section>
 
-          {o.kind === 'os' && (can('time_log') || o.time_logs?.length > 0) && <ExecutionCard o={o} onChanged={load} />}
+          {o.kind === 'os' && (can('time_log') || o.time_logs?.length > 0) && <div id="horas" className="scroll-mt-4"><ExecutionCard o={o} onChanged={load} /></div>}
+          {o.kind === 'os' && <div id="fotos" className="scroll-mt-4"><Attachments entity="order" entityId={o.id} canEdit={can('orders_edit', 'orders_create') && !closed} title="Fotos e documentos da OS" /></div>}
           {o.kind === 'os' && <QualityCard o={o} onChanged={load} />}
           <Timeline o={o} onAdded={apply} />
         </div>
@@ -332,7 +369,7 @@ export default function OrderDetail() {
       )}
 
       {modal === 'pay' && (
-        <PaymentModal open onClose={() => setModal(null)} balance={o.balance} subtitle={`${label} nº ${o.number} · ${o.customer_name || 'Consumidor'}`} busy={busy}
+        <PaymentModal open onClose={() => setModal(null)} balance={o.balance} subtitle={`${docNo} · ${o.customer_name || 'Consumidor'}`} busy={busy}
           requireCustomerForLater hasCustomer={!!o.customer_id}
           onConfirm={async (body) => {
             const r = await run(() => api.post(`/orders/${o.id}/payments`, body));
@@ -340,7 +377,7 @@ export default function OrderDetail() {
           }} />
       )}
       {modal === 'terminal' && <TerminalChargeModal order={o} onClose={() => { setModal(null); load(); }} onPaid={() => load()} />}
-      {modal === 'deliver' && <DeliverModal o={o} dirty={dirty} onClose={() => setModal(null)} onDone={(r) => { apply(r); setModal(null); }} />}
+      {modal === 'deliver' && <DeliverModal o={o} dirty={dirty} onSave={save} onRefresh={load} onClose={() => setModal(null)} onDone={(r) => { apply(r); setModal(null); }} />}
       {modal === 'cancel' && <CancelModal o={o} onClose={() => setModal(null)} onDone={(r) => { apply(r); setModal(null); }} />}
       {modal === 'invoice' && <InvoiceModal order={o} onClose={() => setModal(null)} onDone={(inv) => { setModal(null); load(); toast(inv.status === 'erro' ? `Nota rejeitada: ${inv.message}` : `Nota ${INVOICE_STATUS[inv.status]?.label.toLowerCase()}`, inv.status === 'erro' ? 'error' : 'success'); }} />}
     </div>
@@ -391,7 +428,7 @@ function Timeline({ o, onAdded }) {
   );
 }
 
-function DeliverModal({ o, dirty, onClose, onDone }) {
+function DeliverModal({ o, dirty, onSave, onRefresh, onClose, onDone }) {
   const { can } = useAuth();
   const settings = useSettings();
   const [run, busy] = useAction();
@@ -399,14 +436,22 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
   const values = can('orders_values');
   const needInspection = o.kind === 'os' && settings.orders?.requireInspection && !['aprovado', 'aprovado_ressalva'].includes(o.inspection_result);
   const deliver = async (body = {}) => {
-    const r = await run(() => api.post(`/orders/${o.id}/deliver`, { ...body, received_by: rec.received_by || null, received_document: rec.received_document || null }), `${o.kind === 'venda' ? 'Venda' : 'OS'} entregue`);
+    const r = await run(() => api.post(`/orders/${o.id}/deliver`, { ...body, received_by: rec.received_by || null, received_document: rec.received_document || null }), `${orderNo(settings, o)} entregue`);
     if (r !== FAIL) onDone(r);
   };
   // maquininha ao fechar a OS: 'perguntar' (botão), 'automatico' (envia direto à maquininha padrão) ou 'desligado'
   const termMode = settings.orders?.terminalOnClose || 'perguntar';
   const [balance, setBalance] = useState(Number(o.balance));
   const canTerminal = values && can('checkout') && termMode !== 'desligado';
-  const blocked = dirty || needInspection || o.open_logs?.length > 0;
+  const openLogs = o.open_logs || [];
+  const needReceiver = settings.orders?.requireReceiver && o.kind === 'os' && !rec.received_by.trim();
+  // o que impede a entrega, em linguagem simples (o botão explica ao ser tocado)
+  const blockedMsg = (dirty && 'Salve as alterações da OS antes de entregar.')
+    || (openLogs.length > 0 && 'Encerre o cronômetro em andamento antes de entregar.')
+    || (needInspection && 'A empresa exige inspeção final aprovada antes da entrega.')
+    || (needReceiver && 'Informe quem recebeu o equipamento.')
+    || null;
+  const blocked = !!(dirty || needInspection || openLogs.length > 0);
   const [term, setTerm] = useState(() => (canTerminal && termMode === 'automatico' && !blocked && Number(o.balance) > 0.009 ? 'auto' : null));
   const afterTerminal = async () => {
     const fresh = await api.get(`/orders/${o.id}`).catch(() => null);
@@ -414,14 +459,29 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
     setBalance(left);
     if (left <= 0.009) { setTerm(null); await deliver(); } else setTerm(null);
   };
+  const stopTimers = async () => {
+    const r = await run(async () => { for (const l of openLogs) await api.post(`/production/time/${l.id}/stop`, {}); }, openLogs.length > 1 ? 'Cronômetros encerrados' : 'Cronômetro encerrado');
+    if (r !== FAIL) await onRefresh?.();
+  };
   if (term) {
     return <TerminalChargeModal order={{ ...o, balance }} auto={term === 'auto'} onPaid={afterTerminal} onClose={() => setTerm(null)} />;
   }
   const warn = (
     <>
-      {dirty && <div className="rounded-app-sm bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">Há alterações não salvas nesta OS. Salve antes de entregar.</div>}
-      {needInspection && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">A empresa exige inspeção final aprovada antes da entrega.</div>}
-      {o.open_logs?.length > 0 && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">Há cronômetro em andamento nesta OS: encerre antes de entregar.</div>}
+      {dirty && (
+        <div className="flex flex-wrap items-center gap-2 rounded-app-sm bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          <span className="flex-1">Há alterações não salvas nesta OS.</span>
+          {onSave && <button type="button" className="btn-outline h-9 bg-surface text-xs" disabled={busy} onClick={onSave}>Salvar agora</button>}
+        </div>
+      )}
+      {needInspection && <div className="rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">A empresa exige inspeção final aprovada antes da entrega (seção “Qualidade e checklists”).</div>}
+      {openLogs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
+          <Timer className="h-4 w-4 shrink-0" />
+          <span className="flex-1">Cronômetro ligado ({openLogs.map((l) => l.technician_name).filter(Boolean).join(', ') || 'técnico'}): encerre antes de entregar.</span>
+          {can('time_log') && <button type="button" className="btn-outline h-9 bg-surface text-xs text-red-700" disabled={busy} onClick={stopTimers}><Square className="h-3.5 w-3.5" /> Encerrar agora</button>}
+        </div>
+      )}
       {o.kind === 'os' && (
         <div className="grid gap-3 sm:grid-cols-2">
           <Input label={`Quem recebeu${settings.orders?.requireReceiver ? '' : ' (opcional)'}`} value={rec.received_by} onChange={(e) => setRec({ ...rec, received_by: e.target.value })} />
@@ -432,19 +492,20 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
   );
   if (values && can('checkout') && balance > 0.009) {
     return (
-      <PaymentModal open onClose={onClose} balance={balance} title="Entregar ao cliente" subtitle={`Receba o saldo de ${money(balance)} ou lance como a receber`}
-        confirmText="Receber e entregar" busy={busy} allowSkip={!settings.orders?.requirePaymentToDeliver} requireCustomerForLater hasCustomer={!!o.customer_id}
+      <PaymentModal open onClose={onClose} balance={balance} title="Entregar ao cliente" subtitle={`${orderNo(settings, o)} · receba o saldo de ${money(balance)} ou deixe a receber`}
+        confirmText="Receber e entregar" busy={busy} allowSkip={!settings.orders?.requirePaymentToDeliver} skipText="Entregar e deixar a receber"
+        requireCustomerForLater hasCustomer={!!o.customer_id} blocked={blockedMsg}
         extra={<>{warn}{canTerminal && (
-          <button type="button" className="btn-outline w-full justify-center" disabled={blocked} onClick={() => setTerm('manual')}>
+          <ActionButton className="btn-outline w-full justify-center" blocked={blockedMsg} onClick={() => setTerm('manual')}>
             <CreditCard className="h-4 w-4" /> Cobrar {money(balance)} na maquininha e entregar
-          </button>
-        )}{!settings.orders?.requirePaymentToDeliver && <p className="text-xs text-ink-faint">Para entregar sem receber agora, zere os valores e confirme — o saldo fica em aberto na OS.</p>}</>}
+          </ActionButton>
+        )}</>}
         onConfirm={(body) => deliver(body)} />
     );
   }
   return (
-    <Modal open onClose={onClose} size="sm" title="Confirmar entrega"
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || dirty || needInspection || (settings.orders?.requireReceiver && o.kind === 'os' && !rec.received_by.trim())} onClick={() => deliver()}>Confirmar entrega</button></>}>
+    <Modal open onClose={onClose} size="sm" title="Confirmar entrega" subtitle={orderNo(settings, o)}
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><ActionButton blocked={blockedMsg} disabled={busy} onClick={() => deliver()}>Confirmar entrega</ActionButton></>}>
       <div className="space-y-3 text-sm">
         {warn}
         <p>O equipamento será marcado como entregue ao cliente{o.warranty_days > 0 && <> e a garantia de <b>{o.warranty_days} dias</b> começa a contar hoje</>}.</p>
@@ -454,6 +515,7 @@ function DeliverModal({ o, dirty, onClose, onDone }) {
 }
 
 function CancelModal({ o, onClose, onDone }) {
+  const settings = useSettings();
   const [run, busy] = useAction();
   const [reason, setReason] = useState('');
   const [refund, setRefund] = useState(true);
@@ -462,8 +524,8 @@ function CancelModal({ o, onClose, onDone }) {
     if (r !== FAIL) onDone(r);
   };
   return (
-    <Modal open onClose={onClose} size="sm" title={`Cancelar ${o.kind === 'venda' ? 'venda' : 'OS'} nº ${o.number}`}
-      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-danger" disabled={busy || reason.trim().length < 3} onClick={go}>Cancelar</button></>}>
+    <Modal open onClose={onClose} size="sm" title={`Cancelar ${orderNo(settings, o)}`}
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><ActionButton className="btn-danger" disabled={busy} blocked={reason.trim().length < 3 ? 'Escreva o motivo do cancelamento (mínimo 3 letras).' : null} onClick={go}>Cancelar {o.kind === 'venda' ? 'venda' : 'OS'}</ActionButton></>}>
       <div className="space-y-4">
         <Input label="Motivo" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus placeholder="Ex.: cliente desistiu do reparo" />
         <p className="text-sm text-ink-soft">Os materiais lançados voltam ao estoque e as parcelas a receber são excluídas.</p>

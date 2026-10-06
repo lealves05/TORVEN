@@ -5,7 +5,7 @@ import { Save, Wrench, MapPin, RotateCcw, Car } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
-import { PageHeader, Input, Select, MoneyInput, useAction, FAIL, cx } from '../components/ui';
+import { PageHeader, Input, Select, MoneyInput, ActionButton, Hint, highlight, useAction, FAIL, cx } from '../components/ui';
 import { money } from '../lib/format';
 import CustomerPicker, { EquipmentPicker } from '../components/CustomerPicker';
 import PlateCapture from '../components/PlateCapture';
@@ -28,6 +28,8 @@ export default function OrderNew() {
     warranty_days: cfg.defaultWarrantyDays, status: 'aberta',
   });
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
+  // foco automático só no computador: no celular o teclado e a lista cobririam o formulário
+  const desktop = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
 
   // serviço principal: um item do tipo serviço marcado (_main) na lista — o valor vem do cadastro e pode ser editado
   const mainIdx = f.items.findIndex((i) => i._main);
@@ -104,11 +106,13 @@ export default function OrderNew() {
                 </button>
               )}
             </div>
-            {plateOn && <PlateCapture onSelect={usePlate} onClear={clearPlate} customer={customer} autoLookup={!!cfg.plateAutoLookup} initialPlate={voice?.plate} />}
-            <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setF((x) => ({ ...x, equipment_id: null, equipment: null })); }}
-              autoFocus={!voice} initialText={!customer && voice?.customer && !voice?.plate ? voice.customer : undefined} />
-            <EquipmentPicker customerId={customer?.id} value={f.equipment_id} onChange={set('equipment_id')}
-              newEquipment={f.equipment} onNewEquipment={(e) => setF((x) => ({ ...x, equipment: e }))} />
+            {plateOn && <PlateCapture onSelect={usePlate} onClear={clearPlate} customer={customer} autoLookup={!!cfg.plateAutoLookup} initialPlate={voice?.plate} autoFocus={!voice && desktop} />}
+            <div id="campo-cliente">
+              <CustomerPicker value={customer} onChange={(c) => { setCustomer(c); setF((x) => ({ ...x, equipment_id: null, equipment: null })); }}
+                autoFocus={!voice && !plateOn && desktop} initialText={!customer && voice?.customer && !voice?.plate ? voice.customer : undefined} />
+            </div>
+            <div id="campo-equipamento"><EquipmentPicker customerId={customer?.id} value={f.equipment_id} onChange={set('equipment_id')}
+              newEquipment={f.equipment} onNewEquipment={(e) => setF((x) => ({ ...x, equipment: e }))} /></div>
           </section>
 
           <section className="card space-y-4 p-5">
@@ -176,8 +180,8 @@ export default function OrderNew() {
             </div>
             {f.service_location === 'externo' && <Input label="Endereço do serviço" value={f.service_address} onChange={set('service_address')} placeholder={[customer?.street, customer?.number, customer?.city].filter(Boolean).join(', ')} />}
             <Input label="Prazo de entrega" type="datetime-local" value={f.promised_at} onChange={set('promised_at')} />
-            <Input label="Garantia (dias)" type="number" min={0} value={f.warranty_days} onChange={set('warranty_days')} />
-            <Select label="Etapa inicial" value={f.status} onChange={set('status')}>
+            <Input label={<>Garantia (dias)<Hint text="Quantos dias, a partir da entrega, o serviço fica coberto. Retornos nesse prazo viram OS de garantia sem custo." /></>} type="number" min={0} value={f.warranty_days} onChange={set('warranty_days')} />
+            <Select label={<>Etapa inicial<Hint text="Em que ponto a OS começa. O normal é “Recebida”; use outra se o serviço já foi avaliado ou aprovado." /></>} value={f.status} onChange={set('status')}>
               <option value="aberta">Recebida</option><option value="diagnostico">Em diagnóstico</option>
               <option value="aguardando_aprovacao">Aguardando aprovação</option><option value="aprovada">Aprovada</option>
               <option value="em_execucao">Em execução</option>
@@ -193,7 +197,12 @@ export default function OrderNew() {
       <div className="action-bar">
         <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
           <button className="btn-ghost" onClick={() => nav(-1)}>Cancelar</button>
-          <button className="btn-primary" disabled={busy || !customer || (f.equipment && !f.equipment.description)} onClick={save}><Save className="h-4 w-4" /> Abrir OS</button>
+          <ActionButton disabled={busy} onClick={save}
+            blocked={!customer ? (plateOn ? 'Escolha o cliente: busque pela placa ou pelo nome.' : 'Escolha o cliente da OS (busque pelo nome, telefone ou CPF/CNPJ).')
+              : f.equipment && !f.equipment.description ? 'Descreva o equipamento novo (ex.: “Portão basculante 3x2 m”).' : null}
+            onBlocked={() => highlight(!customer ? '#campo-cliente' : '#campo-equipamento')}>
+            <Save className="h-4 w-4" /> Abrir OS
+          </ActionButton>
         </div>
       </div>
     </div>

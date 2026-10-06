@@ -35,7 +35,7 @@ function VehicleFacts({ v, plate }) {
  *   onClear?: () => void, customer?: { id: string, name: string } | null, initialPlate?: string, autoLookup?: boolean,
  * }} p
  */
-export default function PlateCapture({ onSelect, onClear, customer, initialPlate, autoLookup = false }) {
+export default function PlateCapture({ onSelect, onClear, customer, initialPlate, autoLookup = false, autoFocus }) {
   const { can } = useAuth();
   const [plate, setPlate] = useState(initialPlate || '');
   const [reading, setReading] = useState('');
@@ -156,12 +156,13 @@ export default function PlateCapture({ onSelect, onClear, customer, initialPlate
             {reading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />} {reading || 'Foto da placa'}
           </button>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPhoto} />
-          <Input label="Placa" className="w-36" value={plate} maxLength={8} placeholder="ABC1D23" aria-label="Placa do veículo" autoComplete="off"
+          <Input label="Placa" className="w-36" value={plate} maxLength={8} placeholder="ABC1D23" aria-label="Placa do veículo" autoComplete="off" autoFocus={autoFocus}
+            autoCapitalize="characters" enterKeyHint="search"
             onChange={(e) => setPlate(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } }} />
           <button type="button" className="btn-ghost border border-line" onClick={() => search()} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Buscar
           </button>
-          {plate && <button type="button" className="btn-ghost btn-icon" title="Limpar" onClick={reset}><X className="h-4 w-4" /></button>}
+          {plate && <button type="button" className="btn-ghost btn-icon" title="Limpar" aria-label="Limpar placa" onClick={reset}><X className="h-4 w-4" /></button>}
           <p className="w-full text-xs text-ink-faint">Digite a placa: a busca é automática e o proprietário entra como cliente.</p>
         </div>
       )}

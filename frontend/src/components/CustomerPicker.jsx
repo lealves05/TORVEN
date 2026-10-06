@@ -36,7 +36,7 @@ export default function CustomerPicker({ value, onChange, label = 'Cliente', opt
             <div className="truncate text-sm font-medium">{value.name}</div>
             <div className="truncate text-xs text-ink-faint">{[value.phone, value.document, value.city].filter(Boolean).join(' · ') || '—'}</div>
           </div>
-          <button type="button" className="btn-ghost btn-icon h-8" onClick={() => onChange(null)} title="Trocar cliente"><X className="h-4 w-4" /></button>
+          <button type="button" className="btn-ghost btn-icon h-8" onClick={() => onChange(null)} title="Trocar cliente" aria-label="Trocar cliente"><X className="h-4 w-4" /></button>
         </div>
       </div>
     );
@@ -47,14 +47,17 @@ export default function CustomerPicker({ value, onChange, label = 'Cliente', opt
       {label && <span className="label">{label}{optional && <span className="text-ink-faint"> (opcional)</span>}</span>}
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+        {/* a lista só abre ao tocar/clicar ou digitar — o foco automático não cobre o resto do formulário */}
         <input className="input pl-9" placeholder="Buscar por nome, telefone ou CPF/CNPJ…" value={text} autoFocus={autoFocus}
-          onFocus={() => setOpen(true)} onChange={(e) => { setText(e.target.value); setOpen(true); }} />
+          aria-label={label || 'Buscar cliente'} aria-expanded={open} aria-autocomplete="list" role="combobox"
+          onClick={() => setOpen(true)} onKeyDown={(e) => { if (e.key === 'ArrowDown') setOpen(true); if (e.key === 'Escape') setOpen(false); }}
+          onChange={(e) => { setText(e.target.value); setOpen(true); }} />
       </div>
       {open && (
         <div className="card animate-pop absolute z-40 mt-1 max-h-72 w-full overflow-y-auto p-1">
           {list.map((c) => (
             <button type="button" key={c.id} onClick={() => { onChange(c); setOpen(false); setText(''); }}
-              className="flex w-full items-center gap-3 rounded-app-sm px-3 py-2 text-left hover:bg-muted">
+              className="flex min-h-[2.75rem] w-full items-center gap-3 rounded-app-sm px-3 py-2 text-left hover:bg-muted">
               {c.kind === 'pj' ? <Building2 className="h-4 w-4 shrink-0 text-ink-faint" /> : <User className="h-4 w-4 shrink-0 text-ink-faint" />}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{c.name}</span>
