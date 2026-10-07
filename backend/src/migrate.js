@@ -15,6 +15,13 @@ function listMigrations() {
 export async function migrate() {
   const client = await pool.connect();
   try {
+    // caminho rápido (cada instância nova da Edge Function passa por aqui): se todas as migrações deste pacote já
+    // estão registradas, uma consulta basta — sem trava, sem DDL. Só com migração pendente segue o caminho completo.
+    try {
+      const names = listMigrations().map((m) => m.name);
+      const { rows: [c] } = await client.query('select count(*)::int as n from _migrations where name = any($1::text[])', [names]);
+      if (c.n === names.length) return;
+    } catch { /* tabela de controle ainda não existe: caminho completo */ }
     await client.query(`create table if not exists _migrations (
       name text primary key, applied_at timestamptz not null default now())`);
     await client.query('alter table _migrations enable row level security');
