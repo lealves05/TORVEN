@@ -3,10 +3,11 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   LayoutDashboard, LifeBuoy, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
   LogOut, Menu, X, Sun, Moon, BadgePercent, ChevronDown, Plus, ShoppingCart, Truck, PackagePlus, Receipt, HardHat,
-  Inbox, HeartHandshake, Headset, Boxes, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
+  Inbox, HeartHandshake, Headset, Boxes, CircleHelp, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
 import VoiceCommand from './VoiceCommand';
+import { helpFor } from '../lib/training-help';
 import { useAuth } from '../context/AuthContext';
 import { ROLES, isTechnician } from '../lib/format';
 import { cx, Avatar } from './ui';
@@ -326,7 +327,7 @@ function TopLayout() {
               </NavLink>
             )))}
           </nav>
-          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><VoiceCommand light /><Notifications light /><QuickActions light /><UserMenu light /></div>
+          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><HelpLink light /><VoiceCommand light /><Notifications light /><QuickActions light /><UserMenu light /></div>
         </div>
       </header>
       {open && <MobileDrawer nav={nav} onClose={() => setOpen(false)} />}
@@ -367,6 +368,19 @@ function SideGroup({ item, collapsed }) {
       </button>
       {open && <div className="space-y-0.5">{item.children.map((c) => <SideLink key={c.to} item={c} />)}</div>}
     </div>
+  );
+}
+
+/** Botão Ajuda do topo: abre a vídeo-aula da tela atual (ou a lista de aulas). */
+function HelpLink({ light }) {
+  const loc = useLocation();
+  const h = helpFor(loc.pathname);
+  return (
+    <Link to={h ? `/suporte?aula=${h.n}` : '/suporte'} aria-label={h ? `Ajuda: vídeo-aula “${h.title}”` : 'Ajuda: vídeo-aulas'}
+      title={h ? `Vídeo-aula desta tela: ${h.title}` : 'Vídeo-aulas e suporte'}
+      className={cx('btn h-9 gap-1.5 px-2.5 text-xs', light ? 'text-primary-fg hover:bg-primary-fg/15' : 'border border-line text-ink-soft hover:border-primary hover:text-primary')}>
+      <CircleHelp className="h-4 w-4" /><span className="hidden md:inline">Ajuda</span>
+    </Link>
   );
 }
 
@@ -417,6 +431,7 @@ function SideLayout() {
           <div className="hidden min-w-0 flex-1 lg:block"><Breadcrumbs nav={nav} /></div>
           <div className="ml-auto flex items-center gap-1.5">
             <SearchButton />
+            <HelpLink />
             <VoiceCommand />
             <Notifications />
             <QuickActions />

@@ -28,3 +28,7 @@ Documento completo da migração (ORBI, TORVEN, RUSTEN e Master): `ORBI/docs/clo
   própria ou a do sistema; fonte serifada; títulos, nome do quadro do objeto, linha extra no cabeçalho, rodapé e textos das
   assinaturas; campos exibidos (situação, técnico, prazo, garantia, relato, acessórios, estado, diagnóstico, solução, valores,
   observações, termos, assinaturas, CNPJ, endereço); 1 ou 2 vias; papel A4 ou cupom 80 mm. Pré-visualização ao vivo.
+- Vídeo-aulas refeitas (tools/videos, ver README): 26 aulas narradas e legendadas, 37 min, para quem tem pouca prática com
+  computador — cartão com o que será aprendido, selo de passo, destaque em cada clique e resumo no fim. Inclui placa, ditado
+  por voz, impressão, garantia, qualidade, compras, retornos, logotipo e modelo da OS. Tela de Suporte com velocidade 0,75x e
+  texto da aula clicável; botão Ajuda no topo de todas as telas abre a aula da tela atual.

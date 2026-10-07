@@ -1,10 +1,10 @@
 // Suporte e treinamento: vídeo-aulas narradas, dúvidas frequentes e contato com a equipe da plataforma.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Clock, LifeBuoy, PlayCircle, Search } from 'lucide-react';
+import { CheckCircle2, Clock, LifeBuoy, PlayCircle, Search, Gauge, Captions } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { PageHeader, cx } from '../components/ui';
-import { LESSONS, MODULES, fmtDur, posterUrl, thumbUrl, videoUrl } from '../lib/training';
+import { LESSONS, MODULES, fmtDur, posterUrl, thumbUrl, videoUrl, captionsUrl } from '../lib/training';
 
 const FAQ = [
   ['Qual a diferença entre solicitação, orçamento e OS?', 'A solicitação é o pedido do cliente, antes de ver o serviço. O orçamento é a proposta com valores. A ordem de serviço é o trabalho aprovado, com etapas, materiais, horas e entrega.'],
@@ -13,8 +13,35 @@ const FAQ = [
   ['Como registro as horas do técnico?', 'Na OS ou no Painel de produção, use Iniciar e Encerrar. Esqueceu? Use Lançar manual. As horas aparecem na Folha de horas e nas comissões.'],
   ['Recebi e o caixa estava fechado.', 'Abra o caixa em Financeiro › Caixa e lançamentos antes de receber. Recebimentos ficam ligados ao caixa do dia.'],
   ['Onde vejo quem alterou algo?', 'Em Configurações › Logs e auditoria, com usuário, data e o que mudou.'],
+  ['Digitei a placa e o cliente não apareceu.', 'Confira as letras e os números. Se a placa ainda não tiver cadastro, use “Cadastrar proprietário e veículo” — o dono e o veículo entram na OS na hora.'],
+  ['O microfone não escreve nada.', 'Na primeira vez o navegador pergunta se pode usar o microfone: clique em Permitir. Se recusou, clique no cadeado ao lado do endereço do site e libere o microfone. Funciona no Chrome, Edge, Safari e no celular.'],
+  ['Como mudo o que sai na OS impressa?', 'Em Configurações › Documentos (OS impressa): logotipo, cores, títulos, rodapé, o que aparece, papel A4 ou cupom e número de vias. A pré-visualização mostra na hora.'],
+  ['A aula está rápida demais.', 'Abaixo do vídeo, escolha 0,75x para assistir mais devagar. O texto completo da aula fica logo abaixo — clique numa frase para voltar até ela.'],
 ];
 const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const SPEEDS = [[0.75, 'Mais devagar (0,75x)'], [1, 'Normal'], [1.25, 'Mais rápido (1,25x)']];
+
+/** Lê o .vtt da aula: [{ at, text }] para a transcrição clicável. */
+function useTranscript(lesson) {
+  const [cues, setCues] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    setCues([]);
+    fetch(captionsUrl(lesson)).then((r) => (r.ok ? r.text() : '')).then((t) => {
+      if (!alive) return;
+      const out = [];
+      for (const block of t.split(/\r?\n\r?\n/)) {
+        const m = block.match(/(\d\d):(\d\d):(\d\d)\.(\d+)\s*-->/);
+        if (!m) continue;
+        const text = block.split(/\r?\n/).slice(block.split(/\r?\n/).findIndex((l) => l.includes('-->')) + 1).join(' ').trim();
+        if (text) out.push({ at: +m[1] * 3600 + +m[2] * 60 + +m[3] + +`0.${m[4]}`, text });
+      }
+      setCues(out);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [lesson.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  return cues;
+}
 const total = LESSONS.reduce((a, l) => a + l.s, 0);
 
 function useWatched(userId) {
@@ -35,6 +62,8 @@ export default function Support() {
   const [term, setTerm] = useState('');
   const [seen, mark] = useWatched(user?.id);
   const player = useRef(null);
+  const [speed, setSpeed] = useState(() => { try { return Number(localStorage.getItem('torven.aulas.velocidade')) || 1; } catch { return 1; } });
+  const [now, setNow] = useState(0);
   const cur = LESSONS.find((l) => l.n === Number(params.get('aula'))) || LESSONS[0];
   const idx = LESSONS.indexOf(cur);
   const ch = access?.support_channel || {};
@@ -44,9 +73,12 @@ export default function Support() {
     if (play) setTimeout(() => { player.current?.play?.().catch(() => {}); player.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); }, 60);
   };
   useEffect(() => { player.current?.load?.(); }, [cur.n]);
+  useEffect(() => { if (player.current) player.current.playbackRate = speed; try { localStorage.setItem('torven.aulas.velocidade', String(speed)); } catch { /* */ } }, [speed, cur.n]);
+  const cues = useTranscript(cur);
+  const seek = (t) => { const v = player.current; if (!v) return; v.currentTime = t; v.play?.().catch(() => {}); };
   const groups = useMemo(() => {
     const t = norm(term.trim());
-    const hit = (l) => !t || norm(`${l.title} ${l.desc} ${l.learn.join(' ')}`).includes(t);
+    const hit = (l) => !t || norm(`${l.title} ${l.desc} ${l.learn.join(' ')} ${l.text || ''}`).includes(t);
     return MODULES.map((m) => ({ ...m, items: LESSONS.filter((l) => l.mod === m.key && hit(l)) })).filter((g) => g.items.length);
   }, [term]);
   const wa = String(ch.whatsapp || '').replace(/\D/g, '');
@@ -54,11 +86,13 @@ export default function Support() {
   return (
     <div className="space-y-6">
       <PageHeader title="Suporte e treinamento" subtitle={`${LESSONS.length} vídeo-aulas narradas, gravadas no próprio TORVEN (${Math.round(total / 60)} min no total).`} />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section aria-label="Aula atual" className="min-w-0 space-y-3">
           <video ref={player} key={cur.n} controls playsInline preload="metadata" poster={posterUrl(cur)}
-            className="aspect-[16/10] w-full rounded-xl bg-black shadow-lg" onEnded={() => { mark(cur.n); if (LESSONS[idx + 1]) open(LESSONS[idx + 1], false); }}>
+            className="aspect-[16/10] w-full rounded-xl bg-black shadow-lg" onEnded={() => { mark(cur.n); if (LESSONS[idx + 1]) open(LESSONS[idx + 1], false); }}
+            onLoadedMetadata={(e) => { e.currentTarget.playbackRate = speed; }} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}>
             <source src={videoUrl(cur)} type="video/mp4" />
+            <track kind="captions" src={captionsUrl(cur)} srcLang="pt-BR" label="Português (a legenda já aparece na imagem)" />
             Seu navegador não reproduz vídeos.
           </video>
           <div className="card p-5">
@@ -70,11 +104,39 @@ export default function Support() {
             <h2 className="mt-2 text-2xl font-bold">{cur.title}</h2>
             <p className="text-ink-soft">{cur.desc}</p>
             <ul className="mt-3 grid gap-1 text-sm sm:grid-cols-3">{cur.learn.map((x) => <li key={x} className="flex gap-1.5"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />{x}</li>)}</ul>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <button className="btn btn-ghost border border-line" disabled={idx === 0} onClick={() => open(LESSONS[idx - 1])}>Aula anterior</button>
               <button className="btn btn-primary" disabled={idx === LESSONS.length - 1} onClick={() => open(LESSONS[idx + 1])}>Próxima aula</button>
+              <span className="ml-auto flex flex-wrap items-center gap-1" role="group" aria-label="Velocidade da aula">
+                <Gauge className="h-4 w-4 text-ink-faint" aria-hidden="true" />
+                {SPEEDS.map(([v, l]) => (
+                  <button key={v} type="button" aria-pressed={speed === v} aria-label={l} title={l} onClick={() => setSpeed(v)}
+                    className={cx('btn h-8 border px-2.5 text-xs', speed === v ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>
+                    {String(v).replace('.', ',')}x
+                  </button>
+                ))}
+              </span>
             </div>
           </div>
+          {cues.length > 0 && (
+            <details className="card p-4" open>
+              <summary className="flex cursor-pointer items-center gap-2 font-semibold"><Captions className="h-4 w-4 text-primary" /> Texto da aula
+                <span className="text-xs font-normal text-ink-faint">— clique numa frase para ir até ela no vídeo</span></summary>
+              <ol className="mt-3 max-h-72 space-y-1 overflow-y-auto pr-1 text-sm">
+                {cues.map((c, i) => {
+                  const on = now >= c.at && (i === cues.length - 1 || now < cues[i + 1].at);
+                  return (
+                    <li key={i}>
+                      <button type="button" onClick={() => seek(c.at)} aria-current={on ? 'true' : undefined}
+                        className={cx('flex w-full gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-primary/5', on && 'bg-primary/10 font-medium text-primary')}>
+                        <span className="w-10 shrink-0 tabular-nums text-xs text-ink-faint">{fmtDur(c.at)}</span><span>{c.text}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </details>
+          )}
         </section>
         <aside className="space-y-3">
           <div className="card p-3">
@@ -102,7 +164,7 @@ export default function Support() {
           </div>
         </aside>
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div>
           <h2 className="text-xl font-bold">Perguntas frequentes</h2>
           <div className="mt-2 space-y-2">{FAQ.map(([q, a]) => <details key={q} className="card p-3"><summary className="cursor-pointer font-semibold">{q}</summary><p className="mt-2 text-sm">{a}</p></details>)}</div>

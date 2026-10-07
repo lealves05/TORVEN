@@ -1,0 +1,29 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:08.900
+Aula 17: Materiais e estoque. Nesta aula você vai aprender: Encontrar um material; Cadastrar um material novo; Ver o que está abaixo do mínimo.
+
+2
+00:00:11.173 --> 00:00:17.076
+Em Materiais e estoque ficam as peças e os insumos da oficina, com a quantidade de cada um.
+
+3
+00:00:19.590 --> 00:00:24.768
+O botão Abaixo do mínimo mostra só o que está acabando. É a sua lista de compras.
+
+4
+00:00:26.790 --> 00:00:33.888
+Para cadastrar, clique em Novo material. Informe o nome, a unidade, o custo, o preço de venda e o estoque mínimo.
+
+5
+00:00:35.490 --> 00:00:41.756
+O estoque mínimo é a quantidade em que você quer ser avisado. Por exemplo: dez discos de corte.
+
+6
+00:00:42.190 --> 00:00:50.141
+Lembre: o material usado na OS e na venda de balcão sai do estoque sozinho. E a entrada da nota do fornecedor soma ao estoque.
+
+7
+00:00:50.190 --> 00:00:59.997
+Recapitulando: Encontrar um material; Cadastrar um material novo; Ver o que está abaixo do mínimo. Se precisar, assista de novo quando quiser. Até a próxima aula!

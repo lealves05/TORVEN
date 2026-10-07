@@ -1,0 +1,49 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:10.266
+Aula 11: Cadastrar clientes e veículos. Nesta aula você vai aprender: Cadastrar um cliente novo; Incluir um ou mais veículos; Por que cada placa tem um só dono.
+
+2
+00:00:12.631 --> 00:00:20.177
+Na tela Clientes e veículos ficam todos os seus clientes. Use a busca para achar pelo nome, telefone ou documento.
+
+3
+00:00:22.676 --> 00:00:29.838
+Para cadastrar, clique em Novo cliente. Escolha pessoa física, para uma pessoa, ou pessoa jurídica, para uma empresa.
+
+4
+00:00:32.776 --> 00:00:39.255
+Escreva o nome e o celular. O celular é importante: é por ele que você avisa que o serviço ficou pronto.
+
+5
+00:00:39.276 --> 00:00:43.473
+Só o nome é obrigatório. O resto pode ser completado depois.
+
+6
+00:00:52.776 --> 00:00:58.615
+Na parte Veículos, clique em Adicionar veículo e preencha a placa, a marca, o modelo e o ano.
+
+7
+00:01:05.376 --> 00:01:12.815
+O cliente tem mais de um veículo? Clique de novo em Adicionar veículo. Para tirar um veículo, use a lixeira vermelha.
+
+8
+00:01:16.076 --> 00:01:21.297
+Clique em Salvar. A ficha do cliente abre, com os veículos e o histórico de serviços.
+
+9
+00:01:33.476 --> 00:01:42.256
+Cada placa só pode estar em um cadastro. Se você digitar uma placa que já existe, aparece o aviso: já cadastrado para, e o nome do dono.
+
+10
+00:01:42.276 --> 00:01:45.555
+Assim não existem dois cadastros para o mesmo carro.
+
+11
+00:01:47.776 --> 00:01:54.234
+Essa regra pode ser desligada em Configurações, se a sua oficina precisar. Por exemplo, para frotas.
+
+12
+00:01:54.376 --> 00:02:04.887
+Recapitulando: Cadastrar um cliente novo; Incluir um ou mais veículos; Por que cada placa tem um só dono. Se precisar, assista de novo quando quiser. Até a próxima aula!
