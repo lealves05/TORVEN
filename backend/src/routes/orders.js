@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { q, tx } from '../db.js';
 import { need, can } from '../auth.js';
 import { parse, notFound, bad, round2, publicToken, OPEN_STATUSES, HttpError } from '../util.js';
+import { checkType, assertChecklists } from './quality.js';
 import {
   nextNumber, itemSchema, prepareItems, insertItems, syncOrderStock, logEvent, orderFinance, STATUS_LABEL, refreshLabor, assertNoOpenCharge,
 } from '../domain.js';
@@ -23,6 +24,7 @@ const orderSchema = z.object({
     category: opt, description: s.min(2), brand: opt, model: opt, serial: opt, year: opt, notes: opt, material: opt, dimensions: opt,
   }).nullable().optional(),
   technician_id: z.string().uuid().nullable().optional(),
+  order_type_id: z.string().uuid().nullable().optional(),
   priority: z.enum(['baixa', 'normal', 'alta', 'urgente']).default('normal'),
   service_location: z.enum(['oficina', 'externo']).default('oficina'),
   service_address: opt,
@@ -75,8 +77,10 @@ async function loadOrder(req, id, db = null) {
             e.description as equipment_description, e.brand as equipment_brand, e.model as equipment_model,
             e.serial as equipment_serial, e.category as equipment_category, e.plate as equipment_plate, e.year as equipment_year,
             e.color as equipment_color,
-            t.name as technician_name, t.color as technician_color, u.name as created_by_name, qt.number as quote_number
+            t.name as technician_name, t.color as technician_color, u.name as created_by_name, qt.number as quote_number,
+            ot.name as order_type_name
        from orders o left join customers c on c.id = o.customer_id left join equipment e on e.id = o.equipment_id
+       left join order_types ot on ot.id = o.order_type_id
        left join technicians t on t.id = o.technician_id left join users u on u.id = o.created_by
        left join quotes qt on qt.id = o.quote_id
       where o.id = $1 and o.company_id = $2 ${scope}`, params);
@@ -98,7 +102,8 @@ async function loadOrder(req, id, db = null) {
                       l.manual, l.notes, l.created_at, u.name as user_name
            from order_time_logs l join technicians t on t.id = l.technician_id left join users u on u.id = l.user_id
           where l.order_id = $1 order by l.started_at desc`, [id]),
-    () => run(`select i.*, u.name as inspector_name from order_inspections i left join users u on u.id = i.inspector_id
+    () => run(`select i.*, u.name as inspector_name, ct.name as template_name from order_inspections i
+           left join users u on u.id = i.inspector_id left join checklist_templates ct on ct.id = i.template_id
           where i.order_id = $1 order by i.created_at desc`, [id]),
     () => run(`select id, number, status, within_warranty, description, opened_at, rework_order_id from warranty_claims
           where order_id = $1 order by opened_at desc`, [id]),
@@ -215,6 +220,7 @@ r.post('/', need('orders_create'), async (req, res) => {
   const id = await tx(async (db) => {
     const number = await nextNumber(db, 'orders', req.companyId);
     const equipmentId = await resolveEquipment(db, req, d);
+    const type = d.kind === 'os' ? await checkType(db, req.companyId, d.order_type_id) : null;
     const technician = d.technician_id || (req.user.role === 'technician' ? req.ownTechnician : null);
     const src = can(req, 'orders_values') ? d.items : await catalogPrices(db, req.companyId, d.items, []);
     if (!can(req, 'orders_values')) d.discount = 0;
@@ -226,14 +232,14 @@ r.post('/', need('orders_create'), async (req, res) => {
     const { rows: [o] } = await db.query(
       `insert into orders (company_id, number, kind, customer_id, equipment_id, technician_id, status, priority, service_location,
               service_address, received_at, promised_at, problem, diagnosis, solution, accessories, condition, subtotal, discount, total,
-              warranty_days, notes, internal_notes, public_token, created_by)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,coalesce($11::timestamptz, now()),$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+              warranty_days, notes, internal_notes, public_token, created_by, order_type_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,coalesce($11::timestamptz, now()),$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
        returning *`,
       [req.companyId, number, d.kind, d.customer_id || null, equipmentId, technician, d.status || 'aberta', d.priority,
         d.service_location, d.service_address || null, d.received_at || null, promised, d.problem || null, d.diagnosis || null,
         d.solution || null, d.accessories || null, d.condition || null, subtotal, d.discount, total,
         d.warranty_days ?? (d.kind === 'os' ? cfg.defaultWarrantyDays : 0), d.notes || null, d.internal_notes || null,
-        publicToken(), req.user.id]);
+        publicToken(), req.user.id, type?.id || null]);
     await insertItems(db, 'order_items', 'order_id', o.id, items);
     await syncOrderStock(db, o, req.user.id, req.settings);
     await logEvent(db, o.id, { type: 'criacao', to: o.status, message: d.kind === 'venda' ? 'Venda criada' : 'OS aberta', isPublic: true, userId: req.user.id });
@@ -275,6 +281,11 @@ r.put('/:id', need('orders_edit'), async (req, res) => {
         d.service_address || null, d.received_at || null, d.promised_at || null, d.problem || null, d.diagnosis || null,
         d.solution || null, d.accessories || null, d.condition || null, subtotal, d.discount, total, d.warranty_days ?? null,
         d.notes || null, d.internal_notes || null]);
+    if (d.order_type_id !== undefined && (d.order_type_id || null) !== (cur.order_type_id || null) && cur.kind === 'os') {
+      const t = await checkType(db, req.companyId, d.order_type_id);
+      await db.query('update orders set order_type_id = $2 where id = $1', [cur.id, t?.id || null]);
+      await logEvent(db, cur.id, { type: 'nota', message: t ? `Tipo da OS: ${t.name}` : 'Tipo da OS removido', isPublic: false, userId: req.user.id });
+    }
     await insertItems(db, 'order_items', 'order_id', o.id, prepared);
     await syncOrderStock(db, o, req.user.id, req.settings);
   });
@@ -293,7 +304,9 @@ r.post('/:id/status', need('orders_edit'), async (req, res) => {
     await loadOrder(req, cur.id, db);
     if (['entregue', 'cancelada'].includes(cur.status)) throw bad('OS entregue ou cancelada. Use "Reabrir".');
     if (cur.status === d.status) return;
+    if (cur.status === 'aberta') await assertChecklists(db, cur, ['recebimento'], 'mudar a etapa da OS');
     if (d.status === 'pronta') {
+      await assertChecklists(db, cur, ['recebimento', 'inspecao'], 'marcar a OS como pronta');
       if (req.settings.orders.requireInspection && !['aprovado', 'aprovado_ressalva'].includes(cur.inspection_result)) {
         throw bad('Registre a inspeção final aprovada antes de marcar como pronta.');
       }
@@ -415,6 +428,7 @@ r.post('/:id/deliver', need('orders_deliver'), async (req, res) => {
     if (o.kind === 'os' && cfgO.requireInspection && !['aprovado', 'aprovado_ressalva'].includes(o.inspection_result)) {
       throw bad('Registre a inspeção final aprovada antes de entregar.');
     }
+    await assertChecklists(db, o, ['recebimento', 'inspecao', 'entrega'], 'entregar');
     if (o.kind === 'os' && cfgO.requireReceiver && !d.received_by) throw bad('Informe quem recebeu o serviço.');
     const { rows: [openLogs] } = await db.query('select count(*)::int as n from order_time_logs where order_id = $1 and ended_at is null', [o.id]);
     if (openLogs.n) throw bad('Há apontamento de horas em andamento nesta OS. Encerre o cronômetro antes de entregar.');

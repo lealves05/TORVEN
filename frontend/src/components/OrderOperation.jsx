@@ -1,6 +1,6 @@
 // Blocos da operação técnica dentro da OS: estados separados, execução (horas), qualidade, agenda e garantia.
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Play, Square, Timer, Plus, Trash2, ClipboardCheck, CalendarPlus, ShieldAlert, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import { fmt, fmtDateTime, money, toLocalInput, docNumber } from '../lib/format';
@@ -12,6 +12,7 @@ import { ACTIVITY, Elapsed, hm } from '../pages/Production';
 import { SCHEDULE_KIND, SCHEDULE_STATUS, ScheduleModal } from '../pages/Agenda';
 import { WarrantyBadge, WarrantyModal } from '../pages/Warranty';
 import VoiceTextarea from './VoiceTextarea';
+import { useOrderTypes, OrderTypeSelect } from './OrderTypes';
 
 export const INSPECTION_RESULT = {
   aprovado: { label: 'Aprovada', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
@@ -137,26 +138,60 @@ function ManualTime({ o, scopeAll, onClose, onDone }) {
 
 export function QualityCard({ o, onChanged }) {
   const { can } = useAuth();
+  const [params, setParams] = useSearchParams();
   const [modal, setModal] = useState(null);
+  const [templates, setTemplates] = useState(null); // null = carregando
+  const [run, busy] = useAction();
+  const types = useOrderTypes();
   const canInspect = can('inspections');
-  const kinds = [canInspect && 'inspecao', (can('orders_edit') || can('orders_create')) && 'recebimento', (can('orders_deliver') || canInspect) && 'entrega'].filter(Boolean);
+  const kinds = [(can('orders_edit') || can('orders_create') || canInspect) && 'recebimento', canInspect && 'inspecao', (can('orders_deliver') || canInspect) && 'entrega'].filter(Boolean);
   const closed = o.status === 'cancelada';
+  const editable = !['entregue', 'cancelada'].includes(o.status) && (can('orders_edit') || can('orders_create'));
+  useEffect(() => {
+    api.get(`/quality/templates${o.order_type_id ? `?order_type_id=${o.order_type_id}` : ''}`)
+      .then((l) => setTemplates(l.filter((t) => !t.order_type_id || t.order_type_id === o.order_type_id))).catch(() => setTemplates([]));
+  }, [o.order_type_id]);
+  // aberta logo depois de criar a OS (tipo com checklist de recebimento)
+  useEffect(() => {
+    const k = params.get('checklist');
+    if (k && kinds.includes(k) && !closed) setModal(k);
+    if (k) { params.delete('checklist'); setParams(params, { replace: true }); }
+  }, []); // eslint-disable-line
+  const done = (k) => (o.inspections || []).some((i) => i.kind === k && (i.result !== 'reprovado' || k === 'recebimento'));
+  const pending = [...new Set((templates || []).filter((t) => t.required && !done(t.kind)).map((t) => t.kind))];
+  const changeType = async (v) => {
+    const r = await run(() => api.put(`/quality/orders/${o.id}/type`, { order_type_id: v }), v ? 'Tipo da OS alterado' : 'Tipo da OS removido');
+    if (r !== FAIL) onChanged();
+  };
   return (
-    <section className="card p-5">
+    <section className="card p-5" id="checklists">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-semibold"><ClipboardCheck className="h-4 w-4 text-ink-faint" /> Qualidade e checklists</h2>
         {!closed && kinds.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {kinds.map((k) => <button key={k} className="btn-outline h-8 text-xs" onClick={() => setModal(k)}><Plus className="h-3.5 w-3.5" /> {CHECK_KIND[k]}</button>)}
+            {kinds.map((k) => (
+              <button key={k} className={cx('h-8 text-xs', pending.includes(k) ? 'btn-primary' : 'btn-outline')} onClick={() => setModal(k)}>
+                <Plus className="h-3.5 w-3.5" /> {CHECK_KIND[k]}
+              </button>
+            ))}
           </div>
         )}
       </div>
+      {o.kind === 'os' && (editable && types?.length ? (
+        <div className="mb-3 max-w-sm"><OrderTypeSelect types={types} value={o.order_type_id} onChange={(v) => !busy && changeType(v)} /></div>
+      ) : o.order_type_name ? <p className="mb-3 text-sm">Tipo de OS: <b>{o.order_type_name}</b></p> : null)}
+      {pending.length > 0 && !closed && (
+        <p className="mb-3 rounded-app-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          Falta preencher o checklist obrigatório: <b>{pending.map((k) => CHECK_KIND[k]).join(', ')}</b>. Toque no botão destacado acima.
+        </p>
+      )}
       {!o.inspections?.length ? <p className="text-sm text-ink-faint">Nenhum checklist registrado.</p> : (
         <ul className="space-y-2 text-sm">
           {o.inspections.map((i) => (
             <li key={i.id} className="rounded-app-sm border border-line p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <b>{CHECK_KIND[i.kind]}</b><span className={cx('chip', INSPECTION_RESULT[i.result]?.cls)}>{INSPECTION_RESULT[i.result]?.label}</span>
+                {i.template_name && <span className="text-xs text-ink-faint">{i.template_name}</span>}
                 <span className="ml-auto text-xs text-ink-faint">{fmtDateTime(i.created_at)}{i.inspector_name && ` · ${i.inspector_name}`}</span>
               </div>
               <ul className="mt-2 grid gap-1 sm:grid-cols-2">
@@ -172,27 +207,21 @@ export function QualityCard({ o, onChanged }) {
           ))}
         </ul>
       )}
-      {modal && <InspectionModal o={o} kind={modal} onClose={() => setModal(null)} onDone={() => { setModal(null); onChanged(); }} />}
+      {modal && templates && <InspectionModal o={o} kind={modal} all={templates} onClose={() => setModal(null)} onDone={() => { setModal(null); onChanged(); }} />}
     </section>
   );
 }
 
-function InspectionModal({ o, kind, onClose, onDone }) {
+function InspectionModal({ o, kind, all, onClose, onDone }) {
   const [run, busy] = useAction();
-  const [templates, setTemplates] = useState([]);
-  const [tpl, setTpl] = useState('');
-  const [items, setItems] = useState([]);
+  const templates = all.filter((t) => t.kind === kind);
+  const toItems = (t) => (t ? t.items.map((label) => ({ label, result: 'ok', note: '' })) : []);
+  const [tpl, setTpl] = useState(templates[0]?.id || '');
+  const [items, setItems] = useState(() => toItems(templates[0]));
   const [result, setResult] = useState('aprovado');
   const [notes, setNotes] = useState('');
   const [extra, setExtra] = useState('');
-  useEffect(() => {
-    api.get('/quality/templates').then((l) => {
-      const mine = l.filter((t) => t.kind === kind);
-      setTemplates(mine);
-      if (mine[0]) { setTpl(mine[0].id); setItems(mine[0].items.map((label) => ({ label, result: 'ok', note: '' }))); }
-    }).catch(() => {});
-  }, [kind]);
-  const pick = (id) => { setTpl(id); const t = templates.find((x) => x.id === id); setItems(t ? t.items.map((label) => ({ label, result: 'ok', note: '' })) : []); };
+  const pick = (id) => { setTpl(id); setItems(toItems(templates.find((x) => x.id === id))); };
   const setIt = (k, patch) => setItems(items.map((x, i) => (i === k ? { ...x, ...patch } : x)));
   const noks = items.filter((i) => i.result === 'nok').length;
   useEffect(() => { if (noks && result === 'aprovado') setResult('aprovado_ressalva'); }, [noks]); // eslint-disable-line
@@ -201,17 +230,26 @@ function InspectionModal({ o, kind, onClose, onDone }) {
     if (r !== FAIL) onDone();
   };
   return (
-    <Modal open onClose={onClose} size="lg" title={CHECK_KIND[kind]} subtitle={`OS nº ${o.number}`}
+    <Modal open onClose={onClose} size="lg" title={CHECK_KIND[kind]} subtitle={`OS nº ${o.number}${o.order_type_name ? ` · ${o.order_type_name}` : ''}`}
       footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className={result === 'reprovado' ? 'btn-danger' : 'btn-primary'} disabled={busy || !items.length} onClick={go}>Registrar</button></>}>
       <div className="space-y-3 text-sm">
-        {templates.length > 1 && <Select label="Modelo" value={tpl} onChange={(e) => pick(e.target.value)}>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</Select>}
+        {templates.length > 1 && (
+          <Select label="Checklist" value={tpl} onChange={(e) => pick(e.target.value)}>
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.order_type_name ? ` — ${t.order_type_name}` : ' — geral'}{t.required ? ' (obrigatório)' : ''}</option>)}
+          </Select>
+        )}
+        {templates.length === 1 && <p className="text-xs text-ink-faint">Checklist: <b>{templates[0].name}</b>{templates[0].required && ' (obrigatório)'}</p>}
+        {!templates.length && <p className="text-xs text-ink-faint">Não há checklist cadastrado para esta etapa. Inclua os itens abaixo ou crie um em Configurações › OS e orçamentos.</p>}
+        {items.length > 1 && (
+          <button type="button" className="btn-ghost h-8 text-xs" onClick={() => setItems(items.map((x) => ({ ...x, result: 'ok' })))}>Marcar todos como OK</button>
+        )}
         <div className="divide-y divide-line rounded-app-sm border border-line">
           {items.map((it, k) => (
             <div key={k} className="flex flex-wrap items-center gap-2 p-2">
               <span className="min-w-[180px] flex-1">{it.label}</span>
               <div className="flex gap-1">
                 {[['ok', 'OK', 'border-emerald-500 bg-emerald-500/10 text-emerald-700'], ['nok', 'Não conforme', 'border-red-500 bg-red-500/10 text-red-700'], ['na', 'N/A', 'border-ink-faint bg-muted']].map(([v, l, cls]) => (
-                  <button key={v} type="button" onClick={() => setIt(k, { result: v })} className={cx('rounded-app-sm border px-2 py-1 text-xs', it.result === v ? cls : 'border-line text-ink-soft')}>{l}</button>
+                  <button key={v} type="button" aria-pressed={it.result === v} onClick={() => setIt(k, { result: v })} className={cx('rounded-app-sm border px-2.5 py-1.5 text-xs', it.result === v ? cls : 'border-line text-ink-soft')}>{l}</button>
                 ))}
               </div>
               {it.result === 'nok' && <input className="input h-8 w-full text-xs" placeholder="O que foi encontrado" value={it.note} onChange={(e) => setIt(k, { note: e.target.value })} />}
@@ -219,7 +257,7 @@ function InspectionModal({ o, kind, onClose, onDone }) {
           ))}
         </div>
         <div className="flex gap-2">
-          <input className="input h-8 text-xs" placeholder="Adicionar item ao checklist" value={extra} onChange={(e) => setExtra(e.target.value)} />
+          <input className="input h-8 min-w-0 text-xs" placeholder="Adicionar item ao checklist" value={extra} onChange={(e) => setExtra(e.target.value)} />
           <button type="button" className="btn-outline h-8 text-xs" disabled={extra.trim().length < 2} onClick={() => { setItems([...items, { label: extra.trim(), result: 'ok', note: '' }]); setExtra(''); }}>Incluir</button>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -229,6 +267,7 @@ function InspectionModal({ o, kind, onClose, onDone }) {
           ))}
         </div>
         <Textarea label="Observações" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <p className="text-xs text-ink-faint">Para registrar fotos, use “Fotos e documentos da OS” — dá para enviar várias de uma vez.</p>
         {kind === 'inspecao' && result === 'reprovado' && o.status === 'pronta' && <p className="text-xs text-red-600">A OS volta para “em execução”.</p>}
       </div>
     </Modal>

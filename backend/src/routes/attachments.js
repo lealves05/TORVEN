@@ -11,6 +11,9 @@ const TABLE = { equipment: 'equipment', request: 'service_requests', quote: 'quo
 const READ = { equipment: ['customers_view'], customer: ['customers_view'], request: ['requests_view'], quote: ['quotes_view', 'quotes'], order: ['orders_view'], warranty: ['warranty_manage', 'orders_view'], inspection: ['orders_view', 'inspections'], purchase: ['purchases', 'materials_manage'], purchase_order: ['purchases'] };
 const WRITE = { equipment: ['customers_edit', 'orders_edit'], customer: ['customers_edit'], request: ['requests_manage'], quote: ['quotes'], order: ['orders_edit', 'orders_create'], warranty: ['warranty_manage'], inspection: ['inspections', 'orders_deliver'], purchase: ['purchases'], purchase_order: ['purchases'] };
 const MAX_BYTES = 1_500_000;
+// OS costuma ter mais fotos (antes/durante/depois); os demais registros, menos.
+export const MAX_FILES = { order: 40, inspection: 30 };
+const maxFiles = (entity) => MAX_FILES[entity] || 20;
 const MIMES = /^(image\/(jpeg|png|webp|gif)|application\/pdf)$/;
 
 const allowed = (req, keys) => keys.some((k) => can(req, k));
@@ -65,7 +68,7 @@ r.post('/', async (req, res) => {
   await checkParent(req, d.entity, d.entity_id);
   const { rows: [{ n }] } = await q('select count(*)::int as n from attachments where company_id = $1 and entity = $2 and entity_id = $3',
     [req.companyId, d.entity, d.entity_id]);
-  if (n >= 20) throw bad('Limite de 20 anexos por registro.');
+  if (n >= maxFiles(d.entity)) throw bad(`Limite de ${maxFiles(d.entity)} anexos por registro. Apague algum para incluir outro.`);
   const a = await one(
     `insert into attachments (company_id, entity, entity_id, filename, mime, size, data, caption, authorized, created_by)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id, entity, entity_id, filename, mime, size, caption, authorized, created_at`,

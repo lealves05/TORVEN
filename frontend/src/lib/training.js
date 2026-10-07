@@ -311,6 +311,36 @@ export const LESSONS = [
     "text": "Na ficha da OS, em Qualidade e checklists, ficam as listas de conferência do serviço. Antes de entregar, clique em Inspeção final. Abre uma lista com o que deve ser conferido. Para cada item, clique em OK se está certo, em Não conforme se tem problema, ou em N/A quando não se aplica. No fim, escolha Aprovada, Aprovada com ressalva ou Reprovada, e clique em Registrar. Reprovado, o serviço volta para a execução. As listas são da sua oficina. Você muda os itens em Configurações, e pode exigir a inspeção aprovada antes da entrega. Também dá para usar a lista de recebimento, na chegada do equipamento, para registrar como ele chegou."
   },
   {
+    "n": 27,
+    "file": "27-tipos-de-os-e-checklists",
+    "mod": "producao",
+    "s": 122,
+    "title": "Tipos de OS e checklists de cada tipo",
+    "routes": [],
+    "desc": "Criar os tipos de serviço da oficina e a lista de conferência de cada um.",
+    "learn": [
+      "Criar um tipo de OS",
+      "Montar o checklist do tipo",
+      "Escolher o tipo ao abrir a OS"
+    ],
+    "text": "Em Configurações, na aba OS e orçamentos, fica o quadro Tipos de OS e checklists. Tipo de OS é o tipo de serviço que você faz. Por exemplo: troca de óleo, funilaria ou solda. Clique no botão Novo tipo de OS, no alto, à direita. Escreva o nome do tipo. Clique em Salvar. O sistema já abre o primeiro checklist deste tipo: o de Recebimento. Dê um nome ao checklist. Depois escreva o primeiro item a conferir. Para mais itens, escreva no campo de baixo e clique em Adicionar. As setas mudam a ordem e o X apaga. Ligue Obrigatório se a OS só pode seguir depois que esse checklist for preenchido. Clique em Salvar checklist. O tipo aparece com as três etapas: recebimento, inspeção final e entrega. Em cada etapa, Criar checklist monta outra lista. Agora, ao abrir uma OS, escolha o Tipo de OS. Embaixo aparecem os checklists deste tipo. Quando você clicar em Abrir OS, o checklist de recebimento já aparece na tela para preencher. Os checklists gerais continuam valendo para todas as OS. Os do tipo aparecem só nas OS daquele tipo."
+  },
+  {
+    "n": 28,
+    "file": "28-varias-fotos-na-os",
+    "mod": "producao",
+    "s": 93,
+    "title": "Várias fotos de uma vez na OS",
+    "routes": [],
+    "desc": "Guardar as fotos do serviço na OS: chegada, andamento e entrega.",
+    "learn": [
+      "Escolher várias fotos de uma vez",
+      "Escrever a legenda e confirmar a autorização",
+      "Ver as fotos em tamanho grande"
+    ],
+    "text": "Na ficha da OS, desça até o quadro Fotos e documentos da OS. Clique em Adicionar fotos. Na janela que abre, segure a tecla Control e clique em cada foto que quiser. Depois clique em Abrir. No celular, use Tirar foto, para a câmera, ou Da galeria, para escolher várias. Todas as fotos aparecem para conferir. Se quiser, escreva uma legenda em cada uma. O X vermelho tira a foto da lista. Marque que o cliente autorizou as fotos e clique em Salvar. O sistema envia uma por uma e mostra o andamento. Clique numa foto para ver grande. Use as setas dos lados para passar para a próxima. No celular, arraste o dedo. Fotografe o item na chegada, durante o serviço e na entrega. Isso evita discussão depois."
+  },
+  {
     "n": 17,
     "file": "17-materiais-e-estoque",
     "mod": "materiais",
@@ -487,7 +517,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 2214;
+export const TOTAL_SECONDS = 2429;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

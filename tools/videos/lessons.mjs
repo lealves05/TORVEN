@@ -14,6 +14,7 @@ export const MODULES = [
 ];
 
 const LOGO_FILE = new URL('./assets/logo-exemplo.png', import.meta.url).pathname;
+const PHOTOS = ['foto-chegada.jpg', 'foto-servico.jpg', 'foto-pronto.jpg'].map((f) => new URL(`./assets/${f}`, import.meta.url).pathname);
 const ICON = '<span class="l"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>';
 /** Cartão explicativo (mesmo visual da abertura). */
 const slide = (tag, title, body) => `<div class="k">${ICON}TORVEN · TREINAMENTO</div><div class="n">${tag}</div><h1 style="font-size:50px">${title}</h1>${body}`;
@@ -284,11 +285,41 @@ export const LESSONS = [
       { tag: 'Inspeção final', act: async (h) => { await h.unspot(); await h.click(btn(h, 'Inspeção final'), { wait: 1000 }); }, say: ['Antes de entregar, clique em Inspeção final. Abre uma lista com o que deve ser conferido.'] },
       { tag: 'Marcar itens', act: async (h) => { const d = h.page.getByRole('dialog').last(); await h.click(d.getByRole('button', { name: 'OK', exact: true }).nth(0), { wait: 300 }); await h.click(d.getByRole('button', { name: 'OK', exact: true }).nth(1), { wait: 300 }); }, say: ['Para cada item, clique em OK se está certo, em Não conforme se tem problema, ou em N/A quando não se aplica.'] },
       { act: async (h) => { const d = h.page.getByRole('dialog').last(); await h.click(d.getByRole('button', { name: 'Aprovada', exact: true }), { wait: 400 }); await h.spot(d.getByRole('button', { name: 'Registrar', exact: true })); }, say: ['No fim, escolha Aprovada, Aprovada com ressalva ou Reprovada, e clique em Registrar. Reprovado, o serviço volta para a execução.'] },
-      { act: async (h) => { await h.unspot(); await h.esc(); await h.card(slide('Listas da sua oficina', 'Você escolhe o que conferir', list(['Configurações, OS e orçamentos, Checklists de qualidade.', 'Uma lista para o recebimento e outra para a entrega.', 'Pode exigir a inspeção aprovada para entregar.']))); }, say: ['As listas são da sua oficina. Você muda os itens em Configurações, e pode exigir a inspeção aprovada antes da entrega.'] },
+      { act: async (h) => { await h.unspot(); await h.esc(); await h.card(slide('Listas da sua oficina', 'Você escolhe o que conferir', list(['Configurações, OS e orçamentos, Tipos de OS e checklists.', 'Uma lista para cada etapa e para cada tipo de serviço.', 'Pode exigir a inspeção aprovada para entregar.']))); }, say: ['As listas são da sua oficina. Você muda os itens em Configurações, e pode exigir a inspeção aprovada antes da entrega.'] },
       { act: (h) => h.card(null), say: ['Também dá para usar a lista de recebimento, na chegada do equipamento, para registrar como ele chegou.'] },
     ],
   },
 
+  {
+    n: 27, file: '27-tipos-de-os-e-checklists', mod: 'producao', title: 'Tipos de OS e checklists de cada tipo', routes: [], start: '/configuracoes?tab=os',
+    desc: 'Criar os tipos de serviço da oficina e a lista de conferência de cada um.',
+    learn: ['Criar um tipo de OS', 'Montar o checklist do tipo', 'Escolher o tipo ao abrir a OS'],
+    steps: [
+      { tag: 'Onde fica', act: async (h) => { await h.spot(h.page.locator('#tipos-de-os h3')); }, say: ['Em Configurações, na aba OS e orçamentos, fica o quadro Tipos de OS e checklists.', 'Tipo de OS é o tipo de serviço que você faz. Por exemplo: troca de óleo, funilaria ou solda.'] },
+      { tag: 'Novo tipo', act: async (h) => { await h.click(btn(h, 'Novo tipo de OS'), { wait: 800 }); await h.type('Nome do tipo', 'Troca de óleo', { delay: 70 }); }, say: ['Clique no botão Novo tipo de OS, no alto, à direita. Escreva o nome do tipo.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Salvar', exact: true }), { wait: 1200 }); }, say: ['Clique em Salvar. O sistema já abre o primeiro checklist deste tipo: o de Recebimento.'] },
+      { tag: 'Itens da lista', act: async (h) => { await h.type('Nome do checklist', 'Recebimento do veículo', { delay: 55 }); await h.type(h.page.getByLabel('Item 1', { exact: true }), 'Nível de combustível anotado', { delay: 40 }); }, say: ['Dê um nome ao checklist. Depois escreva o primeiro item a conferir.'] },
+      { act: async (h) => { for (const it of ['Riscos e amassados fotografados', 'Objetos de valor retirados']) { await h.type('Novo item', it, { delay: 40 }); await h.click(btn(h, 'Adicionar'), { wait: 400 }); } }, say: ['Para mais itens, escreva no campo de baixo e clique em Adicionar. As setas mudam a ordem e o X apaga.'] },
+      { tag: 'Obrigatório', act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByText('Obrigatório', { exact: true }), { wait: 500 }); }, say: ['Ligue Obrigatório se a OS só pode seguir depois que esse checklist for preenchido.'] },
+      { act: async (h) => { await h.click(btn(h, 'Salvar checklist'), { wait: 1200 }); await h.spot(h.page.getByLabel('Tipo Troca de óleo')); }, say: ['Clique em Salvar checklist. O tipo aparece com as três etapas: recebimento, inspeção final e entrega.', 'Em cada etapa, Criar checklist monta outra lista.'] },
+      { tag: 'Na OS', act: async (h) => { await h.unspot(); await h.go('/os/nova'); await h.select('Tipo de OS', 'Troca de óleo'); await h.spot(h.page.locator('#campo-tipo-os')); }, say: ['Agora, ao abrir uma OS, escolha o Tipo de OS. Embaixo aparecem os checklists deste tipo.', 'Quando você clicar em Abrir OS, o checklist de recebimento já aparece na tela para preencher.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Resumo', 'Cada serviço com a sua lista', list(['Tipos de OS: em Configurações, OS e orçamentos.', 'Checklist do tipo: recebimento, inspeção e entrega.', 'Checklists gerais valem para todas as OS.']))); }, say: ['Os checklists gerais continuam valendo para todas as OS. Os do tipo aparecem só nas OS daquele tipo.'] },
+    ],
+  },
+  {
+    n: 28, file: '28-varias-fotos-na-os', mod: 'producao', title: 'Várias fotos de uma vez na OS', routes: [], start: '/os',
+    desc: 'Guardar as fotos do serviço na OS: chegada, andamento e entrega.',
+    learn: ['Escolher várias fotos de uma vez', 'Escrever a legenda e confirmar a autorização', 'Ver as fotos em tamanho grande'],
+    setup: async (api) => ({ id: await osId(api, 8) }),
+    steps: [
+      { tag: 'Onde fica', act: async (h, st) => { await h.go(`/os/${st.id}`); await h.spot(h.page.locator('#fotos h2')); }, say: ['Na ficha da OS, desça até o quadro Fotos e documentos da OS.'] },
+      { tag: 'Escolher', act: async (h) => { await h.spot(btn(h, 'Adicionar fotos')); await h.page.evaluate(() => window.__av?.click()); await h.sleep(500); await h.unspot(); await h.page.locator('[data-testid=anexos-varios]').setInputFiles(PHOTOS); await h.sleep(1800); }, say: ['Clique em Adicionar fotos. Na janela que abre, segure a tecla Control e clique em cada foto que quiser. Depois clique em Abrir.', 'No celular, use Tirar foto, para a câmera, ou Da galeria, para escolher várias.'] },
+      { tag: 'Conferir', act: async (h) => { await h.unspot(); await h.type('Legenda da foto 1', 'Risco na porta', { delay: 60 }); }, say: ['Todas as fotos aparecem para conferir. Se quiser, escreva uma legenda em cada uma. O X vermelho tira a foto da lista.'] },
+      { tag: 'Salvar', act: async (h) => { const d = h.page.getByRole('dialog').last(); await h.click(d.getByText(/O cliente autorizou/), { wait: 400 }); await h.click(d.getByRole('button', { name: /^Salvar \d+ anexos$/ }), { wait: 2500 }); }, say: ['Marque que o cliente autorizou as fotos e clique em Salvar. O sistema envia uma por uma e mostra o andamento.'] },
+      { tag: 'Ver grande', act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Abrir Risco na porta' }), { wait: 1200 }); await h.click(h.page.getByRole('button', { name: 'Próxima foto' }), { wait: 1200 }); }, say: ['Clique numa foto para ver grande. Use as setas dos lados para passar para a próxima. No celular, arraste o dedo.'] },
+      { act: async (h) => { await h.esc(); await h.card(slide('Dicas', 'Fotos protegem você e o cliente', list(['Até 20 fotos por vez e 40 por OS.', 'No computador, dá para arrastar as fotos para o quadro.', 'As fotos ficam menores sozinhas, para não pesar.']))); }, say: ['Fotografe o item na chegada, durante o serviço e na entrega. Isso evita discussão depois.'] },
+    ],
+  },
   // ───────────────────────── Materiais e compras
   {
     n: 17, file: '17-materiais-e-estoque', mod: 'materiais', title: 'Materiais e estoque', routes: ['/estoque'], start: '/estoque',

@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import FiscalSetup from '../components/FiscalSetup';
 import IntegrationsSetup from '../components/IntegrationsSetup';
+import { OrderTypesSettings } from '../components/OrderTypes';
 import { OrderDocument, SAMPLE_ORDER, docConfig } from '../components/DocumentTemplate';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, useAction, FAIL, cx } from '../components/ui';
@@ -133,7 +134,7 @@ export default function Settings() {
             </div>
             <p className="text-xs text-ink-faint">O sistema só cria a lista de retornos; o contato é feito e registrado pela equipe.</p>
           </div>
-          <ChecklistTemplates />
+          <OrderTypesSettings />
           <div className="card space-y-4 p-6">
             <h3 className="font-semibold">Numeração dos documentos</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -649,49 +650,6 @@ function PermissionsTab({ s, setS }) {
   );
 }
 
-
-const CHECK_KIND = { recebimento: 'Recebimento', inspecao: 'Inspeção final', entrega: 'Entrega' };
-
-function ChecklistTemplates() {
-  const [run, busy] = useAction();
-  const [list, setList] = useState([]);
-  const [edit, setEdit] = useState(null);
-  const load = () => api.get('/quality/templates?all=1').then(setList).catch(() => {});
-  useEffect(() => { load(); }, []);
-  const save = async () => {
-    const body = { name: edit.name, kind: edit.kind, items: edit.text.split('\n').map((x) => x.trim()).filter(Boolean), active: edit.active !== false };
-    const r = await run(() => (edit.id ? api.put(`/quality/templates/${edit.id}`, body) : api.post('/quality/templates', body)), 'Checklist salvo');
-    if (r !== FAIL) { setEdit(null); load(); }
-  };
-  return (
-    <div className="card space-y-3 p-6">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Checklists de qualidade</h3>
-        <button className="btn-ghost h-8 text-xs text-primary" onClick={() => setEdit({ name: '', kind: 'inspecao', text: '', active: true })}><Plus className="h-3.5 w-3.5" /> Novo</button>
-      </div>
-      <ul className="divide-y divide-line text-sm">
-        {list.map((t) => (
-          <li key={t.id} className={cx('flex items-center gap-2 py-2', !t.active && 'opacity-50')}>
-            <span className="chip bg-muted text-ink-soft">{CHECK_KIND[t.kind]}</span>
-            <span className="flex-1">{t.name} <span className="text-xs text-ink-faint">· {t.items.length} itens</span></span>
-            <button className="btn-ghost h-8 text-xs" onClick={() => setEdit({ ...t, text: t.items.join('\n') })}>Editar</button>
-          </li>
-        ))}
-      </ul>
-      {edit && (
-        <Modal open onClose={() => setEdit(null)} title={edit.id ? 'Editar checklist' : 'Novo checklist'}
-          footer={<><button className="btn-ghost" onClick={() => setEdit(null)}>Voltar</button><button className="btn-primary" disabled={busy || edit.name.trim().length < 2 || !edit.text.trim()} onClick={save}>Salvar</button></>}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Nome" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
-            <Select label="Uso" value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>{Object.entries(CHECK_KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
-            <Textarea label="Itens (um por linha)" rows={8} value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} className="sm:col-span-2" />
-            <div className="sm:col-span-2"><Toggle checked={edit.active !== false} onChange={(v) => setEdit({ ...edit, active: v })} label="Ativo" /></div>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
 
 function DataExport() {
   const { toast } = useUI();

@@ -11,6 +11,7 @@ import CustomerPicker, { EquipmentPicker } from '../components/CustomerPicker';
 import PlateCapture from '../components/PlateCapture';
 import ItemsEditor, { cleanItems } from '../components/ItemsEditor';
 import VoiceTextarea from '../components/VoiceTextarea';
+import { useOrderTypes, OrderTypeSelect, CHECK_KIND } from '../components/OrderTypes';
 
 export default function OrderNew() {
   const nav = useNavigate();
@@ -25,8 +26,15 @@ export default function OrderNew() {
     equipment_id: null, equipment: null, technician_id: user.technician_id || '', priority: 'normal', service_location: 'oficina',
     service_address: '', promised_at: format(addDays(new Date(), cfg.defaultPromiseDays || 3), "yyyy-MM-dd'T'18:00"),
     problem: '', accessories: '', condition: '', notes: '', internal_notes: '', items: [], discount: 0,
-    warranty_days: cfg.defaultWarrantyDays, status: 'aberta',
+    warranty_days: cfg.defaultWarrantyDays, status: 'aberta', order_type_id: null,
   });
+  const orderTypes = useOrderTypes();
+  const [typeChecklists, setTypeChecklists] = useState([]);
+  useEffect(() => {
+    if (!f.order_type_id) { setTypeChecklists([]); return; }
+    api.get(`/quality/templates?order_type_id=${f.order_type_id}`)
+      .then((l) => setTypeChecklists(l.filter((t) => t.order_type_id === f.order_type_id))).catch(() => setTypeChecklists([]));
+  }, [f.order_type_id]);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
   // foco automático só no computador: no celular o teclado e a lista cobririam o formulário
   const desktop = typeof window !== 'undefined' && window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
@@ -83,7 +91,9 @@ export default function OrderNew() {
       equipment: f.equipment?.description ? f.equipment : null, items: cleanItems(f.items), warranty_days: Number(f.warranty_days) || 0,
     };
     const r = await run(() => api.post('/orders', body), 'OS aberta');
-    if (r !== FAIL) nav(`/os/${r.id}`, { replace: true });
+    // com checklist de recebimento no tipo, a OS já abre com ele na tela para preencher
+    const receive = typeChecklists.some((t) => t.kind === 'recebimento') && (can('orders_edit') || can('orders_create') || can('inspections'));
+    if (r !== FAIL) nav(`/os/${r.id}${receive ? '?checklist=recebimento' : ''}`, { replace: true });
   };
 
   return (
@@ -117,6 +127,16 @@ export default function OrderNew() {
 
           <section className="card space-y-4 p-5">
             <h2 className="font-semibold">Relato e recebimento</h2>
+            {orderTypes?.length > 0 && (
+              <div id="campo-tipo-os" className="space-y-1.5">
+                <OrderTypeSelect types={orderTypes} value={f.order_type_id} onChange={(v) => setF((x) => ({ ...x, order_type_id: v }))} />
+                {typeChecklists.length > 0 && (
+                  <p className="text-xs text-ink-faint">
+                    Checklists deste tipo: {typeChecklists.map((t) => `${t.name} (${CHECK_KIND[t.kind]}${t.required ? ', obrigatório' : ''})`).join(' · ')}
+                  </p>
+                )}
+              </div>
+            )}
             <VoiceTextarea label="Problema relatado / serviço solicitado" rows={3} value={f.problem} onChange={set('problem')}
               placeholder="Ex.: trinca na longarina, portão arrastando, máquina não abre arco…" />
             <div className="grid gap-4 sm:grid-cols-2">

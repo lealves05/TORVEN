@@ -365,6 +365,52 @@ await check('cronômetro iniciado em duas OS ao mesmo tempo pelo mesmo técnico:
   assert.equal(n.n, 1);
 });
 
+// ---------- tipos de OS, checklists vinculados e várias fotos ----------
+let otype;
+await check('tipo de OS: cria, recusa nome repetido e checklist obrigatório vinculado', async () => {
+  const t = await api('POST', '/quality/types', { name: 'Troca de óleo' }, T);
+  assert.equal(t.status, 201, JSON.stringify(t.data)); otype = t.data;
+  assert.equal((await api('POST', '/quality/types', { name: 'TROCA DE ÓLEO' }, T)).status, 400);
+  const c = await api('POST', '/quality/templates', { name: 'Recebimento óleo', kind: 'recebimento', items: ['Nível de óleo', 'Vazamentos'], order_type_id: otype.id, required: true }, T);
+  assert.equal(c.status, 201, JSON.stringify(c.data)); assert.equal(c.data.order_type_id, otype.id);
+  const l = await api('GET', `/quality/templates?order_type_id=${otype.id}`, null, T);
+  assert.ok(l.data.some((x) => x.id === c.data.id));
+});
+await check('outra empresa não vê nem usa o tipo de OS', async () => {
+  assert.ok(!(await api('GET', '/quality/types', null, T2)).data.some((x) => x.id === otype.id));
+  const pt = await api('PUT', `/quality/types/${otype.id}`, { name: 'X invadido' }, T2); assert.equal(pt.status, 404, JSON.stringify(pt.data));
+  const pc = await api('POST', '/quality/templates', { name: 'Yy', kind: 'inspecao', items: ['abc'], order_type_id: otype.id }, T2); assert.equal(pc.status, 404, JSON.stringify(pc.data));
+  const os2 = await api('POST', '/orders', { customer_id: null, kind: 'os', order_type_id: otype.id, items: [] }, T2);
+  assert.ok([400, 404].includes(os2.status));
+});
+await check('OS do tipo só avança depois do checklist obrigatório de recebimento', async () => {
+  const o = await api('POST', '/orders', { customer_id: quick.customer_id, order_type_id: otype.id, items: [] }, T);
+  assert.equal(o.status, 201, JSON.stringify(o.data)); assert.equal(o.data.order_type_name, 'Troca de óleo');
+  const blocked = await api('POST', `/orders/${o.data.id}/status`, { status: 'diagnostico' }, T);
+  assert.equal(blocked.status, 400); assert.match(blocked.data.error, /Recebimento óleo/);
+  const i = await api('POST', `/quality/orders/${o.data.id}/inspections`, { kind: 'recebimento', items: [{ label: 'Nível de óleo', result: 'ok' }], result: 'aprovado' }, T);
+  assert.equal(i.status, 201);
+  assert.equal((await api('POST', `/orders/${o.data.id}/status`, { status: 'diagnostico' }, T)).status, 200);
+  // OS sem tipo não é afetada pelo checklist do tipo
+  const free = await api('POST', '/orders', { customer_id: quick.customer_id, items: [] }, T);
+  assert.equal((await api('POST', `/orders/${free.data.id}/status`, { status: 'diagnostico' }, T)).status, 200);
+  // trocar o tipo da OS fica no histórico; tipo usado não pode ser excluído
+  const ch = await api('PUT', `/quality/orders/${free.data.id}/type`, { order_type_id: otype.id }, T);
+  assert.equal(ch.status, 200);
+  assert.equal((await api('DELETE', `/quality/types/${otype.id}`, null, T)).status, 400);
+});
+await check('várias fotos na OS: até 40 por OS, depois recusa', async () => {
+  const o = await api('POST', '/orders', { customer_id: quick.customer_id, items: [] }, T);
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  for (let k = 0; k < 40; k += 1) {
+    const r = await api('POST', '/attachments', { entity: 'order', entity_id: o.data.id, filename: `f${k}.png`, mime: 'image/png', data: png, authorized: true }, T);
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+  }
+  const over = await api('POST', '/attachments', { entity: 'order', entity_id: o.data.id, filename: 'x.png', mime: 'image/png', data: png, authorized: true }, T);
+  assert.equal(over.status, 400); assert.match(over.data.error, /40/);
+  assert.equal((await api('GET', `/attachments?entity=order&entity_id=${o.data.id}`, null, T2)).data.length || 0, 0);
+});
+
 console.log(`\n${passed} verificações OK, ${fails.length} falhas`);
 server.close(); fake.close(); await pool.end();
 if (fails.length) { fails.forEach((f) => console.log(' -', f)); process.exit(1); }

@@ -121,6 +121,7 @@ function OrderA4({ company, o, cfg, receipt, settings, via }) {
   const title = receipt ? (o.kind === 'venda' ? `${cfg.titles.receipt} de venda` : cfg.titles.receipt) : cfg.titles.os;
   const facts = [
     show.status && ['Situação', <b key="s">{ORDER_STATUS[o.status]?.label || o.status}</b>],
+    o.order_type_name && ['Tipo', o.order_type_name],
     show.technician && ['Técnico', o.technician_name || '—'],
     show.promised && ['Prazo', o.promised_at ? fmtDateTime(o.promised_at) : '—'],
     show.warranty && ['Garantia', o.warranty_days ? `${o.warranty_days} dias${o.warranty_until ? ` (até ${fmt(o.warranty_until)})` : ''}` : '—'],
