@@ -1,41 +1,57 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { CatalogProvider } from './context/CatalogContext';
 import Layout from './components/Layout';
 import { Loading } from './components/ui';
 import { Login, Register, DemoSignup, ForgotPassword, ResetPassword } from './pages/Auth';
-import Dashboard from './pages/Dashboard';
-import Orders from './pages/Orders';
-import OrderNew from './pages/OrderNew';
-import OrderDetail from './pages/OrderDetail';
-import QuickSale from './pages/QuickSale';
-import Quotes, { QuoteEditor } from './pages/Quotes';
-import Customers, { CustomerDetail } from './pages/Customers';
-import Materials from './pages/Materials';
-import Purchases, { PurchaseEditor } from './pages/Purchases';
-import { Services, Technicians, Suppliers } from './pages/Catalog';
-import Cash from './pages/Cash';
-import Invoices from './pages/Invoices';
-import Reports, { Commissions } from './pages/Reports';
-import Settings from './pages/Settings';
-import Account from './pages/Account';
-import Support from './pages/Support';
-import Requests, { RequestNew, RequestDetail } from './pages/Requests';
-import Audit from './pages/Audit';
-import Units from './pages/Units';
-import Agenda from './pages/Agenda';
-import Production from './pages/Production';
-import MyWork from './pages/MyWork';
-import Warranty from './pages/Warranty';
-import Procurement, { QuotationDetail, PurchaseOrderDetail, Picking } from './pages/Procurement';
-import Finance from './pages/Finance';
-import Relationship from './pages/Relationship';
-import { PrintOrder, PrintQuote } from './pages/Print';
-import { PublicQuote, PublicOrder } from './pages/Public';
-import Subscription from './pages/Subscription';
 import { BlockedScreen } from './components/Billing';
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+// Telas carregadas sob demanda: só o necessário para o primeiro desenho entra no pacote inicial.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Orders = lazy(() => import('./pages/Orders'));
+const OrderNew = lazy(() => import('./pages/OrderNew'));
+const OrderDetail = lazy(() => import('./pages/OrderDetail'));
+const QuickSale = lazy(() => import('./pages/QuickSale'));
+const Quotes = lazy(() => import('./pages/Quotes'));
+const QuoteEditor = lazy(() => import('./pages/Quotes').then((m) => ({ default: m.QuoteEditor })));
+const Customers = lazy(() => import('./pages/Customers'));
+const CustomerDetail = lazy(() => import('./pages/Customers').then((m) => ({ default: m.CustomerDetail })));
+const Materials = lazy(() => import('./pages/Materials'));
+const Purchases = lazy(() => import('./pages/Purchases'));
+const PurchaseEditor = lazy(() => import('./pages/Purchases').then((m) => ({ default: m.PurchaseEditor })));
+const Services = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Services })));
+const Technicians = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Technicians })));
+const Suppliers = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Suppliers })));
+const Cash = lazy(() => import('./pages/Cash'));
+const Invoices = lazy(() => import('./pages/Invoices'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Commissions = lazy(() => import('./pages/Reports').then((m) => ({ default: m.Commissions })));
+const Settings = lazy(() => import('./pages/Settings'));
+const Account = lazy(() => import('./pages/Account'));
+const Support = lazy(() => import('./pages/Support'));
+const Requests = lazy(() => import('./pages/Requests'));
+const RequestNew = lazy(() => import('./pages/Requests').then((m) => ({ default: m.RequestNew })));
+const RequestDetail = lazy(() => import('./pages/Requests').then((m) => ({ default: m.RequestDetail })));
+const Audit = lazy(() => import('./pages/Audit'));
+const Units = lazy(() => import('./pages/Units'));
+const Agenda = lazy(() => import('./pages/Agenda'));
+const Production = lazy(() => import('./pages/Production'));
+const MyWork = lazy(() => import('./pages/MyWork'));
+const Warranty = lazy(() => import('./pages/Warranty'));
+const Procurement = lazy(() => import('./pages/Procurement'));
+const QuotationDetail = lazy(() => import('./pages/Procurement').then((m) => ({ default: m.QuotationDetail })));
+const PurchaseOrderDetail = lazy(() => import('./pages/Procurement').then((m) => ({ default: m.PurchaseOrderDetail })));
+const Picking = lazy(() => import('./pages/Procurement').then((m) => ({ default: m.Picking })));
+const Finance = lazy(() => import('./pages/Finance'));
+const Relationship = lazy(() => import('./pages/Relationship'));
+const PrintOrder = lazy(() => import('./pages/Print').then((m) => ({ default: m.PrintOrder })));
+const PrintQuote = lazy(() => import('./pages/Print').then((m) => ({ default: m.PrintQuote })));
+const PublicQuote = lazy(() => import('./pages/Public').then((m) => ({ default: m.PublicQuote })));
+const PublicOrder = lazy(() => import('./pages/Public').then((m) => ({ default: m.PublicOrder })));
+const Subscription = lazy(() => import('./pages/Subscription'));
 
 /** Assinatura aberta com o acesso bloqueado: tela própria, sem o restante do sistema. */
 function BlockedSubscription() {
@@ -43,15 +59,17 @@ function BlockedSubscription() {
     <div className="min-h-full bg-bg">
       <div className="mx-auto max-w-[1100px] p-4 sm:p-6">
         <Link to="/" className="btn-ghost mb-3"><ArrowLeft className="h-4 w-4" /> Voltar</Link>
-        <Subscription />
+        <Lazy><Subscription /></Lazy>
       </div>
     </div>
   );
 }
 
+const Lazy = ({ children }) => <Suspense fallback={<Loading />}>{children}</Suspense>;
+
 function Guard({ perms, children }) {
   const { can } = useAuth();
-  return can(...perms) ? children : <Navigate to="/" replace />;
+  return can(...perms) ? <Lazy>{children}</Lazy> : <Navigate to="/" replace />;
 }
 
 export default function App() {
@@ -60,8 +78,8 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/p/orcamento/:token" element={<PublicQuote />} />
-      <Route path="/p/os/:token" element={<PublicOrder />} />
+      <Route path="/p/orcamento/:token" element={<Lazy><PublicQuote /></Lazy>} />
+      <Route path="/p/os/:token" element={<Lazy><PublicOrder /></Lazy>} />
       <Route path="/esqueci-senha" element={<ForgotPassword />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
       {loading ? (
@@ -80,10 +98,10 @@ export default function App() {
         </>
       ) : (
         <>
-          <Route path="/imprimir/os/:id" element={<PrintOrder />} />
-          <Route path="/imprimir/orcamento/:id" element={<PrintQuote />} />
+          <Route path="/imprimir/os/:id" element={<Lazy><PrintOrder /></Lazy>} />
+          <Route path="/imprimir/orcamento/:id" element={<Lazy><PrintQuote /></Lazy>} />
           <Route element={<CatalogProvider><Layout /></CatalogProvider>}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<Lazy><Dashboard /></Lazy>} />
             <Route path="os" element={<Guard perms={['orders_view', 'orders_create']}><Orders /></Guard>} />
             <Route path="os/nova" element={<Guard perms={['orders_create']}><OrderNew /></Guard>} />
             <Route path="os/:id" element={<Guard perms={['orders_view', 'orders_create']}><OrderDetail /></Guard>} />
@@ -120,9 +138,9 @@ export default function App() {
             <Route path="financeiro/gestao" element={<Guard perms={['cash', 'reports']}><Finance /></Guard>} />
             <Route path="relacionamento" element={<Guard perms={['followups']}><Relationship /></Guard>} />
             <Route path="auditoria" element={<Guard perms={['audit_view']}><Audit /></Guard>} />
-            <Route path="conta" element={<Account />} />
-            <Route path="suporte" element={<Support />} />
-            {access && admin && <Route path="assinatura" element={<Subscription />} />}
+            <Route path="conta" element={<Lazy><Account /></Lazy>} />
+            <Route path="suporte" element={<Lazy><Support /></Lazy>} />
+            {access && admin && <Route path="assinatura" element={<Lazy><Subscription /></Lazy>} />}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </>

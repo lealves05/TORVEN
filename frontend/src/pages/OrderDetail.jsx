@@ -19,7 +19,7 @@ import PaymentModal from '../components/PaymentModal';
 import InvoiceModal from '../components/InvoiceModal';
 import TerminalChargeModal from '../components/TerminalChargeModal';
 import { EquipmentPicker } from '../components/CustomerPicker';
-import { StatusBadge } from './Dashboard';
+import { StatusBadge } from '../components/StatusBadge';
 import { StateChips, ExecutionCard, QualityCard, ScheduleCard, WarrantyCard } from '../components/OrderOperation';
 import VoiceTextarea from '../components/VoiceTextarea';
 

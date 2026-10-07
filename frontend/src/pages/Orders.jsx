@@ -6,7 +6,7 @@ import { money, fmt, ORDER_STATUS, OPEN_STATUSES, PRIORITY, NEXT_STEP, STATUS_HI
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import { PageHeader, Loading, Empty, Hint, useAction, FAIL, cx } from '../components/ui';
-import { StatusBadge } from './Dashboard';
+import { StatusBadge } from '../components/StatusBadge';
 
 export default function Orders() {
   const [params, setParams] = useSearchParams();

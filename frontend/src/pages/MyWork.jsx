@@ -10,7 +10,7 @@ import { useCatalog } from '../context/CatalogContext';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Loading, Empty, Modal, useAction, FAIL, cx } from '../components/ui';
 import Attachments from '../components/Attachments';
-import { StatusBadge } from './Dashboard';
+import { StatusBadge } from '../components/StatusBadge';
 import { Elapsed, ACTIVITY, hm } from './Production';
 
 const PRIO = { urgente: 0, alta: 1, normal: 2, baixa: 3 };

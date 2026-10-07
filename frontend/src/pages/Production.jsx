@@ -6,7 +6,7 @@ import { api, qs } from '../lib/api';
 import { fmt, money, PRIORITY, docNumber, downloadCSV, ymd } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { PageHeader, Tabs, Loading, Empty, Stat, useAction, FAIL, cx } from '../components/ui';
-import { StatusBadge } from './Dashboard';
+import { StatusBadge } from '../components/StatusBadge';
 import { SCHEDULE_KIND } from './Agenda';
 
 export const ACTIVITY = { diagnostico: 'Diagnóstico', execucao: 'Execução', retrabalho: 'Retrabalho', inspecao: 'Inspeção', deslocamento: 'Deslocamento', outro: 'Outro' };

@@ -12,11 +12,10 @@ import { useAuth, useSettings } from '../context/AuthContext';
 import { Stat, Loading, Empty, useFetch, cx } from '../components/ui';
 import { InOutChart } from '../components/charts';
 import { CertBanner } from './Invoices';
+import { StatusBadge } from '../components/StatusBadge';
 
-export function StatusBadge({ status }) {
-  const s = ORDER_STATUS[status] || {};
-  return <span className={cx('chip whitespace-nowrap', s.cls)}><span className={cx('h-1.5 w-1.5 rounded-full', s.dot)} />{s.label || status}</span>;
-}
+export { StatusBadge };
+
 
 /** Cartão "Primeiros passos": some quando tudo estiver feito ou quando o usuário dispensar. */
 function FirstSteps({ setup, companyId }) {
