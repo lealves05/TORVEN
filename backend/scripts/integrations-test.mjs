@@ -192,10 +192,36 @@ await check('liga/desliga a pesquisa por placa (configuração da empresa)', asy
   await api('PUT', '/company', { settings: { orders: { ...co.settings.orders, plateOnOpen: true } } }, T);
 });
 
+// ---------------- logotipo e modelo dos documentos ----------------
+await check('modelo dos documentos: padrões e gravação parcial (campos exibidos e títulos mesclados)', async () => {
+  const co = (await api('GET', '/company', null, T)).data;
+  assert.equal(co.settings.documents.paper, 'a4'); assert.equal(co.settings.documents.show.problem, true);
+  assert.equal(co.settings.documents.titles.os, 'Ordem de serviço'); assert.equal(co.settings.brand.logoShape, 'square');
+  const r = await api('PUT', '/company', { settings: { documents: { headerStyle: 'faixa', accentColor: '#1d4ed8', paper: 'cupom80', copies: 2,
+    titles: { os: 'OS Técnica' }, show: { diagnosis: false }, footerNote: 'PIX: 12.345.678/0001-90' }, brand: { logoShape: 'wide', showName: false } } }, T);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const d = r.data.settings.documents;
+  assert.equal(d.headerStyle, 'faixa'); assert.equal(d.copies, 2); assert.equal(d.titles.os, 'OS Técnica'); assert.equal(d.titles.quote, 'Orçamento');
+  assert.equal(d.show.diagnosis, false); assert.equal(d.show.problem, true); assert.equal(r.data.settings.brand.logoShape, 'wide');
+});
+await check('logotipo: aceita PNG/JPG/WEBP e recusa outro conteúdo', async () => {
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const ok = await api('PUT', '/company', { logo_url: png }, T);
+  assert.equal(ok.status, 200, JSON.stringify(ok.data)); assert.equal(ok.data.logo_url, png);
+  for (const bad of ['javascript:alert(1)', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=', 'https://exemplo.com/logo.png']) {
+    assert.equal((await api('PUT', '/company', { logo_url: bad }, T)).status, 400, bad);
+  }
+  assert.equal((await api('PUT', '/company', { logo_url: null }, T)).data.logo_url, null);
+});
+
 // ---------------- OS para cobrar ----------------
 const os = await api('POST', '/orders', { customer_id: quick.customer_id, equipment_id: quick.equipment_id, problem: 'Solda no para-choque',
   items: [{ kind: 'servico', description: 'Solda', qty: 1, unit_price: 150 }] }, T);
 assert.equal(os.status, 201, JSON.stringify(os.data));
+await check('OS traz placa, ano e cor do veículo para a impressão', async () => {
+  const g = await api('GET', `/orders/${os.data.id}`, null, T);
+  assert.equal(g.data.equipment_plate, 'ABC1D23'); assert.equal(g.data.equipment_color, 'Branca');
+});
 const orderId = os.data.id;
 
 // ---------------- maquininha: Mercado Pago Point ----------------

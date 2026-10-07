@@ -22,7 +22,8 @@ const schema = z.object({
   trade_name: opt, document: opt, state_registration: opt, municipal_registration: opt,
   phone: opt, email: opt, cep: opt, street: opt, number: opt, complement: opt, district: opt, city: opt,
   uf: z.string().trim().max(2).nullable().optional(), city_code: opt,
-  logo_url: z.string().max(700000, 'logo muito grande (máx. ~500KB)').nullable().optional(),
+  logo_url: z.string().max(700000, 'logo muito grande (máx. ~500KB)')
+    .regex(/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/, 'logo deve ser uma imagem PNG, JPG ou WEBP').nullable().optional(),
   settings: z.record(z.any()).optional(),
 });
 const FIELDS = ['name', 'trade_name', 'document', 'state_registration', 'municipal_registration', 'phone', 'email',

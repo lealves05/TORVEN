@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Upload, Trash2, Plus, Check, Sun, Moon, Monitor } from 'lucide-react';
 import { api, apiBase, getToken } from '../lib/api';
@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import FiscalSetup from '../components/FiscalSetup';
 import IntegrationsSetup from '../components/IntegrationsSetup';
+import { OrderDocument, SAMPLE_ORDER, docConfig } from '../components/DocumentTemplate';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, useAction, FAIL, cx } from '../components/ui';
 
@@ -48,7 +49,7 @@ export default function Settings() {
     <div className="pb-20">
       <PageHeader title="Configurações" subtitle="Dados da empresa, aparência, regras das OS, financeiro, fiscal e acessos" />
       <Tabs value={tab} onChange={setTab} tabs={[
-        ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' },
+        ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' }, { value: 'documentos', label: 'Documentos (OS impressa)' },
           { value: 'financeiro', label: 'Financeiro' }, { value: 'categorias', label: 'Categorias' }] : []),
         ...(can('fiscal_settings') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
         ...(can('integrations') ? [{ value: 'integracoes', label: 'Integrações' }] : []),
@@ -59,14 +60,7 @@ export default function Settings() {
 
       {tab === 'empresa' && (
         <div className="card grid max-w-4xl gap-4 p-6 sm:grid-cols-6">
-          <div className="flex items-center gap-4 sm:col-span-6">
-            {f.logo_url ? <img src={f.logo_url} alt="" className="h-16 w-16 rounded-app object-cover" /> : <div className="grid h-16 w-16 place-items-center rounded-app bg-muted text-xs text-ink-faint">logo</div>}
-            <label className="btn-outline cursor-pointer"><Upload className="h-4 w-4" /> Enviar logo
-              <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (file) setF({ ...f, logo_url: await resizeImage(file, 256) }); }} />
-            </label>
-            {f.logo_url && <button className="btn-ghost text-red-600" onClick={() => setF({ ...f, logo_url: null })}><Trash2 className="h-4 w-4" /></button>}
-            <p className="text-xs text-ink-faint">Aparece no sistema, nas OS e orçamentos impressos e nos links do cliente.</p>
-          </div>
+          <div className="sm:col-span-6"><LogoUpload value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} /></div>
           <Input label="Razão social" value={f.name} onChange={set('name')} className="sm:col-span-3" />
           <Input label="Nome fantasia" value={f.trade_name} onChange={set('trade_name')} className="sm:col-span-3" />
           <Input label="CNPJ / CPF" value={f.document} onChange={(e) => setF({ ...f, document: maskDoc(e.target.value) })} className="sm:col-span-2" />
@@ -163,6 +157,22 @@ export default function Settings() {
       {tab === 'aparencia' && (
         <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
           <div className="card space-y-6 p-6">
+            <LogoUpload value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
+            {f.logo_url && (
+              <div className="space-y-3">
+                <div>
+                  <span className="label">Formato do logo no sistema</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[['square', 'Quadrado (ícone)'], ['wide', 'Horizontal (largo)']].map(([k, l]) => (
+                      <button key={k} type="button" onClick={() => setS({ brand: { ...s.brand, logoShape: k } })}
+                        className={cx('btn border', (s.brand?.logoShape || 'square') === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                <Toggle checked={s.brand?.showName !== false} onChange={(v) => setS({ brand: { ...s.brand, showName: v } })}
+                  label="Mostrar o nome da empresa ao lado do logo" hint="Desligue quando o logo já traz o nome escrito." />
+              </div>
+            )}
             <div>
               <span className="label">Cor principal</span>
               <div className="flex flex-wrap items-center gap-2">
@@ -221,8 +231,10 @@ export default function Settings() {
             <span className="label">Pré-visualização</span>
             <div className="mt-2 space-y-4 rounded-app border border-line bg-bg p-5">
               <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-app-sm bg-primary font-semibold text-primary-fg">{(f.trade_name || f.name)?.[0]}</div>
-                <div><div className="font-semibold">{f.trade_name || f.name}</div><div className="text-xs text-ink-faint">Assim ficará o seu sistema</div></div>
+                {f.logo_url
+                  ? <img src={f.logo_url} alt="" className={cx('h-10 rounded-app-sm bg-white object-contain', s.brand?.logoShape === 'wide' ? 'w-auto max-w-[160px] px-1' : 'w-10')} />
+                  : <div className="grid h-10 w-10 place-items-center rounded-app-sm bg-primary font-semibold text-primary-fg">{(f.trade_name || f.name)?.[0]}</div>}
+                <div>{(!f.logo_url || s.brand?.showName !== false) && <div className="font-semibold">{f.trade_name || f.name}</div>}<div className="text-xs text-ink-faint">Assim ficará o seu sistema</div></div>
               </div>
               <div className="card p-4">
                 <div className="text-xs text-ink-faint">OS entregues no mês</div>
@@ -236,6 +248,8 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {tab === 'documentos' && <DocumentsTab f={f} setF={setF} s={s} setS={setS} goTab={setTab} />}
 
       {tab === 'financeiro' && (
         <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
@@ -397,20 +411,191 @@ function Team() {
   );
 }
 
+/** Logo: reduz mantendo a proporção (PNG com transparência; se ficar grande, WEBP e por fim JPG). */
 function resizeImage(file, max) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement('canvas');
-      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      resolve(c.toDataURL('image/png'));
+      c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      let out = c.toDataURL('image/png');
+      if (out.length > 600000) {
+        const webp = c.toDataURL('image/webp', 0.9);
+        if (webp.startsWith('data:image/webp') && webp.length <= 600000) out = webp;
+        else {
+          ctx.globalCompositeOperation = 'destination-over'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          out = c.toDataURL('image/jpeg', 0.85);
+        }
+      }
       URL.revokeObjectURL(img.src);
+      resolve(out);
     };
-    img.onerror = reject;
+    img.onerror = () => reject(new Error('imagem inválida'));
     img.src = URL.createObjectURL(file);
   });
+}
+
+/** Envio do logotipo: mostra a imagem inteira (sem cortar) sobre fundo quadriculado. */
+function LogoUpload({ value, onChange }) {
+  const [err, setErr] = useState('');
+  return (
+    <div>
+      <span className="label">Logotipo</span>
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="grid h-20 w-40 place-items-center overflow-hidden rounded-app border border-line"
+          style={{ backgroundImage: 'linear-gradient(45deg,#e5e7eb 25%,transparent 25%,transparent 75%,#e5e7eb 75%),linear-gradient(45deg,#e5e7eb 25%,transparent 25%,transparent 75%,#e5e7eb 75%)',
+            backgroundSize: '16px 16px', backgroundPosition: '0 0,8px 8px', backgroundColor: '#fff' }}>
+          {value ? <img src={value} alt="Logotipo atual" className="max-h-[72px] max-w-[150px] object-contain" /> : <span className="text-xs text-zinc-500">sem logo</span>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="btn-outline cursor-pointer"><Upload className="h-4 w-4" /> {value ? 'Trocar logo' : 'Enviar logo'}
+            <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" aria-label="Arquivo do logotipo"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]; e.target.value = '';
+                if (!file) return;
+                setErr('');
+                try { onChange(await resizeImage(file, 640)); } catch { setErr('Não consegui abrir esta imagem. Use PNG, JPG ou WEBP.'); }
+              }} />
+          </label>
+          {value && <button type="button" className="btn-ghost text-red-600" onClick={() => onChange(null)}><Trash2 className="h-4 w-4" /> Remover</button>}
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-ink-faint">PNG com fundo transparente fica melhor. Aparece no sistema, nas OS, recibos e orçamentos impressos e nos links do cliente.</p>
+      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
+const DOC_FIELDS = [
+  ['status', 'Situação da OS'], ['technician', 'Técnico'], ['promised', 'Prazo de entrega'], ['warranty', 'Garantia'],
+  ['problem', 'Problema relatado'], ['accessories', 'Acessórios deixados'], ['condition', 'Estado na entrada'], ['diagnosis', 'Diagnóstico'],
+  ['solution', 'Serviço executado'], ['values', 'Valores (itens e total)'], ['notes', 'Observações'], ['terms', 'Termos e condições'],
+  ['signatures', 'Assinaturas'], ['document', 'CNPJ/CPF da empresa'], ['address', 'Endereço da empresa'],
+];
+const DOC_COLORS = ['#111827', '#1d4ed8', '#0f766e', '#15803d', '#b91c1c', '#ea580c', '#7c3aed', '#be185d'];
+
+/** Configurações › Documentos: parametrização da OS impressa, recibo e orçamento, com pré-visualização ao vivo. */
+function DocumentsTab({ f, setF, s, setS, goTab }) {
+  const d = docConfig(s);
+  const [sample, setSample] = useState('os');
+  // a folha A4 (794 px) é reduzida para caber na largura disponível (celular incluso)
+  const boxRef = useRef(null);
+  const [boxW, setBoxW] = useState(800);
+  useEffect(() => {
+    const el = boxRef.current; if (!el) return undefined;
+    const ro = new ResizeObserver(([e]) => setBoxW(e.contentRect.width));
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
+  const zoom = d.paper === 'cupom80' ? Math.min(1, (boxW - 8) / 302) : Math.min(0.62, (boxW - 8) / 794);
+  const setD = (patch) => setS({ documents: { ...(s.documents || {}), ...patch } });
+  const setShow = (k, v) => setD({ show: { ...d.show, [k]: v } });
+  const setTitle = (k, v) => setD({ titles: { ...d.titles, [k]: v } });
+  const Choice = ({ value, onChange, options }) => (
+    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map(([k, l]) => (
+        <button key={k} type="button" aria-pressed={value === k} onClick={() => onChange(k)}
+          className={cx('btn h-auto min-h-9 border px-2 py-1.5 text-sm', value === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
+      ))}
+    </div>
+  );
+  return (
+    <div className="grid max-w-[1400px] gap-6 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
+      <div className="space-y-6">
+        <div className="card space-y-5 p-6">
+          <h2 className="font-semibold">Identidade no documento</h2>
+          <LogoUpload value={f.logo_url} onChange={(v) => setF({ ...f, logo_url: v })} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div><span className="label">Posição do logo</span><Choice value={d.logoPosition} onChange={(v) => setD({ logoPosition: v })} options={[['left', 'Esquerda'], ['center', 'Centro']]} /></div>
+            <div><span className="label">Tamanho do logo</span><Choice value={d.logoSize} onChange={(v) => setD({ logoSize: v })} options={[['p', 'P'], ['m', 'M'], ['g', 'G']]} /></div>
+          </div>
+          <div><span className="label">Cabeçalho</span>
+            <Choice value={d.headerStyle} onChange={(v) => setD({ headerStyle: v })} options={[['linha', 'Com linha'], ['faixa', 'Faixa colorida'], ['simples', 'Simples']]} /></div>
+          <div>
+            <span className="label">Cor de destaque</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setD({ accentColor: '' })}
+                className={cx('btn h-9 border px-3 text-xs', !s.documents?.accentColor ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>
+                <span className="h-4 w-4 rounded-full" style={{ background: s.primaryColor }} /> Cor do sistema
+              </button>
+              {DOC_COLORS.map((c) => (
+                <button key={c} type="button" aria-label={`Cor ${c}`} onClick={() => setD({ accentColor: c })}
+                  className={cx('grid h-9 w-9 place-items-center rounded-full ring-offset-2 ring-offset-surface', s.documents?.accentColor === c && 'ring-2 ring-ink')} style={{ background: c }}>
+                  {s.documents?.accentColor === c && <Check className="h-4 w-4 text-white" />}
+                </button>
+              ))}
+              <label className="relative h-9 w-9 cursor-pointer overflow-hidden rounded-full border border-dashed border-line" title="Cor personalizada">
+                <input type="color" value={d.accent} onChange={(e) => setD({ accentColor: e.target.value })} className="absolute -inset-2 h-14 w-14 cursor-pointer opacity-0" aria-label="Cor personalizada do documento" />
+                <Plus className="m-auto mt-2 h-4 w-4 text-ink-faint" />
+              </label>
+            </div>
+          </div>
+          <div><span className="label">Fonte do documento</span>
+            <Choice value={d.font} onChange={(v) => setD({ font: v })} options={[['sistema', 'Igual ao sistema'], ['serifada', 'Serifada (clássica)']]} /></div>
+        </div>
+
+        <div className="card space-y-5 p-6">
+          <h2 className="font-semibold">Papel e textos</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div><span className="label">Papel da OS e do recibo</span>
+              <Choice value={d.paper} onChange={(v) => setD({ paper: v })} options={[['a4', 'A4'], ['cupom80', 'Cupom 80 mm']]} /></div>
+            <div><span className="label">Vias por impressão</span>
+              <Choice value={Number(d.copies) === 2 ? 2 : 1} onChange={(v) => setD({ copies: v })} options={[[1, '1 via'], [2, '2 vias']]} /></div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Título da OS" value={d.titles.os} maxLength={40} onChange={(e) => setTitle('os', e.target.value)} className="sm:col-span-2" />
+            <Input label="Título do recibo" value={d.titles.receipt} maxLength={40} onChange={(e) => setTitle('receipt', e.target.value)} />
+            <Input label="Título do orçamento" value={d.titles.quote} maxLength={40} onChange={(e) => setTitle('quote', e.target.value)} />
+          </div>
+          <Input label="Nome do quadro do objeto" value={d.equipmentLabel} maxLength={40} placeholder="Ex.: Veículo, Equipamento, Peça"
+            onChange={(e) => setD({ equipmentLabel: e.target.value })} />
+          <Input label="Linha extra no cabeçalho" value={d.headerNote} maxLength={140} placeholder="Ex.: Soldas especiais desde 1998"
+            onChange={(e) => setD({ headerNote: e.target.value })} />
+          <Textarea label="Rodapé" rows={2} value={d.footerNote} maxLength={300} placeholder="Ex.: www.suaempresa.com.br · PIX: CNPJ · @suaempresa"
+            onChange={(e) => setD({ footerNote: e.target.value })} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Assinatura da empresa" value={d.signatureCompany} maxLength={80} placeholder={f.trade_name || f.name}
+              onChange={(e) => setD({ signatureCompany: e.target.value })} />
+            <Input label="Texto na assinatura do cliente" value={d.signatureCustomer} maxLength={80}
+              onChange={(e) => setD({ signatureCustomer: e.target.value })} />
+          </div>
+          <p className="text-xs text-ink-faint">Os termos impressos ficam em <button type="button" className="text-primary hover:underline" onClick={() => goTab('os')}>OS e orçamentos</button>.</p>
+        </div>
+
+        <div className="card p-6">
+          <h2 className="mb-3 font-semibold">O que aparece na OS</h2>
+          <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+            {DOC_FIELDS.map(([k, l]) => (
+              <label key={k} className="flex cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" checked={d.show[k] !== false} onChange={(e) => setShow(k, e.target.checked)} className="h-4 w-4 accent-primary" /> {l}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card min-w-0 p-4 sm:p-6 xl:sticky xl:top-20 xl:self-start">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="label mb-0">Pré-visualização</span>
+          <div className="ml-auto flex gap-1">
+            {[['os', 'OS'], ['recibo', 'Recibo']].map(([k, l]) => (
+              <button key={k} type="button" aria-pressed={sample === k} onClick={() => setSample(k)}
+                className={cx('btn h-8 border px-3 text-xs', sample === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div ref={boxRef} className="max-h-[78vh] overflow-auto rounded-app border border-line bg-zinc-200 p-3" aria-label="Pré-visualização do documento">
+          <div className={cx('mx-auto bg-white text-zinc-900 shadow', d.paper === 'cupom80' ? 'w-[80mm] p-[4mm]' : 'w-[210mm] p-[12mm]')}
+            style={{ zoom }}>
+            <OrderDocument company={f} o={{ ...SAMPLE_ORDER, ...(sample === 'recibo' ? { status: 'entregue' } : {}) }} settings={s} receipt={sample === 'recibo'} />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-ink-faint">Exemplo com dados fictícios. Salve para usar nas próximas impressões.</p>
+      </div>
+    </div>
+  );
 }
 
 const SCOPE_OPTS = {
@@ -451,7 +636,7 @@ function PermissionsTab({ s, setS }) {
                       {(SCOPE_OPTS[p.key] || DEFAULT_SCOPE).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                     </select>
                   ) : (
-                    <input type="checkbox" aria-label={p.label} className="h-4 w-4 accent-[rgb(var(--primary))]" checked={!!perms[role]?.[p.key]} onChange={(e) => set(p.key, e.target.checked)} />
+                    <input type="checkbox" aria-label={p.label} className="h-4 w-4 accent-primary" checked={!!perms[role]?.[p.key]} onChange={(e) => set(p.key, e.target.checked)} />
                   )}
                 </div>
               ))}

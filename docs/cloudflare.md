@@ -22,3 +22,9 @@ Documento completo da migração (ORBI, TORVEN, RUSTEN e Master): `ORBI/docs/clo
 - Ditado por voz nos campos de texto (computador e celular): microfone dentro dos campos da OS (relato, acessórios, estado,
   diagnóstico, solução, observações, anotações) e das solicitações. Pontuação falada ("vírgula", "ponto final", "nova linha");
   "ponto" solto só vira "." no fim da fala (por causa de "ponto de solda"). Desligável em Configurações › OS › "Ditado por voz".
+- Logotipo e documentos (Configurações › Aparência e › Documentos (OS impressa)): logo mantém a proporção (PNG/JPG/WEBP,
+  conferido no servidor), formato quadrado ou horizontal no sistema e opção de esconder o nome ao lado. Modelo da OS/recibo/
+  orçamento: cabeçalho com linha, faixa colorida ou simples; logo à esquerda ou centralizado em 3 tamanhos; cor de destaque
+  própria ou a do sistema; fonte serifada; títulos, nome do quadro do objeto, linha extra no cabeçalho, rodapé e textos das
+  assinaturas; campos exibidos (situação, técnico, prazo, garantia, relato, acessórios, estado, diagnóstico, solução, valores,
+  observações, termos, assinaturas, CNPJ, endereço); 1 ou 2 vias; papel A4 ou cupom 80 mm. Pré-visualização ao vivo.

@@ -73,7 +73,8 @@ async function loadOrder(req, id, db = null) {
     `select o.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email, c.document as customer_document,
             c.kind as customer_kind,
             e.description as equipment_description, e.brand as equipment_brand, e.model as equipment_model,
-            e.serial as equipment_serial, e.category as equipment_category,
+            e.serial as equipment_serial, e.category as equipment_category, e.plate as equipment_plate, e.year as equipment_year,
+            e.color as equipment_color,
             t.name as technician_name, t.color as technician_color, u.name as created_by_name, qt.number as quote_number
        from orders o left join customers c on c.id = o.customer_id left join equipment e on e.id = o.equipment_id
        left join technicians t on t.id = o.technician_id left join users u on u.id = o.created_by

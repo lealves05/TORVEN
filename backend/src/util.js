@@ -119,6 +119,28 @@ export const DEFAULT_SETTINGS = {
   ],
   cardFeesAsExpense: true,
   requireOpenCash: false,
+  // identidade visual: formato do logo no sistema
+  brand: { logoShape: 'square', showName: true },
+  // modelo dos documentos impressos (OS, recibo, orçamento) — ajustável ao padrão visual de cada cliente
+  documents: {
+    accentColor: '',              // vazio = cor principal do sistema
+    headerStyle: 'linha',         // 'linha' | 'faixa' | 'simples'
+    logoPosition: 'left',         // 'left' | 'center'
+    logoSize: 'm',                // 'p' | 'm' | 'g'
+    font: 'sistema',              // 'sistema' | 'serifada'
+    paper: 'a4',                  // 'a4' | 'cupom80' (impressora térmica)
+    copies: 1,                    // 1 | 2 (via da empresa + via do cliente)
+    titles: { os: 'Ordem de serviço', receipt: 'Recibo', quote: 'Orçamento' },
+    equipmentLabel: 'Equipamento / peça',
+    headerNote: '',
+    footerNote: '',
+    signatureCompany: '',
+    signatureCustomer: 'de acordo',
+    show: {
+      status: true, technician: true, promised: true, warranty: true, problem: true, accessories: true, condition: true,
+      diagnosis: true, solution: true, values: true, notes: true, terms: true, signatures: true, document: true, address: true,
+    },
+  },
   orders: {
     defaultWarrantyDays: 90,
     defaultPromiseDays: 3,
@@ -302,9 +324,11 @@ export function permissionsFor(role, settings) {
 
 export function withDefaults(settings = {}) {
   const out = { ...DEFAULT_SETTINGS, ...settings };
-  for (const k of ['orders', 'whatsapp', 'modules', 'numbering', 'quotes', 'relationship']) {
+  for (const k of ['orders', 'whatsapp', 'modules', 'numbering', 'quotes', 'relationship', 'brand', 'documents']) {
     out[k] = { ...DEFAULT_SETTINGS[k], ...(settings?.[k] || {}) };
   }
+  out.documents.titles = { ...DEFAULT_SETTINGS.documents.titles, ...(settings?.documents?.titles || {}) };
+  out.documents.show = { ...DEFAULT_SETTINGS.documents.show, ...(settings?.documents?.show || {}) };
   out.permissions = Object.fromEntries(Object.keys(DEFAULT_PERMISSIONS).map((r) =>
     [r, { ...DEFAULT_PERMISSIONS[r], ...(settings?.permissions?.[r] || {}) }]));
   return out;

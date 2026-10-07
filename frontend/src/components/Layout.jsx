@@ -25,14 +25,18 @@ export function Mark({ className = 'h-5 w-5' }) {
 }
 
 export function Logo({ company, compact, light }) {
+  const brand = company?.settings?.brand || {};
+  const wide = !!company?.logo_url && brand.logoShape === 'wide' && !compact;
+  const showName = !company?.logo_url || brand.showName !== false;
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       {company?.logo_url
-        ? <img src={company.logo_url} alt="" className="h-9 w-9 rounded-app-sm bg-white object-cover" />
+        ? <img src={company.logo_url} alt="" className={cx('h-9 shrink-0 rounded-app-sm bg-white object-contain',
+          wide ? 'w-auto max-w-[150px] px-1' : 'w-9')} />
         : <div className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-app-sm', light ? 'bg-primary-fg/15 text-primary-fg' : 'bg-primary text-primary-fg')}>
             <Mark />
           </div>}
-      {!compact && (
+      {!compact && showName && (
         <div className="min-w-0 leading-tight">
           <div className="max-w-[180px] truncate text-sm font-semibold">{company?.trade_name || company?.name || 'TORVEN'}</div>
           <div className={cx('whitespace-nowrap text-[11px]', light ? 'hidden opacity-70 2xl:block' : 'text-ink-faint')}>TORVEN · assistência técnica</div>
