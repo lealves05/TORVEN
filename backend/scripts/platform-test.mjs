@@ -186,6 +186,17 @@ await check('F06/F11: CORS só para origem aprovada; API sem cache', async () =>
   assert.equal(ok.headers.get('access-control-allow-origin'), 'http://localhost:5173');
   assert.match(ok.headers.get('cache-control') || '', /no-store/);
 });
+await check('módulos do plano: rota do módulo bloqueada, núcleo compartilhado continua liberado', async () => {
+  const off = { status: 'ACTIVE', blocked: false, notices: [], features: { conciliacao_bancaria: false, tipos_os_checklists: false, maquininha: false, tabela_fipe: false, comissoes: false, financeiro: true, qualidade: true } };
+  assert.equal((await central('POST', `/tenants/${cid}/access`, { access: off })).status, 200);
+  for (const path of ['/finance/statements', '/quality/templates', '/terminal-charges', '/vehicles/fipe/brands', '/reports/commissions']) {
+    const r = await api('GET', path, null, token);
+    assert.equal(r.status, 403, path); assert.equal(r.data.code, 'FEATURE_DISABLED', path);
+  }
+  for (const path of ['/finance/accounts', '/quality/types']) assert.notEqual((await api('GET', path, null, token)).status, 403, `${path} é núcleo`);
+  await central('POST', `/tenants/${cid}/access`, { access: { status: 'ACTIVE', blocked: false, notices: [], features: {} } });
+  assert.notEqual((await api('GET', '/finance/statements', null, token)).status, 403, 'chave ausente no plano = liberado');
+});
 await check('F01: segredo do JWT fraco é recusado em produção', async () => {
   const { secretProblem } = await import('../src/auth.js');
   for (const v of [undefined, '', 'x', 'torven-dev-secret-troque-em-producao', 'a'.repeat(64)]) assert.ok(secretProblem(v), String(v));

@@ -13,6 +13,7 @@
  */
 import crypto from 'node:crypto';
 import { q, one } from './db.js';
+import { compileModuleRules, moduleForRoute } from './moduleRules.js';
 import { HttpError } from './util.js';
 
 const SKEW = 300;
@@ -28,11 +29,27 @@ export const FEATURES = {
   compras: { label: 'Compras e cotações', routes: ['/procurement', '/purchases'] },
   financeiro: { label: 'Contas, conciliação, fluxo e DRE', routes: ['/finance'] },
   relacionamento: { label: 'Relacionamento e retornos', routes: ['/relationship'] },
-  fiscal: { label: 'Documentos fiscais', routes: ['/invoices', '/company/fiscal'] },
+  fiscal: { label: 'Documentos fiscais (vários CNPJs e emissores)', routes: ['/invoices', '/company/fiscal', '/fiscal/emitters'] },
   relatorios: { label: 'Relatórios e indicadores', routes: ['/reports'] },
   exportacao: { label: 'Exportação de dados', routes: ['/export'] },
   whatsapp: { label: 'Atendimento pelo WhatsApp', routes: ['/whatsapp'] },
+  // recursos que existiam dentro de outros módulos e agora podem entrar ou sair dos planos separadamente
+  // (vale a regra mais específica: /finance/statements é "Conciliação bancária", não "Financeiro")
+  conciliacao_bancaria: { label: 'Conciliação do extrato bancário com as OS', routes: ['/finance/statements', '/finance/lines'] },
+  tipos_os_checklists: { label: 'Tipos de OS e checklists de inspeção', routes: ['/quality/types', '/quality/templates', '/quality/orders/:id/inspections'] },
+  maquininha: { label: 'Cobrança na maquininha de cartão', routes: ['/terminal-charges', '/integrations/terminals', '/integrations/devices'] },
+  consulta_placa: { label: 'Consulta de veículo pela placa (serviço pago)', routes: ['PUT,POST /integrations/plates'] },
+  tabela_fipe: { label: 'Tabela FIPE no cadastro do veículo', routes: ['/vehicles/fipe'] },
+  comissoes: { label: 'Comissões dos técnicos', routes: ['/reports/commissions'] },
 };
+/** Rotas do núcleo: nunca bloqueadas por módulo, mesmo dentro do prefixo de um módulo. */
+const CORE_ROUTES = [
+  'GET /finance/accounts',          // o Caixa (núcleo) lista as contas
+  'GET /quality/types',             // a OS pode ter tipo mesmo sem o módulo de checklists
+  'PUT /quality/orders/:id/type',
+  '/procurement/picking',           // separação de materiais para a OS
+];
+const MODULE_RULES = compileModuleRules(FEATURES, CORE_ROUTES);
 /** Rotas liberadas mesmo com a empresa bloqueada (regularização e leitura mínima). */
 const BLOCKED_ALLOWED = ['/billing'];
 
@@ -183,10 +200,10 @@ export async function platformGate(req, _res, next) {
       { code: 'TENANT_BLOCKED', status: access.status, reason: access.reason });
   }
   const f = access.features || {};
-  for (const [key, def] of Object.entries(FEATURES)) {
-    if (f[key] === false && def.routes.some((p) => path === p || path.startsWith(`${p}/`))) {
-      throw new HttpError(403, `O módulo ${def.label} não está disponível no seu plano.`, { code: 'FEATURE_DISABLED', feature: key });
-    }
+  // módulo da regra mais específica que cobre a rota ('' = núcleo, sempre liberado)
+  const key = moduleForRoute(MODULE_RULES, req.method, path);
+  if (key && f[key] === false) {
+    throw new HttpError(403, `O módulo ${FEATURES[key].label} não está disponível no seu plano.`, { code: 'FEATURE_DISABLED', feature: key });
   }
   next();
 }

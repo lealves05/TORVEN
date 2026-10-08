@@ -14,7 +14,7 @@ import { useUI } from '../context/UIContext';
 import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, useAction, FAIL, cx } from '../components/ui';
 
 export default function Settings() {
-  const { company, setCompany, user, can } = useAuth();
+  const { company, setCompany, user, can, feature } = useAuth();
   const full = can('settings');
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') || (full ? 'empresa' : can('fiscal_settings') ? 'fiscal' : can('integrations') && !can('users') ? 'integracoes' : 'perfis');
@@ -50,9 +50,9 @@ export default function Settings() {
     <div className="pb-20">
       <PageHeader title="Configurações" subtitle="Dados da empresa, aparência, regras das OS, financeiro, fiscal e acessos" />
       <Tabs value={tab} onChange={setTab} tabs={[
-        ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' }, { value: 'tipos-os', label: 'Tipos de OS' }, { value: 'checklists', label: 'Checklists' }, { value: 'documentos', label: 'Documentos (OS impressa)' },
+        ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' }, ...(feature('tipos_os_checklists') ? [{ value: 'tipos-os', label: 'Tipos de OS' }, { value: 'checklists', label: 'Checklists' }] : []), { value: 'documentos', label: 'Documentos (OS impressa)' },
           { value: 'financeiro', label: 'Financeiro' }, { value: 'categorias', label: 'Categorias' }] : []),
-        ...(can('fiscal_settings') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
+        ...(can('fiscal_settings') && feature('fiscal') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
         ...(can('integrations') ? [{ value: 'integracoes', label: 'Integrações' }] : []),
         ...(full ? [{ value: 'modulos', label: 'Módulos' }] : []),
         ...(can('users') ? [{ value: 'perfis', label: 'Perfis de acesso' }, { value: 'equipe', label: 'Usuários' }] : []),

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Car, CreditCard, Save, FlaskConical, Plus, Trash2, Star, RefreshCw, ExternalLink, KeyRound } from 'lucide-react';
 import { api } from '../lib/api';
 import { useUI } from '../context/UIContext';
+import { useAuth } from '../context/AuthContext';
 import { Input, Select, Toggle, Modal, Loading, useAction, FAIL, cx } from './ui';
 import WhatsAppSetup from './WhatsAppSetup';
 
@@ -260,11 +261,13 @@ function Terminals() {
 }
 
 export default function IntegrationsSetup() {
+  const { feature } = useAuth();
+  // cada integração aparece só quando o plano inclui o módulo correspondente (a API também recusa)
   return (
     <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
-      <WhatsAppSetup />
-      <PlateService />
-      <Terminals />
+      {feature('whatsapp') && <WhatsAppSetup />}
+      {feature('consulta_placa') && <PlateService />}
+      {feature('maquininha') && <Terminals />}
     </div>
   );
 }

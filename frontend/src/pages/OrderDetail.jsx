@@ -39,7 +39,7 @@ export const publicUrl = appUrl;
 export default function OrderDetail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { can, company } = useAuth();
+  const { can, company, feature } = useAuth();
   const settings = useSettings();
   const { technicians } = useCatalog();
   const { confirm, toast } = useUI();
@@ -171,7 +171,7 @@ export default function OrderDetail() {
             </button>
           )}
           {!closed && can('checkout') && values && o.balance > 0.009 && <button className="btn-outline" onClick={() => setModal('pay')}><Wallet className="h-4 w-4" /> Receber</button>}
-          {!closed && can('checkout') && values && o.balance > 0.009 && settings.orders?.terminalOnClose !== 'desligado' && (
+          {!closed && can('checkout') && feature('maquininha') && values && o.balance > 0.009 && settings.orders?.terminalOnClose !== 'desligado' && (
             <button className="btn-outline" onClick={() => setModal('terminal')}><CreditCard className="h-4 w-4" /> Maquininha</button>
           )}
           {next && <button className="btn-primary" disabled={busy} onClick={() => setStatus(next.to, { ask: false })} title={`Mover para "${ORDER_STATUS[next.to].label}"`}>{next.label} <ChevronRight className="h-4 w-4" /></button>}
@@ -429,7 +429,7 @@ function Timeline({ o, onAdded }) {
 }
 
 function DeliverModal({ o, dirty, onSave, onRefresh, onClose, onDone }) {
-  const { can } = useAuth();
+  const { can, feature } = useAuth();
   const settings = useSettings();
   const [run, busy] = useAction();
   const [rec, setRec] = useState({ received_by: o.customer_name || '', received_document: '' });
@@ -442,7 +442,7 @@ function DeliverModal({ o, dirty, onSave, onRefresh, onClose, onDone }) {
   // maquininha ao fechar a OS: 'perguntar' (botão), 'automatico' (envia direto à maquininha padrão) ou 'desligado'
   const termMode = settings.orders?.terminalOnClose || 'perguntar';
   const [balance, setBalance] = useState(Number(o.balance));
-  const canTerminal = values && can('checkout') && termMode !== 'desligado';
+  const canTerminal = values && can('checkout') && feature('maquininha') && termMode !== 'desligado';
   const openLogs = o.open_logs || [];
   const needReceiver = settings.orders?.requireReceiver && o.kind === 'os' && !rec.received_by.trim();
   // o que impede a entrega, em linguagem simples (o botão explica ao ser tocado)

@@ -66,7 +66,7 @@ export function useNav() {
   ].filter(Boolean);
   const groups = [
     { label: 'Atendimento', icon: Headset, children: [
-      can('requests_manage') && { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
+      can('requests_manage') && feature('whatsapp') && { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
       can('requests_view', 'requests_manage') && feature('comercial') && { to: '/solicitacoes', label: 'Solicitações', icon: Inbox },
       can('orders_create') && can('checkout') && { to: '/venda', label: 'Venda de balcão', icon: ShoppingCart },
       can('followups') && feature('relacionamento') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },
@@ -86,7 +86,7 @@ export function useNav() {
     { label: 'Financeiro e fiscal', icon: Landmark, children: [
       can('cash') && { to: '/financeiro', label: 'Caixa e lançamentos', icon: Wallet, end: true },
       can('cash', 'reports') && feature('financeiro') && { to: '/financeiro/gestao', label: 'Contas, conciliação e DRE', icon: Landmark },
-      mods.commissions && scope('commissions') !== 'none' && { to: '/comissoes', label: 'Comissões', icon: BadgePercent },
+      mods.commissions && feature('comissoes') && scope('commissions') !== 'none' && { to: '/comissoes', label: 'Comissões', icon: BadgePercent },
       can('invoices_issue', 'invoices_cancel') && mods.invoices && feature('fiscal') && { to: '/notas', label: 'Notas fiscais', icon: Receipt },
     ] },
     { label: 'Relatórios', icon: BarChart3, children: [

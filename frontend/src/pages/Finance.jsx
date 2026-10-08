@@ -14,17 +14,17 @@ const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', '
 
 export default function Finance() {
   const [params, setParams] = useSearchParams();
-  const { can } = useAuth();
+  const { can, feature } = useAuth();
   const tab = params.get('aba') || (can('cash') ? 'contas' : 'dre');
   return (
     <div>
       <PageHeader title="Gestão financeira" subtitle="Saldos por conta, conciliação com o extrato do banco, fluxo projetado e resultado do mês" />
       <Tabs value={tab} onChange={(t) => setParams({ aba: t })} tabs={[
-        ...(can('cash') ? [{ value: 'contas', label: 'Contas' }, { value: 'conciliacao', label: 'Conciliação bancária' }, { value: 'fluxo', label: 'Fluxo projetado' }] : []),
+        ...(can('cash') ? [{ value: 'contas', label: 'Contas' }, ...(feature('conciliacao_bancaria') ? [{ value: 'conciliacao', label: 'Conciliação bancária' }] : []), { value: 'fluxo', label: 'Fluxo projetado' }] : []),
         ...(can('reports') ? [{ value: 'dre', label: 'DRE gerencial' }] : []),
       ]} />
       {tab === 'contas' && <Accounts />}
-      {tab === 'conciliacao' && <Reconciliation />}
+      {tab === 'conciliacao' && feature('conciliacao_bancaria') && <Reconciliation />}
       {tab === 'fluxo' && <Cashflow />}
       {tab === 'dre' && <Dre />}
     </div>

@@ -2,6 +2,7 @@
 // sem consulta paga. A FIPE não pesquisa pela placa: a pessoa escolhe o modelo numa lista curta, digitando parte do nome.
 import { useEffect, useState } from 'react';
 import { Loader2, Search, Check, RotateCcw, BadgeDollarSign } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { cx } from './ui';
 
@@ -37,7 +38,13 @@ function Finder({ label, placeholder, items, onPick, loading, autoFocus }) {
 }
 
 /** @param {{ onPick: (v: object) => void, compact?: boolean }} p */
-export default function FipePicker({ onPick, compact }) {
+/** Some quando o plano não inclui a Tabela FIPE (a API também recusa). */
+export default function FipePicker(props) {
+  const { feature } = useAuth();
+  return feature('tabela_fipe') ? <FipePickerInner {...props} /> : null;
+}
+
+function FipePickerInner({ onPick, compact }) {
   const [type, setType] = useState('cars');
   const [brands, setBrands] = useState(null);
   const [brand, setBrand] = useState(null);

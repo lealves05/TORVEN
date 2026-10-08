@@ -42,6 +42,8 @@ r.get('/plate/:plate', async (req, res) => {
   }
   const active = (await listIntegrations(req.companyId, 'placa')).find((x) => x.enabled);
   const base = { plate: formatPlate(plate), found: false, lookup_available: !!active, provider: active ? PLATE_PROVIDERS[active.provider]?.name : null };
+  // consulta paga só com o módulo "Consulta de veículo pela placa" no plano (a busca no próprio cadastro é do núcleo)
+  if (req.access?.features?.consulta_placa === false) return res.json({ ...base, lookup_available: false, provider: null, plan_disabled: true });
   if (!active || req.query.consultar !== '1') return res.json(base);
 
   const cfg = await loadIntegration(req.companyId, 'placa', active.provider);
