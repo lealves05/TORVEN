@@ -471,6 +471,35 @@ await check('um checklist em vários tipos; vincular pelo tipo; geral vale para 
   const after = (await api('GET', '/quality/templates?all=1', null, T)).data.find((x) => x.id === c.data.id);
   assert.equal(after.active, true); assert.equal(after.order_type_ids.length, 2);
 });
+await check('tipos de OS padrão por ramo, com checklists, e exibir/ocultar', async () => {
+  const all = (await api('GET', '/quality/types?all=1', null, T)).data;
+  const std = all.filter((t) => t.segment);
+  assert.equal(std.length, 26, `padrão: ${std.length}`);
+  for (const seg of ['mecanica', 'autoeletrica', 'serralheria', 'soldas']) assert.ok(std.some((t) => t.segment === seg), seg);
+  assert.ok(std.every((t) => t.checklist_ids.length === 3), 'cada tipo com recebimento, inspeção e entrega');
+  const oleo = std.find((t) => t.template_key === 'mec-oleo');
+  const tpl = (await api('GET', `/quality/templates?order_type_id=${oleo.id}`, null, T)).data;
+  assert.ok(tpl.some((c) => c.kind === 'recebimento') && tpl.some((c) => c.kind === 'inspecao' && c.name.includes('Troca de óleo')));
+  // ocultar um tipo: some da abertura da OS
+  assert.equal((await api('POST', `/quality/types/${oleo.id}/visible`, { visible: false }, T)).status, 200);
+  assert.ok(!(await api('GET', '/quality/types', null, T)).data.some((t) => t.id === oleo.id));
+  assert.equal((await api('POST', '/orders', { customer_id: quick.customer_id, order_type_id: oleo.id, items: [] }, T)).status, 404);
+  // ocultar/exibir um ramo inteiro
+  const h = await api('POST', '/quality/types/segment-visible', { segment: 'serralheria', visible: false }, T);
+  assert.equal(h.data.updated, 6);
+  assert.ok(!(await api('GET', '/quality/types', null, T)).data.some((t) => t.segment === 'serralheria'));
+  await api('POST', '/quality/types/segment-visible', { segment: 'serralheria', visible: true }, T);
+  // outra empresa não mexe
+  assert.equal((await api('POST', `/quality/types/${oleo.id}/visible`, { visible: true }, T2)).status, 404);
+  // restaurar o que foi apagado (sem duplicar)
+  const sold = std.find((t) => t.template_key === 'sol-inox');
+  assert.equal((await api('DELETE', `/quality/types/${sold.id}`, null, T)).status, 204);
+  const cat = (await api('GET', '/quality/catalog', null, T)).data;
+  assert.equal(cat.find((c) => c.segment === 'soldas').types.find((t) => t.key === 'sol-inox').installed, false);
+  const rr = await api('POST', '/quality/catalog/install', { segments: ['soldas', 'mecanica'] }, T);
+  assert.equal(rr.data.created, 1);
+  assert.equal((await api('GET', '/quality/types?all=1', null, T)).data.filter((t) => t.segment).length, 26);
+});
 await check('várias fotos na OS: até 40 por OS, depois recusa', async () => {
   const o = await api('POST', '/orders', { customer_id: quick.customer_id, items: [] }, T);
   const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';

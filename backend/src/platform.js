@@ -36,7 +36,7 @@ export const FEATURES = {
   // recursos que existiam dentro de outros módulos e agora podem entrar ou sair dos planos separadamente
   // (vale a regra mais específica: /finance/statements é "Conciliação bancária", não "Financeiro")
   conciliacao_bancaria: { label: 'Conciliação do extrato bancário com as OS', routes: ['/finance/statements', '/finance/lines'] },
-  tipos_os_checklists: { label: 'Tipos de OS e checklists de inspeção', routes: ['/quality/types', '/quality/templates', '/quality/orders/:id/inspections'] },
+  tipos_os_checklists: { label: 'Tipos de OS e checklists de inspeção', routes: ['/quality/types', '/quality/templates', '/quality/catalog', '/quality/orders/:id/inspections'] },
   maquininha: { label: 'Cobrança na maquininha de cartão', routes: ['/terminal-charges', '/integrations/terminals', '/integrations/devices'] },
   consulta_placa: { label: 'Consulta de veículo pela placa (serviço pago)', routes: ['PUT,POST /integrations/plates'] },
   tabela_fipe: { label: 'Tabela FIPE no cadastro do veículo', routes: ['/vehicles/fipe'] },

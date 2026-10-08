@@ -1,6 +1,6 @@
 // Tipos de ordem de serviço e os checklists vinculados a cada tipo (recebimento, inspeção final, entrega).
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Trash2, X, ClipboardList, ClipboardCheck, ArrowUp, ArrowDown, Info, Pencil, Tags } from 'lucide-react';
+import { Plus, Trash2, X, ClipboardList, ClipboardCheck, ArrowUp, ArrowDown, Info, Pencil, Tags, Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { api } from '../lib/api';
 import { useUI } from '../context/UIContext';
 import { Input, Textarea, Select, Toggle, Modal, Loading, useAction, FAIL, cx } from './ui';
@@ -26,8 +26,12 @@ export function OrderTypeSelect({ types, value, onChange, label = 'Tipo de OS', 
   return (
     <Select label={label} value={value || ''} onChange={(e) => onChange(e.target.value || null)} className={className}>
       <option value="">Sem tipo (checklists gerais)</option>
-      {current && <option value={value}>Tipo desativado</option>}
-      {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+      {current && <option value={value}>Tipo oculto</option>}
+      {types.filter((t) => !t.segment || !SEGMENT_LABEL[t.segment]).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+      {Object.entries(SEGMENT_LABEL).map(([k, l]) => {
+        const list = types.filter((t) => t.segment === k);
+        return list.length ? <optgroup key={k} label={l}>{list.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup> : null;
+      })}
     </Select>
   );
 }
@@ -41,7 +45,7 @@ function useQualityData() {
     api.get('/quality/templates?all=1').then(setTpls).catch(() => setTpls([])),
   ]), []);
   useEffect(() => { load(); }, [load]);
-  return { types, tpls, load };
+  return { types, tpls, load, setTypes };
 }
 
 /** Salva o checklist (com os tipos vinculados). Devolve o checklist salvo ou FAIL. */
@@ -61,15 +65,17 @@ export function ChecklistsSettings() {
   const { types, tpls, load } = useQualityData();
   const [edit, setEdit] = useState(null);
   const [kind, setKind] = useState('');
+  const [text, setText] = useState('');
   if (!types || !tpls) return <Loading />;
   const typeName = (id) => types.find((t) => t.id === id)?.name || 'tipo';
-  const list = tpls.filter((c) => !kind || c.kind === kind);
+  const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const list = tpls.filter((c) => (!kind || c.kind === kind) && (!text || norm(`${c.name} ${(c.order_type_ids || []).map(typeName).join(' ')}`).includes(norm(text))));
   const save = async () => { if ((await saveTemplate(run, edit)) !== FAIL) { setEdit(null); load(); } };
   return (
     <div className="max-w-5xl space-y-4" id="checklists">
       <div className="card space-y-3 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-72">
             <h3 className="font-semibold">Checklists</h3>
             <p className="text-sm text-ink-faint">Listas de conferência usadas nas OS: no recebimento, na inspeção final e na entrega.</p>
           </div>
@@ -79,6 +85,7 @@ export function ChecklistsSettings() {
           Marque <b>Obrigatório</b> para a OS não avançar sem o checklist preenchido. Escolha em <b>quais tipos de OS</b> ele vale;
           sem nenhum tipo marcado, ele vale para <b>todas as OS</b>.
         </Help>
+        <input className="input" placeholder="Buscar checklist ou tipo de OS…" aria-label="Buscar checklist" value={text} onChange={(e) => setText(e.target.value)} />
         <div className="flex flex-wrap gap-1.5">
           {[['', 'Todas as etapas'], ...Object.entries(CHECK_KIND)].map(([k, l]) => (
             <button key={k} onClick={() => setKind(k)} className={cx('chip border', kind === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
@@ -116,10 +123,22 @@ export function ChecklistsSettings() {
 export function OrderTypesTab() {
   const [run, busy] = useAction();
   const { confirm } = useUI();
-  const { types, tpls, load } = useQualityData();
+  const { types, tpls, load, setTypes } = useQualityData();
   const [edit, setEdit] = useState(null); // { ...tipo, checklist_ids }
   const [newChecklist, setNewChecklist] = useState(null);
+  const [show, setShow] = useState('');
+  const [pick, setPick] = useState('');
+  const [restore, setRestore] = useState(false);
   if (!types || !tpls) return <Loading />;
+  const groups = [...Object.entries(SEGMENT_LABEL).map(([key, label]) => ({ key, label, items: types.filter((t) => t.segment === key) })),
+    { key: 'proprios', label: 'Criados pela oficina', items: types.filter((t) => !t.segment || !SEGMENT_LABEL[t.segment]) }];
+  const visible = async (t, on) => {
+    setTypes((l) => l.map((x) => (x.id === t.id ? { ...x, active: on } : x))); // muda na hora; volta se der erro
+    if ((await run(() => api.post(`/quality/types/${t.id}/visible`, { visible: on }), on ? `"${t.name}" exibido` : `"${t.name}" ocultado`)) === FAIL) load();
+  };
+  const segmentVisible = async (segment, on) => {
+    if ((await run(() => api.post('/quality/types/segment-visible', { segment, visible: on }), on ? 'Tipos exibidos' : 'Tipos ocultados')) !== FAIL) load();
+  };
 
   const open = (t) => setEdit(t ? { ...t, checklist_ids: [...(t.checklist_ids || [])] } : { name: '', description: '', active: true, checklist_ids: [] });
   const save = async () => {
@@ -149,7 +168,7 @@ export function OrderTypesTab() {
     <div className="max-w-5xl space-y-4" id="tipos-de-os">
       <div className="card space-y-3 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-72">
             <h3 className="font-semibold">Tipos de ordem de serviço</h3>
             <p className="text-sm text-ink-faint">Os serviços que a empresa faz (ex.: Troca de óleo, Funilaria, Solda). Ao escolher o tipo na OS, os checklists dele aparecem sozinhos.</p>
           </div>
@@ -157,32 +176,62 @@ export function OrderTypesTab() {
         </div>
         <Help>Em cada tipo, marque os <b>checklists</b> que devem ser usados. Os checklists marcados como <b>Obrigatório</b> travam a OS até serem preenchidos.</Help>
       </div>
+      <div className="card flex flex-wrap items-center gap-2 p-3">
+        {[['', 'Todos'], ['on', 'Exibidos'], ['off', 'Ocultos']].map(([k, l]) => (
+          <button key={k} onClick={() => setShow(k)} className={cx('chip border', show === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
+        ))}
+        <span className="text-xs text-ink-faint">{types.filter((t) => t.active).length} de {types.length} exibidos na abertura da OS</span>
+        <button className="btn-ghost ml-auto h-8 text-xs" onClick={() => setRestore(true)}><RotateCcw className="h-3.5 w-3.5" /> Restaurar tipos padrão</button>
+      </div>
       {!types.length ? (
         <div className="card p-8 text-center text-sm text-ink-soft"><Tags className="mx-auto mb-2 h-8 w-8 text-ink-faint" />Nenhum tipo de OS ainda. Clique em <b>Novo tipo de OS</b>.</div>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {types.map((t) => (
-            <section key={t.id} className={cx('card p-4', !t.active && 'opacity-60')} aria-label={`Tipo ${t.name}`}>
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <h4 className="font-semibold">{t.name} {!t.active && <span className="chip bg-muted text-ink-soft">Desativado</span>}</h4>
-                  <p className="text-xs text-ink-faint">{t.description || 'Sem descrição'} · {t.orders} OS</p>
-                </div>
-                <button className="btn-outline h-8 text-xs" onClick={() => open(t)}><Pencil className="h-3.5 w-3.5" /> Editar</button>
-              </div>
-              <ul className="mt-3 space-y-1 text-sm">
-                {(t.checklist_ids || []).map((id) => tplName(id)).filter(Boolean).map((c) => (
-                  <li key={c.id} className="flex items-center gap-2"><ClipboardCheck className="h-4 w-4 text-ink-faint" />
-                    <span className="min-w-0 flex-1 truncate">{c.name} <span className="text-xs text-ink-faint">· {CHECK_KIND[c.kind]}</span></span>
-                    {c.required && <span className="chip bg-red-500/10 text-red-700 dark:text-red-300">Obrigatório</span>}
-                  </li>
+      ) : groups.map((g) => {
+        const list = g.items.filter((t) => !show || (show === 'on' ? t.active : !t.active));
+        if (!g.items.length) return null;
+        const allOn = g.items.every((t) => t.active);
+        return (
+          <section key={g.key} className="space-y-2" aria-label={g.label}>
+            <div className="flex flex-wrap items-center gap-2 px-1">
+              <h4 className="font-semibold">{g.label}</h4>
+              <span className="text-xs text-ink-faint">{g.items.filter((t) => t.active).length}/{g.items.length} exibidos</span>
+              <button className="btn-ghost ml-auto h-8 text-xs" disabled={busy} onClick={() => segmentVisible(g.key, !allOn)}>
+                {allOn ? <><EyeOff className="h-3.5 w-3.5" /> Ocultar todos</> : <><Eye className="h-3.5 w-3.5" /> Exibir todos</>}
+              </button>
+            </div>
+            {!list.length ? <p className="px-1 text-xs text-ink-faint">Nenhum tipo neste filtro.</p> : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {list.map((t) => (
+                  <div key={t.id} className={cx('card p-4', !t.active && 'bg-muted/40')} aria-label={`Tipo ${t.name}`}>
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h5 className={cx('font-semibold', !t.active && 'text-ink-soft')}>{t.name}</h5>
+                        <p className="text-xs text-ink-faint">{t.description || 'Sem descrição'} · {t.orders} OS</p>
+                      </div>
+                      <button className="btn-outline h-8 shrink-0 text-xs" onClick={() => open(t)}><Pencil className="h-3.5 w-3.5" /> Editar</button>
+                    </div>
+                    <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-app-sm border border-line px-3 py-2 text-sm">
+                      <input type="checkbox" className="h-4 w-4" checked={!!t.active} onChange={(e) => visible(t, e.target.checked)} aria-label={`Exibir ${t.name} na abertura da OS`} />
+                      {t.active ? <><Eye className="h-4 w-4 text-emerald-600" /> Exibido na abertura da OS</> : <><EyeOff className="h-4 w-4 text-ink-faint" /> Oculto (não aparece para escolher)</>}
+                    </label>
+                    <ul className="mt-3 space-y-1 text-sm">
+                      {(t.checklist_ids || []).map((id) => tplName(id)).filter(Boolean)
+                        .sort((x, y) => Object.keys(CHECK_KIND).indexOf(x.kind) - Object.keys(CHECK_KIND).indexOf(y.kind)).map((c) => (
+                        <li key={c.id} className="flex items-center gap-2"><ClipboardCheck className="h-4 w-4 shrink-0 text-ink-faint" />
+                          <span className="min-w-0 flex-1 truncate">{c.name} <span className="text-xs text-ink-faint">· {CHECK_KIND[c.kind]}</span></span>
+                          {c.required && <span className="chip bg-red-500/10 text-red-700 dark:text-red-300">Obrigatório</span>}
+                        </li>
+                      ))}
+                      {!t.checklist_ids?.length && <li className="text-xs text-ink-faint">Nenhum checklist próprio — usa só os checklists gerais.</li>}
+                    </ul>
+                  </div>
                 ))}
-                {!t.checklist_ids?.length && <li className="text-xs text-ink-faint">Nenhum checklist próprio — usa só os checklists gerais.</li>}
-              </ul>
-            </section>
-          ))}
-        </div>
-      )}
+              </div>
+            )}
+          </section>
+        );
+      })}
+
+      {restore && <RestoreCatalog onClose={() => setRestore(false)} onDone={() => { setRestore(false); load(); }} />}
 
       {edit && (
         <Modal open onClose={() => setEdit(null)} size="lg" title={edit.id ? 'Editar tipo de OS' : 'Novo tipo de OS'}
@@ -194,19 +243,20 @@ export function OrderTypesTab() {
           <div className="space-y-4">
             <Input label="Nome do tipo" placeholder="Ex.: Troca de óleo" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} autoFocus />
             <Textarea label="Descrição (opcional)" rows={2} value={edit.description || ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} />
-            {edit.id && <Toggle checked={edit.active !== false} onChange={(v) => setEdit({ ...edit, active: v })} label="Ativo" hint="Desativado, o tipo some da lista na abertura da OS. As OS antigas continuam com ele." />}
+            {edit.id && <Toggle checked={edit.active !== false} onChange={(v) => setEdit({ ...edit, active: v })} label="Exibir na abertura da OS" hint="Oculto, o tipo não aparece para escolher em OS novas. As OS antigas continuam com ele." />}
             <div>
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-medium">Checklists deste tipo</span>
                 <button className="btn-ghost h-8 text-xs text-primary" onClick={() => setNewChecklist(newTpl([], 'recebimento'))}><Plus className="h-3.5 w-3.5" /> Criar checklist novo</button>
               </div>
               <p className="mb-2 text-xs text-ink-faint">Marque os checklists que valem para este tipo. Os que não têm tipo nenhum valem para todas as OS.</p>
+              <input className="input mb-2 h-9 text-sm" placeholder="Filtrar checklists…" aria-label="Filtrar checklists" value={pick} onChange={(e) => setPick(e.target.value)} />
               {!tpls.length ? <p className="text-sm text-ink-soft">Nenhum checklist cadastrado ainda.</p> : (
                 <div className="grid gap-3 sm:grid-cols-3">
                   {Object.entries(CHECK_KIND).map(([k, label]) => (
                     <fieldset key={k} className="min-w-0 rounded-app-sm bg-muted/50 p-3">
                       <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">{label}</legend>
-                      {tpls.filter((c) => c.kind === k && c.active).map((c) => (
+                      {tpls.filter((c) => c.kind === k && c.active && (edit.checklist_ids.includes(c.id) || !pick || c.name.toLowerCase().includes(pick.toLowerCase()))).map((c) => (
                         <label key={c.id} className="flex cursor-pointer items-start gap-2 py-1 text-sm">
                           <input type="checkbox" className="mt-1" checked={edit.checklist_ids.includes(c.id)} onChange={() => toggle(c.id)} />
                           <span className="min-w-0">{c.name}{c.required && <span className="block text-[11px] text-red-600">obrigatório</span>}</span>
@@ -223,6 +273,41 @@ export function OrderTypesTab() {
       )}
       {newChecklist && <TemplateModal tpl={newChecklist} setTpl={setNewChecklist} types={types} busy={busy} onSave={createChecklist} onClose={() => setNewChecklist(null)} hideTypes />}
     </div>
+  );
+}
+
+export const SEGMENT_LABEL = { mecanica: 'Oficina mecânica', autoeletrica: 'Autoelétrica', serralheria: 'Serralheria', soldas: 'Soldas especiais' };
+
+/** Recria os tipos padrão apagados (com os checklists), por ramo. */
+function RestoreCatalog({ onClose, onDone }) {
+  const [run, busy] = useAction();
+  const [cat, setCat] = useState(null);
+  const [sel, setSel] = useState([]);
+  useEffect(() => { api.get('/quality/catalog').then((c) => { setCat(c); setSel(c.filter((x) => x.types.some((t) => !t.installed)).map((x) => x.segment)); }); }, []);
+  const go = async () => {
+    const r = await run(() => api.post('/quality/catalog/install', { segments: sel }));
+    if (r !== FAIL) { toastDone(r.created); onDone(); }
+  };
+  const { toast } = useUI();
+  const toastDone = (n) => toast(n ? `${n} tipo(s) de OS restaurado(s)` : 'Todos os tipos padrão já existiam');
+  return (
+    <Modal open onClose={onClose} title="Restaurar tipos padrão" footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || !sel.length} onClick={go}>Restaurar</button></>}>
+      {!cat ? <Loading /> : (
+        <div className="space-y-2 text-sm">
+          <p className="text-ink-soft">Recria os tipos de OS padrão que foram apagados, com os checklists deles. Os que já existem não mudam.</p>
+          {cat.map((c) => {
+            const missing = c.types.filter((t) => !t.installed).length;
+            return (
+              <label key={c.segment} className="flex cursor-pointer items-center gap-2 rounded-app-sm border border-line px-3 py-2">
+                <input type="checkbox" checked={sel.includes(c.segment)} onChange={() => setSel(sel.includes(c.segment) ? sel.filter((x) => x !== c.segment) : [...sel, c.segment])} />
+                <span className="flex-1"><b>{c.name}</b> <span className="text-xs text-ink-faint">{c.types.length} tipos</span></span>
+                <span className={cx('text-xs', missing ? 'text-amber-700' : 'text-ink-faint')}>{missing ? `${missing} faltando` : 'completo'}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
   );
 }
 

@@ -185,8 +185,9 @@ export const DEFAULT_CHECKLISTS = [
     'Serviço demonstrado ao cliente', 'Peças substituídas devolvidas/descartadas conforme combinado', 'Garantia explicada', 'Acessórios devolvidos'] },
 ];
 
-/** Estrutura mínima de uma empresa nova: unidade principal e checklists padrão. */
+/** Estrutura mínima de uma empresa nova: unidade principal, checklists e tipos de OS padrão. */
 export async function ensureCompanyDefaults(db, companyId) {
+  const { ensureCatalog } = await import('./osCatalog.js');
   await db.query(`insert into units (company_id, name, is_default) select $1, 'Matriz', true
                    where not exists (select 1 from units where company_id = $1)`, [companyId]);
   await db.query(`insert into financial_accounts (company_id, name, kind, is_default_cash) select $1, 'Caixa da oficina', 'caixa', true
@@ -198,6 +199,7 @@ export async function ensureCompanyDefaults(db, companyId) {
                      where not exists (select 1 from checklist_templates where company_id = $1 and kind = $3)`,
     [companyId, t.name, t.kind, JSON.stringify(t.items)]);
   }
+  await ensureCatalog(db, companyId);
 }
 
 /** Recalcula minutos e custo real de mão de obra da OS a partir dos apontamentos. */

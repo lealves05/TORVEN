@@ -348,7 +348,7 @@ export const LESSONS = [
     "n": 27,
     "file": "27-tipos-de-os-e-checklists",
     "mod": "producao",
-    "s": 143,
+    "s": 145,
     "title": "Tipos de OS e checklists obrigatórios",
     "routes": [],
     "desc": "Cadastrar os checklists (obrigatórios ou não), os tipos de serviço da oficina e ligar um ao outro.",
@@ -375,6 +375,21 @@ export const LESSONS = [
       "Registrar e aprovar ou reprovar"
     ],
     "text": "O checklist é uma lista de conferência. Ele protege a oficina e o cliente. Na chegada, anota como o veículo chegou. Antes de entregar, confere se o serviço ficou certo. Abra a ordem de serviço. Desça até o quadro Qualidade e checklists. Aqui aparecem os botões das etapas: Recebimento, Inspeção final e Entrega. Quando o checklist é obrigatório, aparece este aviso amarelo, e o botão da etapa fica destacado em laranja. Enquanto ele não for preenchido, a OS não passa para a próxima etapa. Clique no botão Recebimento. Abre a lista com os itens para conferir. Todos os itens começam marcados como OK. Você só precisa mudar o que estiver diferente. Achou um problema? Clique em Não conforme naquele item. Abre um campo: escreva o que encontrou, por exemplo um risco na porta. Se o item não serve para este veículo, clique em N/A, que quer dizer não se aplica. Por exemplo, um carro sem estepe. Embaixo fica o resultado. Como teve um item Não conforme, o sistema já mudou para Aprovada com ressalva. Ressalva quer dizer: está tudo certo, mas com uma observação. Em Observações, escreva o que for importante. Para guardar fotos, use o quadro Fotos e documentos da OS. Clique em Registrar. O checklist fica guardado na OS, com a data, o nome de quem preencheu e cada item marcado. O Recebimento saiu do aviso amarelo. Agora a OS pode seguir para o serviço. A OS segue o caminho normal: diagnóstico, aprovação e execução. Aqui ela já está em execução. A Inspeção final só fica liberada quando o serviço está em execução ou pronto. Quando o serviço terminar, faça a Inspeção final. Clique no botão Inspeção final. Confira cada item no veículo. Se estiver tudo certo, use Marcar todos como OK e escolha Aprovada. Se o serviço não ficou bom, escolha Reprovada. A OS volta para a execução, para a equipe corrigir antes de entregar. Clique em Registrar. Pronto: as duas conferências ficam na OS, uma embaixo da outra. Resumindo: OK quando está certo, Não conforme quando tem problema, e N/A quando não se aplica. Os checklists são montados em Configurações, na aba Checklists."
+  },
+  {
+    "n": 36,
+    "file": "36-tipos-de-os-prontos",
+    "mod": "producao",
+    "s": 124,
+    "title": "Tipos de OS prontos: exibir ou ocultar",
+    "routes": [],
+    "desc": "Os tipos de OS que já vêm prontos para mecânica, autoelétrica, serralheria e soldas especiais, e como escolher quais aparecem.",
+    "learn": [
+      "Os tipos prontos e seus checklists",
+      "Exibir ou ocultar um tipo ou um ramo inteiro",
+      "Restaurar os tipos padrão"
+    ],
+    "text": "O TORVEN já vem com tipos de ordem de serviço prontos para oficina mecânica, autoelétrica, serralheria e soldas especiais. Cada tipo já tem três checklists: o de chegada, o de inspeção final e o de entrega. Em Configurações, na aba Tipos de OS, eles aparecem separados por ramo. Em cada cartão você vê os checklists daquele tipo. Para mudar os itens ou deixar um checklist obrigatório, use a aba Checklists. Não usa algum tipo? Desmarque a caixa Exibido na abertura da OS. Ele fica oculto e não aparece mais para escolher. As ordens de serviço antigas daquele tipo continuam normais. Se a sua oficina não trabalha com serralheria, por exemplo, clique em Ocultar todos, ao lado do nome do ramo. Para voltar, clique em Exibir todos. Use os filtros Todos, Exibidos e Ocultos para ver só o que interessa. Na abertura da OS, a lista de tipos mostra só os exibidos, separados por ramo. Ao escolher o tipo, os checklists dele já aparecem. Apagou um tipo padrão sem querer? Clique em Restaurar tipos padrão. Ele volta com os checklists, sem mexer nos que já existem. Exiba só o que a sua oficina faz, ajuste os checklists e crie tipos novos quando precisar."
   },
   {
     "n": 28,
@@ -632,7 +647,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 3394;
+export const TOTAL_SECONDS = 3520;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

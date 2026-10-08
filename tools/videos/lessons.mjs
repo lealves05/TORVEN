@@ -403,6 +403,22 @@ export const LESSONS = [
     ],
   },
   {
+    n: 36, file: '36-tipos-de-os-prontos', mod: 'producao', title: 'Tipos de OS prontos: exibir ou ocultar', routes: [], start: '/configuracoes?tab=tipos-os',
+    desc: 'Os tipos de OS que já vêm prontos para mecânica, autoelétrica, serralheria e soldas especiais, e como escolher quais aparecem.',
+    learn: ['Os tipos prontos e seus checklists', 'Exibir ou ocultar um tipo ou um ramo inteiro', 'Restaurar os tipos padrão'],
+    steps: [
+      { act: (h) => h.card(slide('Já vem pronto', 'Tipos de OS por ramo', list(['Oficina mecânica: revisão, óleo, freios, suspensão…', 'Autoelétrica: scanner, bateria, ar-condicionado…', 'Serralheria: portão, grades, estruturas…', 'Soldas especiais: alumínio, inox, ferro fundido…']))), say: ['O TORVEN já vem com tipos de ordem de serviço prontos para oficina mecânica, autoelétrica, serralheria e soldas especiais.', 'Cada tipo já tem três checklists: o de chegada, o de inspeção final e o de entrega.'] },
+      { tag: 'Onde fica', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('region', { name: 'Oficina mecânica' }).locator('h4')); }, say: ['Em Configurações, na aba Tipos de OS, eles aparecem separados por ramo.'] },
+      { act: async (h) => { await h.unspot(); await h.spot(h.page.getByLabel('Tipo Freios').locator('ul')); }, say: ['Em cada cartão você vê os checklists daquele tipo. Para mudar os itens ou deixar um checklist obrigatório, use a aba Checklists.'] },
+      { tag: 'Ocultar um tipo', act: async (h) => { await h.unspot(); await h.click(h.page.getByLabel('Exibir Troca de óleo e filtros na abertura da OS'), { wait: 900 }); await h.spot(h.page.getByLabel('Tipo Troca de óleo e filtros')); }, say: ['Não usa algum tipo? Desmarque a caixa Exibido na abertura da OS. Ele fica oculto e não aparece mais para escolher.', 'As ordens de serviço antigas daquele tipo continuam normais.'] },
+      { tag: 'Ocultar um ramo', act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('region', { name: 'Serralheria' }).getByRole('button', { name: /Ocultar todos/ }), { wait: 1000 }); }, say: ['Se a sua oficina não trabalha com serralheria, por exemplo, clique em Ocultar todos, ao lado do nome do ramo. Para voltar, clique em Exibir todos.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Ocultos', exact: true }), { wait: 900 }); }, say: ['Use os filtros Todos, Exibidos e Ocultos para ver só o que interessa.'] },
+      { tag: 'Na OS', act: async (h) => { await h.go('/os/nova'); await h.sleep(800); await h.spot(h.page.locator('#campo-tipo-os')); }, say: ['Na abertura da OS, a lista de tipos mostra só os exibidos, separados por ramo. Ao escolher o tipo, os checklists dele já aparecem.'] },
+      { tag: 'Restaurar', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=tipos-os'); await h.spot(h.page.getByRole('button', { name: /Restaurar tipos padrão/ })); }, say: ['Apagou um tipo padrão sem querer? Clique em Restaurar tipos padrão. Ele volta com os checklists, sem mexer nos que já existem.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Lembre', 'Do seu jeito', list(['Exiba só os tipos que a oficina faz.', 'Edite nomes, descrições e checklists à vontade.', 'Crie tipos novos em Novo tipo de OS.']))); }, say: ['Exiba só o que a sua oficina faz, ajuste os checklists e crie tipos novos quando precisar.'] },
+    ],
+  },
+  {
     n: 28, file: '28-varias-fotos-na-os', mod: 'producao', title: 'Várias fotos de uma vez na OS', routes: [], start: '/os',
     desc: 'Guardar as fotos do serviço na OS: chegada, andamento e entrega.',
     learn: ['Escolher várias fotos de uma vez', 'Escrever a legenda e confirmar a autorização', 'Ver as fotos em tamanho grande'],

@@ -7,20 +7,29 @@ import { parse, notFound, bad, HttpError } from '../util.js';
 import { logEvent } from '../domain.js';
 import { audit } from '../audit.js';
 import { scopeWhere } from './orders.js';
+import { CATALOG, SEGMENTS, CATALOG_VERSION, installCatalog, ensureCatalog } from '../osCatalog.js';
 
 const r = Router();
 export const CHECK_KIND = { recebimento: 'Recebimento', inspecao: 'Inspeção final', entrega: 'Entrega' };
 export const RESULT = { aprovado: 'Aprovado', aprovado_ressalva: 'Aprovado com ressalva', reprovado: 'Reprovado' };
 
 // ---------- tipos de OS ----------
+/** Empresas antigas recebem os tipos padrão na primeira vez que abrem a lista. */
+async function catalogOnce(companyId) {
+  const c = await one('select os_catalog_version from companies where id = $1', [companyId]);
+  if (c && c.os_catalog_version < CATALOG_VERSION) await tx((db) => ensureCatalog(db, companyId));
+}
+
 r.get('/types', async (req, res) => {
+  await catalogOnce(req.companyId);
   const { rows } = await q(
     `select t.*, coalesce(l.ids, '{}') as checklist_ids, coalesce(l.n, 0) as checklists, coalesce(o.n, 0) as orders
        from order_types t
        left join lateral (select array_agg(x.template_id) as ids, count(*) filter (where c.active)::int as n
                             from order_type_checklists x join checklist_templates c on c.id = x.template_id where x.order_type_id = t.id) l on true
        left join lateral (select count(*)::int as n from orders where company_id = t.company_id and order_type_id = t.id) o on true
-      where t.company_id = $1 ${req.query.all === '1' ? '' : 'and t.active'} order by lower(t.name)`, [req.companyId]);
+      where t.company_id = $1 ${req.query.all === '1' ? '' : 'and t.active'}
+      order by array_position(array['mecanica','autoeletrica','serralheria','soldas'], t.segment) nulls first, lower(t.name)`, [req.companyId]);
   res.json(rows);
 });
 
@@ -64,6 +73,46 @@ r.delete('/types/:id', need('settings', 'inspections'), async (req, res) => {
     await audit(db, req, { entity: 'settings', entityId: t.id, action: 'order_type', summary: `Tipo de OS "${t.name}" excluído` });
   });
   res.status(204).end();
+});
+
+/** Exibir ou ocultar um tipo na abertura da OS (as OS antigas continuam com ele). */
+r.post('/types/:id/visible', need('settings', 'inspections'), async (req, res) => {
+  const d = parse(z.object({ visible: z.boolean() }), req.body);
+  const row = await one('update order_types set active = $3, updated_at = now() where id = $1 and company_id = $2 returning *', [req.params.id, req.companyId, d.visible]);
+  if (!row) throw notFound('Tipo de OS não encontrado');
+  await audit(null, req, { entity: 'settings', entityId: row.id, action: 'order_type', summary: `Tipo de OS "${row.name}" ${d.visible ? 'exibido' : 'ocultado'} na abertura da OS` });
+  res.json(row);
+});
+
+/** Exibir ou ocultar todos os tipos de um ramo (ou os criados pela empresa: segment = "proprios"). */
+r.post('/types/segment-visible', need('settings', 'inspections'), async (req, res) => {
+  const d = parse(z.object({ segment: z.enum([...Object.keys(SEGMENTS), 'proprios']), visible: z.boolean() }), req.body);
+  const { rowCount } = await q(
+    'update order_types set active = $3, updated_at = now() where company_id = $1 and segment is not distinct from $2::text',
+    [req.companyId, d.segment === 'proprios' ? null : d.segment, d.visible]);
+  await audit(null, req, { entity: 'settings', entityId: null, action: 'order_type', summary: `${rowCount} tipo(s) de ${SEGMENTS[d.segment] || 'OS próprios'} ${d.visible ? 'exibidos' : 'ocultados'}` });
+  res.json({ updated: rowCount });
+});
+
+/** Catálogo padrão: ramos e quantos tipos de cada um faltam na empresa (foram apagados). */
+r.get('/catalog', need('settings', 'inspections'), async (req, res) => {
+  const { rows } = await q('select template_key from order_types where company_id = $1 and template_key is not null', [req.companyId]);
+  const have = new Set(rows.map((x) => x.template_key));
+  res.json(Object.entries(CATALOG).map(([k, c]) => ({
+    segment: k, name: SEGMENTS[k], types: c.types.map(([key, name]) => ({ key, name, installed: have.has(key) })),
+  })));
+});
+
+/** Restaura os tipos padrão que faltam (com os checklists), exibidos. */
+r.post('/catalog/install', need('settings', 'inspections'), async (req, res) => {
+  const d = parse(z.object({ segments: z.array(z.enum(Object.keys(SEGMENTS))).min(1) }), req.body);
+  const created = await tx(async (db) => {
+    const n = await installCatalog(db, req.companyId, { segments: d.segments, visible: true });
+    await db.query('update companies set os_catalog_version = greatest(os_catalog_version, $2) where id = $1', [req.companyId, CATALOG_VERSION]);
+    await audit(db, req, { entity: 'settings', entityId: null, action: 'order_type', summary: `Tipos de OS padrão restaurados (${d.segments.map((x) => SEGMENTS[x]).join(', ')}): ${n} novo(s)` });
+    return n;
+  });
+  res.json({ created });
 });
 
 async function checkType(db, companyId, id, { activeOnly = true } = {}) {
