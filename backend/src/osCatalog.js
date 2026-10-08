@@ -1,13 +1,16 @@
-// Tipos de OS e checklists padrão por ramo (mecânica, autoelétrica, serralheria, soldas especiais).
+// Tipos de OS e checklists padrão por ramo (mecânica, autoelétrica, motos, serralheria, soldas especiais).
 // Instalados uma vez por empresa (companies.os_catalog_version); a empresa decide o que exibir na abertura da OS
 // (order_types.active) e pode editar, apagar ou criar outros. Nada aqui é obrigatório: os checklists vêm como
 // "não obrigatórios" — a empresa liga o Obrigatório onde quiser.
 
-export const CATALOG_VERSION = 1;
+export const CATALOG_VERSION = 2;
+/** Versão do catálogo em que cada ramo entrou. Empresas que já tinham o catálogo recebem o ramo novo OCULTO. */
+const SEGMENT_SINCE = { motos: 2 };
 
 export const SEGMENTS = {
   mecanica: 'Oficina mecânica',
   autoeletrica: 'Autoelétrica',
+  motos: 'Oficina de motos',
   serralheria: 'Serralheria',
   soldas: 'Soldas especiais',
 };
@@ -18,6 +21,12 @@ const VEHICLE_IN = ['Placa e quilometragem anotadas', 'Nível de combustível an
   'Reclamação do cliente descrita com as palavras dele'];
 const VEHICLE_OUT = ['Serviço explicado ao cliente', 'Peças trocadas mostradas/devolvidas conforme combinado', 'Veículo limpo (volante, bancos, tapetes)',
   'Painel sem luzes de alerta', 'Quilometragem de saída anotada', 'Próxima revisão/garantia informada'];
+const MOTO_IN = ['Placa e quilometragem anotadas', 'Nível de combustível anotado', 'Painel: luzes de alerta acesas anotadas',
+  'Carenagens, tanque e escapamento: riscos e quebras anotados (fotos)', 'Retrovisores, piscas e manetes conferidos',
+  'Capacete, baú, bolsas e acessórios deixados pelo cliente anotados', 'Chave reserva / alarme anotados', 'Reclamação do cliente descrita com as palavras dele'];
+const MOTO_OUT = ['Serviço explicado ao cliente', 'Peças trocadas mostradas/devolvidas conforme combinado', 'Calibragem dos pneus conferida',
+  'Freios dianteiro e traseiro testados', 'Luzes, buzina e piscas funcionando', 'Moto limpa (banco, tanque, manoplas)', 'Quilometragem de saída anotada',
+  'Próxima revisão/garantia informada'];
 const METAL_IN = ['Medidas conferidas no local ou na peça', 'Material e espessura definidos com o cliente', 'Acabamento combinado (pintura, galvanizado, natural)',
   'Fotos do local/peça antes do serviço', 'Prazo e forma de instalação combinados'];
 const METAL_OUT = ['Medidas finais conferidas', 'Esquadro, prumo e nível conferidos', 'Soldas sem trincas nem porosidade', 'Rebarbas removidas e cantos sem corte',
@@ -53,6 +62,20 @@ export const CATALOG = {
       ['ae-acessorios', 'Acessórios elétricos', 'Som, alarme, travas, vidros, câmeras e rastreador.', ['Acessório funcionando em todas as funções', 'Fiação protegida e presa', 'Fusível adequado instalado', 'Sem consumo de bateria com o carro desligado', 'Cliente orientado sobre o uso']],
     ],
   },
+  motos: {
+    shared: { recebimento: ['Recebimento da moto', MOTO_IN], entrega: ['Entrega da moto', MOTO_OUT] },
+    types: [
+      ['moto-revisao', 'Revisão de moto', 'Revisão por quilometragem ou tempo, conforme o manual da moto.', ['Óleo do motor e filtro trocados', 'Filtro de ar limpo/trocado', 'Vela conferida/trocada', 'Relação lubrificada e com folga regulada', 'Freios e fluido conferidos', 'Cabos de embreagem e acelerador lubrificados e regulados', 'Pneus calibrados e com desgaste anotado', 'Luzes, buzina e piscas testados', 'Parafusos principais no torque']],
+      ['moto-oleo', 'Troca de óleo da moto', 'Troca do óleo do motor e filtro.', ['Óleo correto para a moto (viscosidade e norma JASO)', 'Filtro de óleo / tela limpos ou trocados', 'Arruela do bujão trocada', 'Nível conferido no visor/vareta com a moto em pé', 'Sem vazamento após ligar o motor', 'Etiqueta da próxima troca colada']],
+      ['moto-relacao', 'Relação (corrente, coroa e pinhão)', 'Troca ou regulagem do kit de transmissão.', ['Kit completo trocado (corrente, coroa e pinhão)', 'Alinhamento da roda traseira conferido', 'Folga da corrente regulada', 'Porcas da coroa e do eixo no torque', 'Corrente lubrificada', 'Teste de rodagem sem ruído']],
+      ['moto-freios', 'Freios da moto', 'Pastilhas, lonas, discos, fluido e regulagem.', ['Pastilhas/lonas dentro da medida', 'Discos medidos e sem empeno', 'Fluido trocado/no nível e sem ar', 'Freio traseiro regulado', 'Luz de freio acendendo nos dois manetes/pedal', 'Teste de frenagem feito']],
+      ['moto-suspensao', 'Suspensão da moto', 'Bengalas (retentores e óleo), amortecedor e caixa de direção.', ['Retentores sem vazamento', 'Óleo da bengala na quantidade certa', 'Amortecedor sem vazamento e regulado', 'Caixa de direção sem folga e sem pontos', 'Teste de rodagem em piso irregular']],
+      ['moto-alimentacao', 'Carburação / injeção da moto', 'Limpeza de carburador ou bicos, sincronismo e marcha lenta.', ['Carburador/bico limpo', 'Boia/nível de combustível conferido (carburada)', 'Filtro de combustível conferido', 'Marcha lenta regulada e estável', 'Partida a frio e a quente testadas', 'Sem códigos de falha (injetada)']],
+      ['moto-eletrica', 'Parte elétrica da moto', 'Bateria, retificador, estator, partida, chicote e iluminação.', ['Bateria testada (tensão e partida)', 'Tensão de carga medida em rotação', 'Retificador/estator conferidos', 'Chicote sem emendas soltas', 'Luzes, piscas e painel funcionando']],
+      ['moto-motor', 'Motor da moto (reparo e retífica)', 'Ruídos, perda de potência, fumaça, consumo de óleo, retífica.', ['Diagnóstico registrado antes do reparo', 'Peças substituídas registradas', 'Folga de válvulas regulada', 'Torques conforme manual', 'Sem vazamentos com o motor quente', 'Amaciamento explicado ao cliente']],
+      ['moto-pneus', 'Pneus e rodas da moto', 'Troca de pneus e câmaras, aros, raios e rolamentos.', ['Pneu na medida e sentido de rodagem corretos', 'Data de fabricação do pneu anotada', 'Raios esticados / aro sem empeno', 'Rolamentos de roda sem folga', 'Calibragem conforme o manual', 'Eixos e porcas no torque']],
+    ],
+  },
   serralheria: {
     shared: { recebimento: ['Visita / medição', METAL_IN], entrega: ['Entrega / instalação', METAL_OUT] },
     types: [
@@ -75,6 +98,14 @@ export const CATALOG = {
       ['sol-tubulacao', 'Solda de tubulação e vasos', 'Tubulações, reservatórios e linhas de pressão.', ['Procedimento/eletrodo adequado ao material', 'Alinhamento das juntas conferido', 'Teste hidrostático ou de estanqueidade feito', 'Registro do soldador e data']],
     ],
   },
+};
+
+/** O que cada ramo acrescenta nas listas da empresa (só acrescenta, nunca remove o que a empresa já tem). */
+export const SEGMENT_SETTINGS = {
+  mecanica: { equipmentCategories: ['Carro / utilitário'], serviceCategories: ['Mecânica automotiva'], materialCategories: ['Peças automotivas', 'Óleos e lubrificantes'] },
+  autoeletrica: { equipmentCategories: ['Carro / utilitário'], serviceCategories: ['Autoelétrica'], materialCategories: ['Material elétrico automotivo', 'Baterias'] },
+  motos: { equipmentCategories: ['Moto'], serviceCategories: ['Mecânica de motos', 'Elétrica de motos'], materialCategories: ['Peças de moto', 'Pneus e câmaras', 'Óleos e lubrificantes', 'Kit relação'] },
+  serralheria: {}, soldas: {},
 };
 
 /** Instala o catálogo na empresa (idempotente pela chave). `visible`: exibir os tipos na abertura da OS. */
@@ -114,11 +145,14 @@ export async function installCatalog(db, companyId, { segments = Object.keys(CAT
   return created;
 }
 
-/** Primeira vez que a empresa abre os tipos de OS: instala o catálogo (exibido). Depois disso, só pelo botão. */
+/** Primeira vez que a empresa abre os tipos de OS: instala o catálogo (exibido). Depois disso, só pelo botão.
+ *  Empresa que já tinha uma versão anterior recebe só os ramos novos, OCULTOS (para não encher a lista de quem não usa). */
 export async function ensureCatalog(db, companyId) {
   const { rows: [c] } = await db.query('select os_catalog_version from companies where id = $1 for update', [companyId]);
   if (!c || c.os_catalog_version >= CATALOG_VERSION) return 0;
-  const n = await installCatalog(db, companyId);
+  const v = c.os_catalog_version;
+  const n = v === 0 ? await installCatalog(db, companyId)
+    : await installCatalog(db, companyId, { segments: Object.keys(CATALOG).filter((k) => (SEGMENT_SINCE[k] || 1) > v), visible: false });
   await db.query('update companies set os_catalog_version = $2 where id = $1', [companyId, CATALOG_VERSION]);
   return n;
 }

@@ -45,7 +45,9 @@ export default function FipePicker(props) {
 }
 
 function FipePickerInner({ onPick, compact }) {
-  const [type, setType] = useState('cars');
+  const { company } = useAuth();
+  // oficina só de motos (Configurações › Tipos de OS › Ramo da oficina) já abre em "Moto"
+  const [type, setType] = useState(company?.settings?.fipeDefaultType === 'motorcycles' ? 'motorcycles' : 'cars');
   const [brands, setBrands] = useState(null);
   const [brand, setBrand] = useState(null);
   const [models, setModels] = useState(null);

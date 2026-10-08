@@ -474,8 +474,8 @@ await check('um checklist em vários tipos; vincular pelo tipo; geral vale para 
 await check('tipos de OS padrão por ramo, com checklists, e exibir/ocultar', async () => {
   const all = (await api('GET', '/quality/types?all=1', null, T)).data;
   const std = all.filter((t) => t.segment);
-  assert.equal(std.length, 26, `padrão: ${std.length}`);
-  for (const seg of ['mecanica', 'autoeletrica', 'serralheria', 'soldas']) assert.ok(std.some((t) => t.segment === seg), seg);
+  assert.equal(std.length, 35, `padrão: ${std.length}`);
+  for (const seg of ['mecanica', 'autoeletrica', 'motos', 'serralheria', 'soldas']) assert.ok(std.some((t) => t.segment === seg), seg);
   assert.ok(std.every((t) => t.checklist_ids.length === 3), 'cada tipo com recebimento, inspeção e entrega');
   const oleo = std.find((t) => t.template_key === 'mec-oleo');
   const tpl = (await api('GET', `/quality/templates?order_type_id=${oleo.id}`, null, T)).data;
@@ -498,7 +498,47 @@ await check('tipos de OS padrão por ramo, com checklists, e exibir/ocultar', as
   assert.equal(cat.find((c) => c.segment === 'soldas').types.find((t) => t.key === 'sol-inox').installed, false);
   const rr = await api('POST', '/quality/catalog/install', { segments: ['soldas', 'mecanica'] }, T);
   assert.equal(rr.data.created, 1);
-  assert.equal((await api('GET', '/quality/types?all=1', null, T)).data.filter((t) => t.segment).length, 26);
+  assert.equal((await api('GET', '/quality/types?all=1', null, T)).data.filter((t) => t.segment).length, 35);
+});
+await check('oficina de motos: ramo da oficina ajusta tipos, categorias e FIPE; empresa antiga recebe motos oculto', async () => {
+  const motos = (await api('GET', '/quality/types?all=1', null, T)).data.filter((t) => t.segment === 'motos');
+  assert.equal(motos.length, 9);
+  const rel = motos.find((t) => t.template_key === 'moto-relacao');
+  const tpl = (await api('GET', `/quality/templates?order_type_id=${rel.id}`, null, T)).data;
+  assert.ok(tpl.some((c) => c.name === 'Recebimento da moto' && c.items.some((i) => /Capacete/.test(i))), 'recebimento da moto');
+  assert.ok(tpl.some((c) => c.kind === 'inspecao' && c.items.some((i) => /corrente/i.test(i))));
+  // só motos: exibe as motos, oculta os outros ramos padrão, não mexe nos tipos criados pela oficina
+  const own = await api('POST', '/quality/types', { name: 'Lavagem da moto' }, T);
+  assert.equal(own.status, 201, JSON.stringify(own.data));
+  const p = await api('POST', '/quality/catalog/profile', { segments: ['motos'] }, T);
+  assert.equal(p.status, 200, JSON.stringify(p.data));
+  assert.equal(p.data.hidden, 25); // 26 dos outros ramos, menos a troca de óleo que já estava oculta
+  const vis = (await api('GET', '/quality/types', null, T)).data;
+  assert.equal(vis.filter((t) => t.segment).length, 9);
+  assert.ok(vis.every((t) => !t.segment || t.segment === 'motos'));
+  assert.ok(vis.some((t) => t.id === own.data.id), 'tipo próprio continua');
+  const co = (await api('GET', '/company', null, T)).data;
+  assert.deepEqual(co.settings.segments, ['motos']);
+  assert.equal(co.settings.fipeDefaultType, 'motorcycles');
+  assert.ok(co.settings.equipmentCategories.includes('Moto') && co.settings.materialCategories.includes('Kit relação'));
+  // de novo não duplica categoria
+  await api('POST', '/quality/catalog/profile', { segments: ['motos', 'mecanica'] }, T);
+  const co2 = (await api('GET', '/company', null, T)).data;
+  assert.equal(co2.settings.equipmentCategories.filter((x) => x === 'Moto').length, 1);
+  assert.equal(co2.settings.fipeDefaultType, 'cars');
+  assert.equal((await api('GET', '/quality/types', null, T)).data.filter((t) => t.segment).length, 16);
+  // validação e isolamento
+  assert.equal((await api('POST', '/quality/catalog/profile', { segments: [] }, T)).status, 400);
+  assert.equal((await api('POST', '/quality/catalog/profile', { segments: ['padaria'] }, T)).status, 400);
+  assert.equal((await api('GET', '/quality/types', null, T2)).data.filter((t) => t.segment).length, 35, 'outra empresa intacta');
+  // empresa que já tinha o catálogo v1: recebe motos OCULTO, sem mexer no resto
+  const { rows: [c2] } = await pool.query("select company_id from users where email = 'outro@int.dev'");
+  await pool.query("delete from order_types where company_id = $1 and segment = 'motos'", [c2.company_id]);
+  await pool.query('update companies set os_catalog_version = 1 where id = $1', [c2.company_id]);
+  const after = (await api('GET', '/quality/types?all=1', null, T2)).data.filter((t) => t.segment === 'motos');
+  assert.equal(after.length, 9);
+  assert.ok(after.every((t) => !t.active), 'motos chega oculto em empresa antiga');
+  await api('POST', '/quality/catalog/profile', { segments: ['mecanica', 'autoeletrica', 'serralheria', 'soldas'] }, T);
 });
 await check('várias fotos na OS: até 40 por OS, depois recusa', async () => {
   const o = await api('POST', '/orders', { customer_id: quick.customer_id, items: [] }, T);

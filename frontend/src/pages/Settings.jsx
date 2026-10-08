@@ -24,6 +24,17 @@ export default function Settings() {
   const s = f.settings;
   const setS = (patch) => setF((x) => ({ ...x, settings: { ...x.settings, ...patch } }));
   const dirty = JSON.stringify(f) !== JSON.stringify(company);
+  // a empresa mudou fora deste formulário (ex.: "Ajustar ao ramo" na aba Tipos de OS): sem edição pendente, recarrega;
+  // com edição pendente, traz só o que o ajuste de ramo mexe, para o Salvar não desfazer o ajuste.
+  const prevCompany = useRef(company);
+  useEffect(() => {
+    if (prevCompany.current === company) return;
+    const clean = JSON.stringify(f) === JSON.stringify(prevCompany.current);
+    prevCompany.current = company;
+    if (clean) { setF(structuredClone(company)); return; }
+    const keys = ['segments', 'fipeDefaultType', 'equipmentCategories', 'serviceCategories', 'materialCategories'];
+    setF((x) => ({ ...x, settings: { ...x.settings, ...Object.fromEntries(keys.filter((k) => k in (company.settings || {})).map((k) => [k, structuredClone(company.settings[k])])) } }));
+  }, [company]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { applyTheme(f.settings, user.preferences); }, [f.settings, user.preferences]);
   useEffect(() => () => applyTheme(company.settings, user.preferences), []); // eslint-disable-line

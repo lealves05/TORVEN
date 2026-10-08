@@ -7,7 +7,7 @@ import { parse, notFound, bad, HttpError } from '../util.js';
 import { logEvent } from '../domain.js';
 import { audit } from '../audit.js';
 import { scopeWhere } from './orders.js';
-import { CATALOG, SEGMENTS, CATALOG_VERSION, installCatalog, ensureCatalog } from '../osCatalog.js';
+import { CATALOG, SEGMENTS, SEGMENT_SETTINGS, CATALOG_VERSION, installCatalog, ensureCatalog } from '../osCatalog.js';
 
 const r = Router();
 export const CHECK_KIND = { recebimento: 'Recebimento', inspecao: 'Inspeção final', entrega: 'Entrega' };
@@ -29,7 +29,7 @@ r.get('/types', async (req, res) => {
                             from order_type_checklists x join checklist_templates c on c.id = x.template_id where x.order_type_id = t.id) l on true
        left join lateral (select count(*)::int as n from orders where company_id = t.company_id and order_type_id = t.id) o on true
       where t.company_id = $1 ${req.query.all === '1' ? '' : 'and t.active'}
-      order by array_position(array['mecanica','autoeletrica','serralheria','soldas'], t.segment) nulls first, lower(t.name)`, [req.companyId]);
+      order by array_position(array['mecanica','autoeletrica','motos','serralheria','soldas'], t.segment) nulls first, lower(t.name)`, [req.companyId]);
   res.json(rows);
 });
 
@@ -113,6 +113,42 @@ r.post('/catalog/install', need('settings', 'inspections'), async (req, res) => 
     return n;
   });
   res.json({ created });
+});
+
+/** Ramo da oficina: exibe os tipos padrão dos ramos escolhidos, oculta os dos outros ramos (os criados pela oficina
+ *  não mudam), completa as listas de categorias e, se só trabalha com motos, a Tabela FIPE já abre em "Moto". */
+r.get('/catalog/profile', need('settings', 'inspections'), async (req, res) => {
+  const c = await one('select settings from companies where id = $1', [req.companyId]);
+  res.json({ segments: c?.settings?.segments || [] });
+});
+r.post('/catalog/profile', need('settings'), async (req, res) => {
+  const d = parse(z.object({ segments: z.array(z.enum(Object.keys(SEGMENTS))).min(1, 'escolha pelo menos um ramo') }), req.body);
+  const segs = [...new Set(d.segments)];
+  const out = await tx(async (db) => {
+    await ensureCatalog(db, req.companyId);
+    const created = await installCatalog(db, req.companyId, { segments: segs, visible: true });
+    const { rows } = await db.query(
+      `update order_types set active = (segment = any($2::text[])), updated_at = now()
+        where company_id = $1 and segment is not null and active is distinct from (segment = any($2::text[])) returning active`,
+      [req.companyId, segs]);
+    const { rows: [co] } = await db.query('select settings from companies where id = $1 for update', [req.companyId]);
+    const s = { ...(co.settings || {}), segments: segs };
+    for (const seg of segs) {
+      for (const [k, add] of Object.entries(SEGMENT_SETTINGS[seg] || {})) {
+        const cur = Array.isArray(s[k]) ? s[k] : [];
+        s[k] = [...cur, ...add.filter((x) => !cur.some((y) => String(y).toLowerCase() === x.toLowerCase()))];
+      }
+    }
+    const carros = segs.some((x) => x === 'mecanica' || x === 'autoeletrica');
+    s.fipeDefaultType = segs.includes('motos') && !carros ? 'motorcycles' : 'cars';
+    await db.query('update companies set settings = $2 where id = $1', [req.companyId, s]);
+    const shown = rows.filter((x) => x.active).length;
+    const hidden = rows.length - shown;
+    await audit(db, req, { entity: 'settings', entityId: null, action: 'order_type',
+      summary: `Ramo da oficina: ${segs.map((x) => SEGMENTS[x]).join(', ')} (${shown} tipo(s) exibidos, ${hidden} ocultados, ${created} criados)` });
+    return { segments: segs, shown, hidden, created };
+  });
+  res.json(out);
 });
 
 async function checkType(db, companyId, id, { activeOnly = true } = {}) {

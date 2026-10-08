@@ -404,10 +404,10 @@ export const LESSONS = [
   },
   {
     n: 36, file: '36-tipos-de-os-prontos', mod: 'producao', title: 'Tipos de OS prontos: exibir ou ocultar', routes: [], start: '/configuracoes?tab=tipos-os',
-    desc: 'Os tipos de OS que já vêm prontos para mecânica, autoelétrica, serralheria e soldas especiais, e como escolher quais aparecem.',
+    desc: 'Os tipos de OS que já vêm prontos para mecânica, autoelétrica, motos, serralheria e soldas especiais, e como escolher quais aparecem.',
     learn: ['Os tipos prontos e seus checklists', 'Exibir ou ocultar um tipo ou um ramo inteiro', 'Restaurar os tipos padrão'],
     steps: [
-      { act: (h) => h.card(slide('Já vem pronto', 'Tipos de OS por ramo', list(['Oficina mecânica: revisão, óleo, freios, suspensão…', 'Autoelétrica: scanner, bateria, ar-condicionado…', 'Serralheria: portão, grades, estruturas…', 'Soldas especiais: alumínio, inox, ferro fundido…']))), say: ['O TORVEN já vem com tipos de ordem de serviço prontos para oficina mecânica, autoelétrica, serralheria e soldas especiais.', 'Cada tipo já tem três checklists: o de chegada, o de inspeção final e o de entrega.'] },
+      { act: (h) => h.card(slide('Já vem pronto', 'Tipos de OS por ramo', list(['Oficina mecânica: revisão, óleo, freios, suspensão…', 'Autoelétrica: scanner, bateria, ar-condicionado…', 'Oficina de motos: revisão, relação, freios…', 'Serralheria: portão, grades, estruturas…', 'Soldas especiais: alumínio, inox, ferro fundido…']))), say: ['O TORVEN já vem com tipos de ordem de serviço prontos para oficina mecânica, autoelétrica, oficina de motos, serralheria e soldas especiais.', 'Cada tipo já tem três checklists: o de chegada, o de inspeção final e o de entrega.'] },
       { tag: 'Onde fica', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('region', { name: 'Oficina mecânica' }).locator('h4')); }, say: ['Em Configurações, na aba Tipos de OS, eles aparecem separados por ramo.'] },
       { act: async (h) => { await h.unspot(); await h.spot(h.page.getByLabel('Tipo Freios').locator('ul')); }, say: ['Em cada cartão você vê os checklists daquele tipo. Para mudar os itens ou deixar um checklist obrigatório, use a aba Checklists.'] },
       { tag: 'Ocultar um tipo', act: async (h) => { await h.unspot(); await h.click(h.page.getByLabel('Exibir Troca de óleo e filtros na abertura da OS'), { wait: 900 }); await h.spot(h.page.getByLabel('Tipo Troca de óleo e filtros')); }, say: ['Não usa algum tipo? Desmarque a caixa Exibido na abertura da OS. Ele fica oculto e não aparece mais para escolher.', 'As ordens de serviço antigas daquele tipo continuam normais.'] },
@@ -416,6 +416,21 @@ export const LESSONS = [
       { tag: 'Na OS', act: async (h) => { await h.go('/os/nova'); await h.sleep(800); await h.spot(h.page.locator('#campo-tipo-os')); }, say: ['Na abertura da OS, a lista de tipos mostra só os exibidos, separados por ramo. Ao escolher o tipo, os checklists dele já aparecem.'] },
       { tag: 'Restaurar', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=tipos-os'); await h.spot(h.page.getByRole('button', { name: /Restaurar tipos padrão/ })); }, say: ['Apagou um tipo padrão sem querer? Clique em Restaurar tipos padrão. Ele volta com os checklists, sem mexer nos que já existem.'] },
       { act: async (h) => { await h.unspot(); await h.card(slide('Lembre', 'Do seu jeito', list(['Exiba só os tipos que a oficina faz.', 'Edite nomes, descrições e checklists à vontade.', 'Crie tipos novos em Novo tipo de OS.']))); }, say: ['Exiba só o que a sua oficina faz, ajuste os checklists e crie tipos novos quando precisar.'] },
+    ],
+  },
+  {
+    n: 37, file: '37-oficina-de-motos', mod: 'producao', title: 'Sistema pronto para oficina de motos', routes: [], start: '/configuracoes?tab=tipos-os',
+    desc: 'Ajustar o TORVEN ao ramo da oficina: tipos de OS e checklists de moto, categorias e Tabela FIPE já em Moto.',
+    learn: ['Escolher o ramo da oficina', 'Os tipos de OS e checklists de moto', 'Abrir a OS da moto'],
+    steps: [
+      { act: (h) => h.card(slide('Oficina de motos', 'O que muda quando você escolhe motos', list(['Tipos de OS de moto: revisão, troca de óleo, relação, freios, suspensão…', 'Checklists de moto: carenagem, capacete, corrente, calibragem…', 'Tabela FIPE já abre em Moto.', 'Categorias Moto, Peças de moto, Pneus e câmaras e Kit relação.']))), say: ['Nesta aula você vai deixar o TORVEN pronto para uma oficina de motos, em poucos cliques.'] },
+      { tag: 'Ramo da oficina', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('region', { name: 'Ramo da oficina' })); }, say: ['Em Configurações, na aba Tipos de OS, fica o quadro Ramo da oficina. Nele você marca o que a sua oficina faz.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('region', { name: 'Ramo da oficina' }).getByText('Oficina de motos', { exact: true }), { wait: 700 }); }, say: ['Marque Oficina de motos. Se a oficina também atende carros, marque Oficina mecânica junto.'] },
+      { tag: 'Ajustar', act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Ajustar ao ramo' }), { wait: 900 }); await h.spot(h.page.getByRole('alertdialog')); }, say: ['Clique em Ajustar ao ramo. O sistema avisa o que vai acontecer: os tipos de moto ficam exibidos, e os dos outros ramos ficam ocultos. Nada é apagado.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('alertdialog').getByRole('button', { name: 'Ajustar', exact: true }), { wait: 1800 }); await h.spot(h.page.getByRole('region', { name: 'Oficina de motos' }).locator('h4')); }, say: ['Clique em Ajustar. Pronto: agora aparecem os tipos de OS de moto, cada um com os seus checklists.'] },
+      { tag: 'Checklists de moto', act: async (h) => { await h.unspot(); await h.spot(h.page.getByLabel('Tipo Relação (corrente, coroa e pinhão)').locator('ul')); }, say: ['Veja a troca da relação: chegada da moto, inspeção da relação e entrega da moto. Os itens falam de corrente, coroa, pinhão e alinhamento da roda.'] },
+      { tag: 'Na OS', act: async (h) => { await h.unspot(); await h.go('/os/nova'); await h.sleep(800); await h.spot(h.page.locator('#campo-tipo-os')); }, say: ['Na abertura da OS, a lista de tipos já mostra só os serviços de moto. Ao escolher o tipo, os checklists dele aparecem sozinhos.', 'E, ao cadastrar a moto do cliente, a Tabela FIPE já abre na opção Moto.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Lembre', 'Pode mudar quando quiser', list(['Configurações › Tipos de OS › Ramo da oficina.', 'Os tipos ocultos não somem: voltam com Exibir todos.', 'Os tipos criados pela oficina não mudam.']))); }, say: ['Se a oficina passar a atender outro ramo, é só marcar e ajustar de novo. Os tipos que você criou continuam do jeito que estão.'] },
     ],
   },
   {

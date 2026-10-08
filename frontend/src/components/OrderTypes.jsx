@@ -1,8 +1,9 @@
 // Tipos de ordem de serviço e os checklists vinculados a cada tipo (recebimento, inspeção final, entrega).
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Trash2, X, ClipboardList, ClipboardCheck, ArrowUp, ArrowDown, Info, Pencil, Tags, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, X, ClipboardList, ClipboardCheck, ArrowUp, ArrowDown, Info, Pencil, Tags, Eye, EyeOff, RotateCcw, Store } from 'lucide-react';
 import { api } from '../lib/api';
 import { useUI } from '../context/UIContext';
+import { useAuth } from '../context/AuthContext';
 import { Input, Textarea, Select, Toggle, Modal, Loading, useAction, FAIL, cx } from './ui';
 
 export const CHECK_KIND = { recebimento: 'Recebimento', inspecao: 'Inspeção final', entrega: 'Entrega' };
@@ -176,6 +177,7 @@ export function OrderTypesTab() {
         </div>
         <Help>Em cada tipo, marque os <b>checklists</b> que devem ser usados. Os checklists marcados como <b>Obrigatório</b> travam a OS até serem preenchidos.</Help>
       </div>
+      <BusinessProfile onDone={() => { setShow('on'); load(); }} />
       <div className="card flex flex-wrap items-center gap-2 p-3">
         {[['', 'Todos'], ['on', 'Exibidos'], ['off', 'Ocultos']].map(([k, l]) => (
           <button key={k} onClick={() => setShow(k)} className={cx('chip border', show === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
@@ -187,7 +189,7 @@ export function OrderTypesTab() {
         <div className="card p-8 text-center text-sm text-ink-soft"><Tags className="mx-auto mb-2 h-8 w-8 text-ink-faint" />Nenhum tipo de OS ainda. Clique em <b>Novo tipo de OS</b>.</div>
       ) : groups.map((g) => {
         const list = g.items.filter((t) => !show || (show === 'on' ? t.active : !t.active));
-        if (!g.items.length) return null;
+        if (!g.items.length || (show && !list.length)) return null; // com filtro, não mostra ramo vazio
         const allOn = g.items.every((t) => t.active);
         return (
           <section key={g.key} className="space-y-2" aria-label={g.label}>
@@ -276,7 +278,53 @@ export function OrderTypesTab() {
   );
 }
 
-export const SEGMENT_LABEL = { mecanica: 'Oficina mecânica', autoeletrica: 'Autoelétrica', serralheria: 'Serralheria', soldas: 'Soldas especiais' };
+export const SEGMENT_LABEL = { mecanica: 'Oficina mecânica', autoeletrica: 'Autoelétrica', motos: 'Oficina de motos', serralheria: 'Serralheria', soldas: 'Soldas especiais' };
+
+/** "Ramo da oficina": exibe de uma vez os tipos dos ramos que a oficina atende e oculta os outros. */
+function BusinessProfile({ onDone }) {
+  const [run, busy] = useAction();
+  const { confirm } = useUI();
+  const { company, refresh } = useAuth();
+  const saved = company?.settings?.segments || [];
+  const [sel, setSel] = useState(saved);
+  useEffect(() => { setSel(company?.settings?.segments || []); }, [company?.settings?.segments]);
+  const changed = sel.length !== saved.length || sel.some((x) => !saved.includes(x));
+  const apply = async () => {
+    const names = sel.map((k) => SEGMENT_LABEL[k]).join(', ');
+    if (!(await confirm({ title: 'Ajustar o sistema ao ramo da oficina?',
+      message: `Ficam exibidos os tipos de OS de: ${names}. Os tipos padrão dos outros ramos ficam ocultos (não são apagados). Os tipos criados pela oficina não mudam.`,
+      confirmText: 'Ajustar', danger: false }))) return;
+    const r = await run(() => api.post('/quality/catalog/profile', { segments: sel }));
+    if (r === FAIL) return;
+    await refresh?.();
+    onDone();
+  };
+  return (
+    <section className="card space-y-3 p-5" aria-label="Ramo da oficina">
+      <div className="flex items-start gap-2">
+        <Store className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold">Ramo da oficina</h3>
+          <p className="text-sm text-ink-faint">Marque o que a sua oficina faz e clique em <b>Ajustar</b>. O sistema mostra só os tipos de OS e checklists desses ramos.</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {Object.entries(SEGMENT_LABEL).map(([k, l]) => (
+          <label key={k} className={cx('flex cursor-pointer items-center gap-2 rounded-app-sm border px-3 py-2 text-sm', sel.includes(k) ? 'border-primary bg-primary/10 font-medium text-primary' : 'border-line')}>
+            <input type="checkbox" className="h-4 w-4" checked={sel.includes(k)} onChange={() => setSel(sel.includes(k) ? sel.filter((x) => x !== k) : [...sel, k])} />
+            {l}
+          </label>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn-primary h-9 text-sm" disabled={busy || !sel.length || !changed} onClick={apply}>Ajustar ao ramo</button>
+        {!sel.length ? <span className="text-xs text-ink-faint">Marque pelo menos um ramo.</span>
+          : !changed && saved.length ? <span className="text-xs text-emerald-700">Sistema ajustado para: {saved.map((k) => SEGMENT_LABEL[k]).join(', ')}.</span> : null}
+      </div>
+      {sel.includes('motos') && <p className="text-xs text-ink-faint">Oficina de motos: os checklists falam de carenagem, capacete, relação e calibragem; na Tabela FIPE a escolha já abre em <b>Moto</b> (se a oficina não atende carros) e entram as categorias Moto, Peças de moto, Pneus e câmaras e Kit relação.</p>}
+    </section>
+  );
+}
 
 /** Recria os tipos padrão apagados (com os checklists), por ramo. */
 function RestoreCatalog({ onClose, onDone }) {
