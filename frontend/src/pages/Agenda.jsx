@@ -53,14 +53,15 @@ export default function Agenda() {
         )}
       </div>
       {!list ? <Loading /> : (
-        <div className="grid gap-2 md:grid-cols-7">
+        <div className="md:-mx-1 md:overflow-x-auto md:px-1 md:pb-2">
+        <div className="grid gap-2 md:min-w-[910px] md:grid-cols-7">
           {days.map((d) => {
             const items = list.filter((e) => isSameDay(new Date(e.starts_at), d) || (new Date(e.starts_at) < d && new Date(e.ends_at) > d));
             const today = isSameDay(d, new Date());
             return (
               <div key={d.toISOString()} className={cx('card p-2 md:min-h-[140px]', today && 'ring-2 ring-primary/40', !items.length && !today && 'max-md:hidden')}>
                 <div className="mb-2 flex items-center justify-between px-1">
-                  <span className={cx('text-xs font-semibold uppercase', today ? 'text-primary' : 'text-ink-faint')}>{format(d, 'EEE d', { locale: ptBR })}</span>
+                  <span className={cx('whitespace-nowrap text-xs font-semibold uppercase', today ? 'text-primary' : 'text-ink-faint')}>{format(d, 'EEE d', { locale: ptBR })}</span>
                   {manage && <button className="text-ink-faint hover:text-primary" aria-label="Agendar neste dia" onClick={() => { const s = new Date(d); s.setHours(8, 0, 0, 0); setEdit({ kind: 'execucao', starts_at: s.toISOString(), ends_at: new Date(s.getTime() + 2 * 3600000).toISOString() }); }}><Plus className="h-3.5 w-3.5" /></button>}
                 </div>
                 <div className="space-y-1.5">
@@ -68,7 +69,7 @@ export default function Agenda() {
                     <button key={e.id} onClick={() => setView(e)}
                       className={cx('w-full rounded-app-sm border-l-4 p-1.5 text-left text-xs', SCHEDULE_KIND[e.kind]?.cls, ['cancelado', 'nao_realizado'].includes(e.status) && 'line-through opacity-50', e.status === 'concluido' && 'opacity-60')}
                       style={{ borderLeftColor: color(e.technician_id) }}>
-                      <div className="font-semibold tabular-nums">{fmt(e.starts_at, 'HH:mm')}–{fmt(e.ends_at, 'HH:mm')}</div>
+                      <div className="whitespace-nowrap font-semibold tabular-nums">{fmt(e.starts_at, 'HH:mm')}–{fmt(e.ends_at, 'HH:mm')}</div>
                       <div className="line-clamp-2">{e.title}</div>
                       <div className="truncate opacity-80">{e.technician_name || 'Sem técnico'}{e.customer_name && ` · ${e.customer_name}`}</div>
                     </button>
@@ -78,6 +79,7 @@ export default function Agenda() {
               </div>
             );
           })}
+        </div>
         </div>
       )}
       {list && !list.length && <div className="card mt-4"><Empty icon={CalendarDays} title="Nada agendado nesta semana" text="Visitas marcadas nas solicitações aparecem aqui automaticamente." /></div>}

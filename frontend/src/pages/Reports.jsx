@@ -121,9 +121,9 @@ function Production({ period }) {
             <button className="btn-ghost h-8 text-xs" disabled={!d.services.length} onClick={() => downloadCSV('servicos.csv', d.services)}><Download className="h-3.5 w-3.5" /></button>
           </div>
           {!d.services.length ? <Empty title="Sem dados" /> : (
-            <table className="table-clean"><thead><tr><th>Serviço</th><th className="text-right">Qtd.</th><th className="text-right">Total</th></tr></thead>
+            <div className="overflow-x-auto"><table className="table-clean"><thead><tr><th>Serviço</th><th className="text-right">Qtd.</th><th className="text-right">Total</th></tr></thead>
               <tbody>{d.services.map((x) => <tr key={x.description}><td><div className="max-w-[260px] truncate">{x.description}</div><div className="text-xs text-ink-faint">{x.orders} OS</div></td><td className="text-right tabular-nums">{qty(x.qty)}</td><td className="text-right tabular-nums">{money(x.total)}</td></tr>)}</tbody>
-            </table>
+            </table></div>
           )}
         </div>
         <div className="card">
@@ -132,12 +132,12 @@ function Production({ period }) {
             <button className="btn-ghost h-8 text-xs" disabled={!d.materials.length} onClick={() => downloadCSV('materiais.csv', d.materials)}><Download className="h-3.5 w-3.5" /></button>
           </div>
           {!d.materials.length ? <Empty title="Sem dados" /> : (
-            <table className="table-clean"><thead><tr><th>Material</th><th className="text-right">Qtd.</th><th className="text-right">Venda</th><th className="hidden text-right sm:table-cell">Margem</th></tr></thead>
+            <div className="overflow-x-auto"><table className="table-clean"><thead><tr><th>Material</th><th className="text-right">Qtd.</th><th className="text-right">Venda</th><th className="hidden text-right sm:table-cell">Margem</th></tr></thead>
               <tbody>{d.materials.map((x) => (
                 <tr key={x.description}><td className="max-w-[220px] truncate">{x.description}</td><td className="text-right tabular-nums">{qty(x.qty)} {x.unit}</td><td className="text-right tabular-nums">{money(x.revenue)}</td>
                   <td className="hidden text-right tabular-nums text-ink-soft sm:table-cell">{x.revenue ? `${Math.round(((x.revenue - x.cost) / x.revenue) * 100)}%` : '—'}</td></tr>
               ))}</tbody>
-            </table>
+            </table></div>
           )}
         </div>
         <div className="card">

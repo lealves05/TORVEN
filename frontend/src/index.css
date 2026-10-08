@@ -132,3 +132,6 @@ body {
 
 /* Barra de navegação inferior do celular: respeita a área segura do iPhone */
 .bottom-nav { padding-bottom: env(safe-area-inset-bottom); }
+
+/* itens de grade podem encolher: evita que tabelas/textos longos alarguem a coluna além da tela */
+:where(.grid) > * { min-width: 0; }

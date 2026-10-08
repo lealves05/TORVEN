@@ -128,8 +128,8 @@ export function CustomerDetail() {
         <Stat label="Objetos de serviço" value={c.equipment.length} icon={Wrench} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <div>
             <h2 className="mb-3 font-semibold">Ordens de serviço e vendas</h2>
             <OrdersTable list={c.orders.map((o) => ({ ...o, customer_name: c.name, equipment_description: o.equipment, received_at: o.created_at }))} compact />

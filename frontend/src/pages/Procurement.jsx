@@ -415,7 +415,7 @@ export function PurchaseOrderDetail() {
       {po.cancel_reason && <div className="mb-4 rounded-app-sm bg-red-500/10 p-3 text-sm text-red-700">Cancelado: {po.cancel_reason}</div>}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="card overflow-hidden lg:col-span-2">
-          <table className="table-clean">
+          <div className="overflow-x-auto"><table className="table-clean">
             <thead><tr><th>Item</th><th className="text-right">Pedido</th><th className="text-right">Recebido</th><th className="text-right">Unitário</th><th className="text-right">Total</th></tr></thead>
             <tbody>
               {po.items.map((i) => (
@@ -428,7 +428,7 @@ export function PurchaseOrderDetail() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           <div className="border-t border-line px-4 py-3 text-right font-semibold">Total {money(po.total)}</div>
         </div>
         <div className="space-y-6">

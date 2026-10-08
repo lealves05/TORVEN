@@ -87,8 +87,9 @@ async function loadOrder(req, id, db = null) {
   if (!o) throw notFound('OS não encontrada');
   const [{ rows: items }, { rows: events }, { rows: payments }, { rows: invoices }, { rows: schedule }, { rows: timeLogs }, { rows: inspections },
     { rows: warranties }, { rows: [warrantyOf] }] = await seq([
-    () => run(`select i.*, t.name as technician_name, p.stock as product_stock
+    () => run(`select i.*, t.name as technician_name, p.stock as product_stock, p.sku as product_sku, pu.name as picked_by_name
            from order_items i left join technicians t on t.id = i.technician_id left join products p on p.id = i.product_id
+           left join users pu on pu.id = i.picked_by
           where i.order_id = $1 order by i.position`, [id]),
     () => run(`select ev.*, u.name as user_name from order_events ev left join users u on u.id = ev.user_id
           where ev.order_id = $1 order by ev.created_at desc`, [id]),
@@ -143,6 +144,16 @@ r.get('/', async (req, res) => {
   if (customer_id) { params.push(customer_id); where += ` and o.customer_id = $${params.length}`; }
   if (from) { params.push(from); where += ` and o.created_at >= $${params.length}::date`; }
   if (to) { params.push(to); where += ` and o.created_at < $${params.length}::date + 1`; }
+  // entregues num período (data da entrega no fuso da empresa)
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateRe.test(String(req.query.delivered_from || ''))) {
+    params.push(req.query.delivered_from, req.settings.timezone || 'America/Sao_Paulo');
+    where += ` and o.delivered_at >= ($${params.length - 1}::date)::timestamp at time zone $${params.length}`;
+  }
+  if (dateRe.test(String(req.query.delivered_to || ''))) {
+    params.push(req.query.delivered_to, req.settings.timezone || 'America/Sao_Paulo');
+    where += ` and o.delivered_at < ($${params.length - 1}::date + 1)::timestamp at time zone $${params.length}`;
+  }
   if (overdue === '1') { params.push(OPEN_STATUSES); where += ` and o.status = any($${params.length}) and o.promised_at < now()`; }
   if (search) {
     const t = String(search).trim().toLowerCase();
@@ -157,6 +168,7 @@ r.get('/', async (req, res) => {
   }
   where += scopeWhere(req, params);
   const limit = Math.min(Number(req.query.limit) || 500, 2000);
+  const delivered = status === 'entregue';
   const closedSort = "case when o.status in ('entregue','cancelada') then 1 else 0 end";
   const prioSort = "case o.priority when 'urgente' then 0 when 'alta' then 1 when 'normal' then 2 else 3 end";
   // em aberto (poucas, ordenadas por prioridade) + encerradas mais recentes (pelo índice de data): evita ordenar todas as OS da empresa
@@ -167,7 +179,7 @@ r.get('/', async (req, res) => {
     `select o.id, o.number, o.kind, o.status, o.priority, o.service_location, o.received_at, o.promised_at, o.finished_at,
             o.delivered_at, o.created_at, o.updated_at, o.total, o.problem, o.customer_id, o.technician_id, o.equipment_id,
             c.name as customer_name, c.phone as customer_phone, e.description as equipment_description, e.brand as equipment_brand,
-            e.model as equipment_model, t.name as technician_name, t.color as technician_color,
+            e.model as equipment_model, e.plate as equipment_plate, t.name as technician_name, t.color as technician_color,
             coalesce(f.paid, 0) as paid, coalesce(f.receivable, 0) as receivable,
             (select count(*) from invoices iv where iv.order_id = o.id and iv.status = 'autorizada')::int as invoices_count
        from orders o left join customers c on c.id = o.customer_id left join equipment e on e.id = o.equipment_id
@@ -177,8 +189,8 @@ r.get('/', async (req, res) => {
                 - coalesce(sum(amount) filter (where type='saida' and category='Estornos'), 0) as paid,
                 sum(amount) filter (where type='entrada' and paid_at is null) as receivable
            from transactions where order_id = o.id) f on true
-      where ${search ? where : `o.id in (${ids})`}
-      order by ${closedSort}, ${prioSort}, o.created_at desc
+      where ${search || delivered ? where : `o.id in (${ids})`}
+      order by ${delivered ? 'o.delivered_at desc nulls last' : `${closedSort}, ${prioSort}, o.created_at desc`}
       limit ${limit}`, params);
   let out = rows.map((o) => ({ ...o, balance: round2(o.total - o.paid - o.receivable) }));
   if (payment === 'aberto') out = out.filter((o) => o.balance > 0.009 && o.status !== 'cancelada');

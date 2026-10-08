@@ -49,6 +49,7 @@ const Picking = lazy(() => import('./pages/Procurement').then((m) => ({ default:
 const Finance = lazy(() => import('./pages/Finance'));
 const Relationship = lazy(() => import('./pages/Relationship'));
 const PrintOrder = lazy(() => import('./pages/Print').then((m) => ({ default: m.PrintOrder })));
+const PrintOrderFull = lazy(() => import('./pages/Print').then((m) => ({ default: m.PrintOrderFull })));
 const PrintQuote = lazy(() => import('./pages/Print').then((m) => ({ default: m.PrintQuote })));
 const PublicQuote = lazy(() => import('./pages/Public').then((m) => ({ default: m.PublicQuote })));
 const PublicOrder = lazy(() => import('./pages/Public').then((m) => ({ default: m.PublicOrder })));
@@ -100,6 +101,7 @@ export default function App() {
       ) : (
         <>
           <Route path="/imprimir/os/:id" element={<Lazy><PrintOrder /></Lazy>} />
+          <Route path="/imprimir/os/:id/completa" element={<Lazy><PrintOrderFull /></Lazy>} />
           <Route path="/imprimir/orcamento/:id" element={<Lazy><PrintQuote /></Lazy>} />
           <Route element={<CatalogProvider><Layout /></CatalogProvider>}>
             <Route index element={<Lazy><Dashboard /></Lazy>} />

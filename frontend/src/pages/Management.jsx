@@ -49,7 +49,7 @@ export default function Management({ period }) {
         </section>
         <section className="card p-5">
           <h2 className="mb-3 font-semibold">Produtividade por técnico</h2>
-          <table className="table-clean">
+          <div className="overflow-x-auto"><table className="table-clean">
             <thead><tr><th>Técnico</th><th className="text-right">Horas</th><th className="text-right">OS</th><th className="text-right">Serviços</th><th className="text-right">R$/hora</th></tr></thead>
             <tbody>
               {d.technicians.map((t) => (
@@ -57,7 +57,7 @@ export default function Management({ period }) {
                   <td className="text-right tabular-nums">{money(t.service_revenue)}</td><td className="text-right tabular-nums">{t.revenue_per_hour != null ? money(t.revenue_per_hour) : '—'}</td></tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </section>
       </div>
       <section className="card overflow-hidden">

@@ -165,6 +165,9 @@ export default function OrderDetail() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link to={`/imprimir/os/${o.id}`} target="_blank" className="btn-outline"><Printer className="h-4 w-4" /> Imprimir</Link>
+          <Link to={`/imprimir/os/${o.id}/completa`} target="_blank" className="btn-outline" title="Tudo da OS: serviços, materiais apontados, horas, checklists, pagamentos, fotos e histórico">
+            <FileText className="h-4 w-4" /> OS completa
+          </Link>
           {o.customer_phone && (
             <button className="btn-outline" onClick={() => whatsapp(o.status === 'pronta' ? settings.whatsapp.ready : settings.whatsapp.status)}>
               <MessageCircle className="h-4 w-4 text-emerald-600" /> WhatsApp
@@ -198,8 +201,8 @@ export default function OrderDetail() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <section className="card p-5">
             <div className="grid gap-5 sm:grid-cols-2">
               <div>

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, LayoutGrid, List, Clock, Download, ClipboardList, ShoppingCart, MapPin, ChevronRight } from 'lucide-react';
-import { api, qs } from '../lib/api';
+import { Plus, Search, LayoutGrid, List, Clock, Download, ClipboardList, ShoppingCart, MapPin, ChevronRight, PackageCheck, Printer, FileText } from 'lucide-react';
+import { api, qs, appPath } from '../lib/api';
 import { money, fmt, ORDER_STATUS, OPEN_STATUSES, PRIORITY, NEXT_STEP, STATUS_HINT, orderNo, downloadCSV } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
-import { PageHeader, Loading, Empty, Hint, useAction, FAIL, cx } from '../components/ui';
+import { PageHeader, Loading, Empty, Hint, Stat, useAction, FAIL, cx } from '../components/ui';
+import { PeriodPicker, monthRange } from '../components/period';
 import { StatusBadge } from '../components/StatusBadge';
 
 export default function Orders() {
@@ -22,6 +23,7 @@ export default function Orders() {
   const [run] = useAction();
 
   const load = useCallback(() => {
+    if (view === 'entregues') return Promise.resolve();
     const query = view === 'quadro' ? { ...f, status: 'abertas', kind: 'os', overdue: '' } : f;
     return api.get(`/orders${qs(query)}`).then(setList);
   }, [f, view]);
@@ -41,7 +43,7 @@ export default function Orders() {
       <PageHeader title="Ordens de serviço" subtitle="Acompanhe cada serviço do recebimento à entrega"
         actions={<>
           <div className="flex rounded-app-sm bg-muted p-1">
-            {[['quadro', 'Quadro', LayoutGrid], ['lista', 'Lista', List]].map(([k, l, I]) => (
+            {[['quadro', 'Quadro', LayoutGrid], ['lista', 'Lista', List], ['entregues', 'Entregues', PackageCheck]].map(([k, l, I]) => (
               <button key={k} onClick={() => setView(k)} className={cx('flex items-center gap-1.5 rounded-[calc(var(--radius)*0.45)] px-3 py-1.5 text-sm font-medium', view === k ? 'bg-surface shadow-soft' : 'text-ink-soft')}>
                 <I className="h-4 w-4" />{l}
               </button>
@@ -50,6 +52,7 @@ export default function Orders() {
           {can('orders_create') && <Link to="/os/nova" className="btn-primary"><Plus className="h-4 w-4" /> Nova OS</Link>}
         </>} />
 
+      {view === 'entregues' ? <Delivered /> : (<>
       <div className="card mb-4 flex flex-wrap items-end gap-3 p-3">
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
@@ -82,6 +85,97 @@ export default function Orders() {
       </div>
 
       {!list ? <Loading /> : view === 'quadro' ? <Board list={list} onMove={move} canMove={can('orders_edit')} /> : <OrdersTable list={list} />}
+      </>)}
+    </div>
+  );
+}
+
+/** Aba "Entregues": consulta das OS já entregues, por período, com impressão da OS completa. */
+function Delivered() {
+  const nav = useNavigate();
+  const { can } = useAuth();
+  const settings = useSettings();
+  const { technicians } = useCatalog();
+  const [period, setPeriod] = useState(monthRange());
+  const [f, setF] = useState({ search: '', technician_id: '' });
+  const [list, setList] = useState(null);
+  const [shown, setShown] = useState(100);
+  useEffect(() => {
+    setList(null);
+    const t = setTimeout(() => api.get(`/orders${qs({ status: 'entregue', kind: 'os', delivered_from: period.from, delivered_to: period.to, ...f, limit: 2000 })}`)
+      .then(setList).catch(() => setList([])), 250);
+    return () => clearTimeout(t);
+  }, [period, f]);
+  const values = can('orders_values');
+  const total = (k) => (list || []).reduce((a, o) => a + (Number(o[k]) || 0), 0);
+  return (
+    <div className="space-y-4">
+      <div className="card space-y-3 p-3">
+        <PeriodPicker value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+            <input className="input pl-9" placeholder="Nº da OS, cliente, placa ou equipamento…" aria-label="Buscar OS entregue" value={f.search} onChange={(e) => setF({ ...f, search: e.target.value })} />
+          </div>
+          <select className="input w-44" value={f.technician_id} onChange={(e) => setF({ ...f, technician_id: e.target.value })} aria-label="Técnico">
+            <option value="">Todos os técnicos</option>
+            {technicians.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          {values && (
+            <button className="btn-outline" disabled={!list?.length} title="Exportar CSV" onClick={() => downloadCSV('os-entregues.csv', list.map((o) => ({
+              Numero: o.number, Cliente: o.customer_name, Equipamento: o.equipment_description, Placa: o.equipment_plate, Tecnico: o.technician_name,
+              Entrada: fmt(o.received_at), Entrega: fmt(o.delivered_at), Total: o.total, Recebido: o.paid, AReceber: o.receivable,
+            })))}><Download className="h-4 w-4" /> CSV</button>
+          )}
+        </div>
+      </div>
+      {list && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="OS entregues" value={list.length} icon={PackageCheck} />
+          {values && <Stat label="Valor das OS" value={money(total('total'))} />}
+          {values && <Stat label="Recebido" value={money(total('paid'))} />}
+          {values && <Stat label="A receber" value={money(total('receivable'))} tone="text-amber-500" />}
+        </div>
+      )}
+      {!list ? <Loading /> : !list.length ? (
+        <div className="card"><Empty icon={PackageCheck} title="Nenhuma OS entregue no período" text="Mude o período ou a busca." /></div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="table-clean">
+              <thead><tr><th>Nº</th><th>Cliente / veículo</th><th className="hidden lg:table-cell">Técnico</th><th>Entregue em</th>{values && <th className="text-right">Total</th>}<th /></tr></thead>
+              <tbody>
+                {list.slice(0, shown).map((o) => (
+                  <tr key={o.id} className="cursor-pointer" onClick={() => nav(`/os/${o.id}`)}>
+                    <td className="whitespace-nowrap font-medium tabular-nums">{orderNo(settings, o)}</td>
+                    <td>
+                      <div className="max-w-[280px] truncate">{o.customer_name || 'Consumidor'}</div>
+                      <div className="max-w-[280px] truncate text-xs text-ink-faint">{[o.equipment_plate, o.equipment_description].filter(Boolean).join(' · ') || o.problem}</div>
+                    </td>
+                    <td className="hidden text-ink-soft lg:table-cell">{o.technician_name || '—'}</td>
+                    <td className="whitespace-nowrap">{fmt(o.delivered_at, 'dd/MM/yy HH:mm')}</td>
+                    {values && (
+                      <td className="whitespace-nowrap text-right tabular-nums">
+                        <div className="font-medium">{money(o.total)}</div>
+                        {o.balance > 0.009 && <div className="text-xs text-amber-600">falta {money(o.balance)}</div>}
+                      </td>
+                    )}
+                    <td className="whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                      <a className="btn-outline h-8 px-2 text-xs" href={appPath(`/imprimir/os/${o.id}/completa`)} target="_blank" rel="noreferrer" title="Imprimir a OS completa, com materiais, horas e checklists">
+                        <FileText className="h-3.5 w-3.5" /> OS completa
+                      </a>
+                      <a className="btn-ghost btn-icon h-8" href={appPath(`/imprimir/os/${o.id}`)} target="_blank" rel="noreferrer" title="Imprimir a OS (modelo resumido)" aria-label="Imprimir OS resumida"><Printer className="h-4 w-4" /></a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {list.length > shown && (
+            <div className="border-t border-line p-3 text-center"><button className="btn-outline h-9 text-sm" onClick={() => setShown(shown + 200)}>Mostrar mais ({list.length - shown} restantes)</button></div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -94,7 +188,7 @@ function OrderCard({ o, draggable, onMove }) {
     <div draggable={draggable} onDragStart={(e) => e.dataTransfer.setData('text/plain', o.id)}
       className="card group relative select-none p-3 transition focus-within:border-primary/60 hover:border-primary/40">
       <div className="flex items-center gap-2 text-xs">
-        <span className="font-semibold tabular-nums">{orderNo(settings, o)}</span>
+        <span className="whitespace-nowrap font-semibold tabular-nums">{orderNo(settings, o)}</span>
         {o.priority !== 'normal' && <span className={PRIORITY[o.priority].cls}>{PRIORITY[o.priority].label}</span>}
         {o.service_location === 'externo' && <MapPin className="h-3.5 w-3.5 text-ink-faint" aria-label="Serviço externo" />}
         {o.technician_name && <span className="ml-auto flex items-center gap-1 truncate text-ink-faint"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: o.technician_color }} />{o.technician_name.split(' ')[0]}</span>}
@@ -104,11 +198,11 @@ function OrderCard({ o, draggable, onMove }) {
         {o.customer_name || 'Sem cliente'}
       </Link>
       <div className="truncate text-xs text-ink-faint">{[o.equipment_description, o.equipment_brand].filter(Boolean).join(' · ') || o.problem || '—'}</div>
-      <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
         <span className={cx('flex items-center gap-1', late ? 'font-medium text-red-600' : 'text-ink-faint')}>
           <Clock className="h-3.5 w-3.5 shrink-0" /><span className="whitespace-nowrap">{o.promised_at ? fmt(o.promised_at, 'dd/MM HH:mm') : 'sem prazo'}</span>
         </span>
-        {o.total != null && <span className={cx('tabular-nums', Number(o.total) > 0 ? 'font-medium' : 'text-ink-faint')}>{Number(o.total) > 0 ? money(o.total) : 'sem valor'}</span>}
+        {o.total != null && <span className={cx('whitespace-nowrap tabular-nums', Number(o.total) > 0 ? 'font-medium' : 'text-ink-faint')}>{Number(o.total) > 0 ? money(o.total) : 'sem valor'}</span>}
       </div>
       {onMove && (
         <div className="relative z-10 mt-2.5 space-y-1 border-t border-line/70 pt-2.5">
@@ -163,13 +257,13 @@ function Board({ list, onMove, canMove }) {
       </div>
 
       {/* computador/tablet: quadro com todas as etapas; colunas vazias ficam estreitas para caber tudo na tela */}
-      <div className="hidden gap-2 pb-2 md:flex">
+      <div className="hidden gap-2 overflow-x-auto pb-2 md:flex">
         {OPEN_STATUSES.map((s) => {
           const items = list.filter((o) => o.status === s);
           const empty = !items.length;
           return (
             <div key={s} {...drop(s)} title={empty ? `${ORDER_STATUS[s].label}: nenhuma OS` : undefined}
-              className={cx('flex flex-col rounded-app bg-muted/60 p-2 transition', empty ? 'w-12 shrink-0 items-center' : 'min-w-[180px] flex-1', over === s && 'ring-2 ring-primary/40')}>
+              className={cx('flex flex-col rounded-app bg-muted/60 p-2 transition', empty ? 'w-12 shrink-0 items-center' : 'min-w-[200px] max-w-[320px] flex-1', over === s && 'ring-2 ring-primary/40')}>
               {empty ? (
                 <div className="flex flex-col items-center gap-2 pt-1 text-xs font-medium text-ink-soft">
                   <span className="rounded-full bg-surface px-2 tabular-nums">0</span>

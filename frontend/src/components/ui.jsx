@@ -237,12 +237,12 @@ export function Tabs({ tabs, value, onChange }) {
 
 export function Stat({ label, value, hint, icon: Icon, tone }) {
   return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-ink-faint">{label}</span>
-        {Icon && <Icon className={cx('h-4 w-4', tone || 'text-ink-faint')} />}
+    <div className="card min-w-0 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0 text-xs font-medium text-ink-faint">{label}</span>
+        {Icon && <Icon className={cx('h-4 w-4 shrink-0', tone || 'text-ink-faint')} />}
       </div>
-      <div className="mt-2 text-xl font-semibold tabular-nums tracking-tight">{value}</div>
+      <div className="mt-2 break-words text-lg font-semibold leading-tight tabular-nums tracking-tight 2xl:text-xl">{value}</div>
       {hint && <div className="mt-0.5 text-xs text-ink-faint">{hint}</div>}
     </div>
   );

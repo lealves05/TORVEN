@@ -193,6 +193,27 @@ export const LESSONS = [
     ],
   },
   {
+    n: 35, file: '35-os-entregues-e-os-completa', mod: 'os', title: 'OS entregues e impressão da OS completa', routes: ['/os'], start: '/os?view=entregues',
+    desc: 'Encontrar as ordens de serviço já entregues e imprimir a OS completa, com serviços, materiais, horas e checklists.',
+    learn: ['Abrir a aba Entregues', 'Filtrar por período, cliente ou placa', 'Imprimir a OS completa'],
+    setup: async (api) => {
+      const l = await api('GET', '/orders?status=entregue&kind=os&limit=50');
+      const o = (l.items || l)[0];
+      return { id: o?.id };
+    },
+    steps: [
+      { tag: 'Onde fica', act: (h) => h.spot(h.page.getByRole('button', { name: 'Entregues' })), say: ['Na tela Ordens de serviço, ao lado de Quadro e Lista, fica a aba Entregues.', 'Ela mostra só as ordens de serviço que já foram entregues ao cliente.'] },
+      { tag: 'Período', act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: 'Este ano' }), { wait: 1200 }); }, say: ['Escolha o período da entrega: hoje, sete dias, este mês, o mês anterior ou este ano. Também dá para digitar as datas.'] },
+      { act: (h) => h.spot(h.page.locator('.grid').filter({ hasText: 'OS entregues' }).first()), say: ['Em cima aparecem os totais do período: quantas OS foram entregues, o valor, o que já foi recebido e o que ainda falta receber.'] },
+      { tag: 'Buscar', act: async (h) => { await h.unspot(); await h.spot(h.page.getByLabel('Buscar OS entregue')); }, say: ['Para achar uma OS, digite o número, o nome do cliente ou a placa no campo de busca.'] },
+      { tag: 'OS completa', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('link', { name: /OS completa/ }).first()); }, say: ['Em cada linha tem o botão OS completa. Ele abre a impressão com tudo o que aconteceu na ordem de serviço.'] },
+      { act: async (h, st) => { await h.unspot(); if (st.id) await h.go(`/imprimir/os/${st.id}/completa`); await h.sleep(1500); }, say: ['A OS completa traz os dados do cliente e do veículo, as datas, os serviços e os materiais apontados, com quantidade e valor.'] },
+      { act: async (h) => { await h.scroll(700, 1400); }, say: ['Mais abaixo vêm os totais, as horas apontadas pelos técnicos, os checklists, os pagamentos, as fotos e o histórico.'] },
+      { act: async (h) => { await h.top(); await h.spot(h.page.getByRole('button', { name: /Imprimir \/ salvar PDF/ })); }, say: ['Clique em Imprimir ou salvar PDF. Para guardar no computador ou mandar ao cliente, escolha Salvar como PDF.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Dica', 'Também dentro da OS', list(['Na ficha da OS, botão OS completa.', 'O botão Imprimir continua com o modelo resumido.', 'Serve para conferência, garantia e prestação de contas.']))); }, say: ['O mesmo botão OS completa também fica dentro de cada ordem de serviço, ao lado de Imprimir.'] },
+    ],
+  },
+  {
     n: 9, file: '09-garantia-e-retorno', mod: 'os', title: 'Garantia: quando o cliente volta', routes: ['/garantias'], start: '/os',
     desc: 'Abrir uma garantia a partir da OS entregue e acompanhar o atendimento.',
     learn: ['Onde ver a garantia de uma OS', 'Abrir o atendimento de garantia', 'Acompanhar as garantias abertas'],

@@ -175,7 +175,7 @@ function HistoryModal({ p, onClose }) {
   return (
     <Modal open onClose={onClose} size="lg" title="Histórico de movimentações" subtitle={p.name}>
       {!list ? <Loading /> : !list.length ? <Empty title="Sem movimentações" /> : (
-        <table className="table-clean">
+        <div className="overflow-x-auto"><table className="table-clean">
           <thead><tr><th>Data</th><th>Motivo</th><th className="text-right">Qtd.</th><th className="text-right">Saldo</th></tr></thead>
           <tbody>
             {list.map((m) => (
@@ -187,7 +187,7 @@ function HistoryModal({ p, onClose }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
     </Modal>
   );

@@ -174,6 +174,23 @@ export const LESSONS = [
     "text": "Na ficha da OS, o botão Imprimir fica no alto, junto dos outros botões. Imprima na entrada do serviço, para o cliente conferir e assinar. Esta é a ordem de serviço impressa: os dados da oficina, o cliente, o equipamento, o problema, os itens e as assinaturas. Clique em Imprimir ou salvar PDF. A janela de impressão do computador vai abrir. Quer mandar pelo WhatsApp em vez de imprimir? Na janela de impressão, em Destino, escolha Salvar como PDF. Depois da entrega, você também pode imprimir o recibo, com os pagamentos recebidos. A aparência da folha, como o logotipo, as cores e os campos que aparecem, é ajustada em Configurações, Documentos. Há uma aula só sobre isso."
   },
   {
+    "n": 35,
+    "file": "35-os-entregues-e-os-completa",
+    "mod": "os",
+    "s": 107,
+    "title": "OS entregues e impressão da OS completa",
+    "routes": [
+      "/os"
+    ],
+    "desc": "Encontrar as ordens de serviço já entregues e imprimir a OS completa, com serviços, materiais, horas e checklists.",
+    "learn": [
+      "Abrir a aba Entregues",
+      "Filtrar por período, cliente ou placa",
+      "Imprimir a OS completa"
+    ],
+    "text": "Na tela Ordens de serviço, ao lado de Quadro e Lista, fica a aba Entregues. Ela mostra só as ordens de serviço que já foram entregues ao cliente. Escolha o período da entrega: hoje, sete dias, este mês, o mês anterior ou este ano. Também dá para digitar as datas. Em cima aparecem os totais do período: quantas OS foram entregues, o valor, o que já foi recebido e o que ainda falta receber. Para achar uma OS, digite o número, o nome do cliente ou a placa no campo de busca. Em cada linha tem o botão OS completa. Ele abre a impressão com tudo o que aconteceu na ordem de serviço. A OS completa traz os dados do cliente e do veículo, as datas, os serviços e os materiais apontados, com quantidade e valor. Mais abaixo vêm os totais, as horas apontadas pelos técnicos, os checklists, os pagamentos, as fotos e o histórico. Clique em Imprimir ou salvar PDF. Para guardar no computador ou mandar ao cliente, escolha Salvar como PDF. O mesmo botão OS completa também fica dentro de cada ordem de serviço, ao lado de Imprimir."
+  },
+  {
     "n": 9,
     "file": "09-garantia-e-retorno",
     "mod": "os",
@@ -600,7 +617,7 @@ export const LESSONS = [
     "n": 26,
     "file": "26-suporte-e-treinamento",
     "mod": "config",
-    "s": 75,
+    "s": 74,
     "title": "Como usar as aulas e pedir ajuda",
     "routes": [
       "/suporte"
@@ -615,7 +632,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 3288;
+export const TOTAL_SECONDS = 3394;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;
