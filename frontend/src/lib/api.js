@@ -54,6 +54,21 @@ export const api = {
   del: (p) => request('DELETE', p),
 };
 
+/** Baixa um arquivo autenticado (ex.: PDF/XML de nota) e entrega ao navegador. */
+export async function downloadFile(path, fallbackName = 'arquivo') {
+  const token = getToken();
+  const res = await fetch(`${BASE}/api${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, data);
+  }
+  const name = (res.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 export const qs = (obj) => {
   const s = new URLSearchParams();
   Object.entries(obj).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') s.set(k, v); });

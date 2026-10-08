@@ -60,8 +60,9 @@ r.get('/search', async (req, res) => {
     jobs.push(q(
       `select o.id, o.number, o.kind, o.status, o.problem, c.name as customer_name, e.description as equipment
          from orders o left join customers c on c.id = o.customer_id left join equipment e on e.id = o.equipment_id
-        where o.company_id = $1 and (lower(coalesce(c.name,'')) like $2 or lower(coalesce(e.description,'')) like $2
-          or lower(coalesce(o.problem,'')) like $2 or lower(coalesce(e.serial,'')) like $2 ${num ? 'or o.number = $3' : ''})${scope}
+        where o.company_id = $1 and (o.customer_id in (select id from customers where company_id = $1 and lower(name) like $2)
+          or o.equipment_id in (select id from equipment where company_id = $1 and (lower(description) like $2 or lower(coalesce(serial,'')) like $2))
+          or lower(coalesce(o.problem,'')) like $2 ${num ? 'or o.number = $3' : ''})${scope}
         order by o.created_at desc limit 6`, params)
       .then(({ rows }) => rows.forEach((o) => out.push({
         type: 'order', id: o.id, number: o.number, title: `${o.kind === 'venda' ? 'Venda' : 'OS'} ${o.number} — ${o.customer_name || 'Balcão'}`,

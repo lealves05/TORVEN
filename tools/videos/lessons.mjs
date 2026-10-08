@@ -36,6 +36,23 @@ async function pickCustomer(h, typed, name) {
 }
 const btn = (h, name) => h.page.getByRole('button', { name, exact: true });
 
+/** Certificado A1 de exemplo (gerado na hora, só para a gravação). */
+async function demoPfx(cnpj, password) {
+  const { createRequire } = await import('node:module');
+  const forge = createRequire(new URL('../../backend/package.json', import.meta.url))('node-forge');
+  const keys = forge.pki.rsa.generateKeyPair(1024);
+  const cert = forge.pki.createCertificate();
+  cert.publicKey = keys.publicKey; cert.serialNumber = '01';
+  cert.validity.notBefore = new Date(Date.now() - 86400000); cert.validity.notAfter = new Date(Date.now() + 340 * 86400000);
+  cert.setSubject([{ name: 'commonName', value: `OFICINA DEMONSTRACAO LTDA:${cnpj}` }]); cert.setIssuer([{ name: 'commonName', value: 'AC EXEMPLO' }]);
+  cert.sign(keys.privateKey, forge.md.sha256.create());
+  const der = forge.asn1.toDer(forge.pkcs12.toPkcs12Asn1(keys.privateKey, [cert], password, { algorithm: '3des' })).getBytes();
+  const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+  const file = path.join(os.tmpdir(), 'certificado-a1.pfx');
+  fs.writeFileSync(file, Buffer.from(der, 'binary'));
+  return file;
+}
+
 export const LESSONS = [
   // ───────────────────────── Primeiros passos
   {
@@ -310,19 +327,20 @@ export const LESSONS = [
   },
 
   {
-    n: 27, file: '27-tipos-de-os-e-checklists', mod: 'producao', title: 'Tipos de OS e checklists de cada tipo', routes: [], start: '/configuracoes?tab=os',
-    desc: 'Criar os tipos de serviço da oficina e a lista de conferência de cada um.',
-    learn: ['Criar um tipo de OS', 'Montar o checklist do tipo', 'Escolher o tipo ao abrir a OS'],
+    n: 27, file: '27-tipos-de-os-e-checklists', mod: 'producao', title: 'Tipos de OS e checklists obrigatórios', routes: [], start: '/configuracoes?tab=checklists',
+    desc: 'Cadastrar os checklists (obrigatórios ou não), os tipos de serviço da oficina e ligar um ao outro.',
+    learn: ['Cadastrar um checklist obrigatório', 'Criar um tipo de OS e vincular o checklist', 'Escolher o tipo ao abrir a OS'],
     steps: [
-      { tag: 'Onde fica', act: async (h) => { await h.spot(h.page.locator('#tipos-de-os h3')); }, say: ['Em Configurações, na aba OS e orçamentos, fica o quadro Tipos de OS e checklists.', 'Tipo de OS é o tipo de serviço que você faz. Por exemplo: troca de óleo, funilaria ou solda.'] },
-      { tag: 'Novo tipo', act: async (h) => { await h.click(btn(h, 'Novo tipo de OS'), { wait: 800 }); await h.type('Nome do tipo', 'Troca de óleo', { delay: 70 }); }, say: ['Clique no botão Novo tipo de OS, no alto, à direita. Escreva o nome do tipo.'] },
-      { act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Salvar', exact: true }), { wait: 1200 }); }, say: ['Clique em Salvar. O sistema já abre o primeiro checklist deste tipo: o de Recebimento.'] },
-      { tag: 'Itens da lista', act: async (h) => { await h.type('Nome do checklist', 'Recebimento do veículo', { delay: 55 }); await h.type(h.page.getByLabel('Item 1', { exact: true }), 'Nível de combustível anotado', { delay: 40 }); }, say: ['Dê um nome ao checklist. Depois escreva o primeiro item a conferir.'] },
+      { tag: 'Onde fica', act: async (h) => { await h.spot(h.page.locator('#checklists h3')); }, say: ['Em Configurações há duas abas: Checklists e Tipos de OS.', 'Checklist é a lista de conferência. Tipo de OS é o tipo de serviço, por exemplo troca de óleo, funilaria ou solda.'] },
+      { tag: 'Novo checklist', act: async (h) => { await h.unspot(); await h.click(h.page.locator('[data-tour="novo-checklist"]'), { wait: 800 }); await h.type('Nome do checklist', 'Recebimento — troca de óleo', { delay: 55 }); await h.type(h.page.getByLabel('Item 1', { exact: true }), 'Nível de combustível anotado', { delay: 40 }); }, say: ['Na aba Checklists, clique em Novo checklist. Dê um nome e escreva o primeiro item a conferir.'] },
       { act: async (h) => { for (const it of ['Riscos e amassados fotografados', 'Objetos de valor retirados']) { await h.type('Novo item', it, { delay: 40 }); await h.click(btn(h, 'Adicionar'), { wait: 400 }); } }, say: ['Para mais itens, escreva no campo de baixo e clique em Adicionar. As setas mudam a ordem e o X apaga.'] },
-      { tag: 'Obrigatório', act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByText('Obrigatório', { exact: true }), { wait: 500 }); }, say: ['Ligue Obrigatório se a OS só pode seguir depois que esse checklist for preenchido.'] },
-      { act: async (h) => { await h.click(btn(h, 'Salvar checklist'), { wait: 1200 }); await h.spot(h.page.getByLabel('Tipo Troca de óleo')); }, say: ['Clique em Salvar checklist. O tipo aparece com as três etapas: recebimento, inspeção final e entrega.', 'Em cada etapa, Criar checklist monta outra lista.'] },
-      { tag: 'Na OS', act: async (h) => { await h.unspot(); await h.go('/os/nova'); await h.select('Tipo de OS', 'Troca de óleo'); await h.spot(h.page.locator('#campo-tipo-os')); }, say: ['Agora, ao abrir uma OS, escolha o Tipo de OS. Embaixo aparecem os checklists deste tipo.', 'Quando você clicar em Abrir OS, o checklist de recebimento já aparece na tela para preencher.'] },
-      { act: async (h) => { await h.unspot(); await h.card(slide('Resumo', 'Cada serviço com a sua lista', list(['Tipos de OS: em Configurações, OS e orçamentos.', 'Checklist do tipo: recebimento, inspeção e entrega.', 'Checklists gerais valem para todas as OS.']))); }, say: ['Os checklists gerais continuam valendo para todas as OS. Os do tipo aparecem só nas OS daquele tipo.'] },
+      { tag: 'Obrigatório', act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByText('Obrigatório', { exact: true }), { wait: 500 }); }, say: ['Ligue Obrigatório: a OS só segue depois que esse checklist for preenchido.'] },
+      { act: async (h) => { await h.click(btn(h, 'Salvar checklist'), { wait: 1200 }); await h.spot(h.page.getByText('Recebimento — troca de óleo').first().locator('..').locator('..')); }, say: ['Clique em Salvar checklist. Ele aparece na lista, com o aviso Obrigatório.'] },
+      { tag: 'Tipo de OS', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=tipos-os'); await h.click(h.page.locator('[data-tour="novo-tipo"]'), { wait: 800 }); await h.type('Nome do tipo', 'Troca de óleo', { delay: 70 }); }, say: ['Agora abra a aba Tipos de OS e clique em Novo tipo de OS. Escreva o nome do tipo.'] },
+      { tag: 'Vincular', act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByText('Recebimento — troca de óleo'), { wait: 500 }); await h.spot(h.page.getByRole('dialog').last().getByText('Checklists deste tipo')); }, say: ['Em Checklists deste tipo, marque os checklists que valem para este serviço. Os obrigatórios aparecem marcados em vermelho.'] },
+      { act: async (h) => { await h.unspot(); await h.click(btn(h, 'Salvar tipo'), { wait: 1200 }); await h.spot(h.page.getByLabel('Tipo Troca de óleo')); }, say: ['Clique em Salvar tipo. O cartão mostra os checklists ligados a ele.'] },
+      { tag: 'Na OS', act: async (h) => { await h.unspot(); await h.go('/os/nova'); await h.select('Tipo de OS', 'Troca de óleo'); await h.spot(h.page.locator('#campo-tipo-os')); }, say: ['Ao abrir uma OS, escolha o Tipo de OS. Embaixo aparecem os checklists deste tipo.', 'Quando você clicar em Abrir OS, o checklist de recebimento já aparece para preencher.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Resumo', 'Cada serviço com a sua lista', list(['Checklists: aba Checklists, em Configurações.', 'Tipos de OS: aba Tipos de OS, marcando os checklists.', 'Checklist sem tipo vale para todas as OS.']))); }, say: ['Um checklist pode servir para vários tipos. E o checklist sem nenhum tipo marcado vale para todas as OS.'] },
     ],
   },
   {
@@ -435,6 +453,38 @@ export const LESSONS = [
       { act: async (h) => { await h.unspot(); await h.card(slide('Dica', 'Errou? Dá para desfazer', list(['A setinha ao lado da linha desfaz.', 'Desfazer tira o pagamento da OS.', 'Entradas sem OS: use Lançar novo.']))); }, say: ['Se conferiu errado, clique na setinha ao lado da linha para desfazer. O pagamento sai da OS.'] },
     ],
   },
+  {
+    n: 33, file: '33-emitir-nota-fiscal', mod: 'financeiro', title: 'Emitir a nota fiscal da OS', routes: ['/notas'], start: '/notas',
+    desc: 'Escolher o CNPJ que emite, conferir a nota e emitir — ou registrar a nota feita no site da prefeitura.',
+    learn: ['Abrir a nota de uma OS', 'Escolher o CNPJ que emite', 'Emitir ou informar o número da nota'],
+    setup: async (api) => {
+      const base = { regime: 'simples', cep: '13015-000', street: 'Rua Barão de Jaguara', number: '1000', district: 'Centro', city: 'Campinas', uf: 'SP', city_code: '3509502', im: '12345', docs: { nfse: true, nfe: false } };
+      await api('POST', '/fiscal/emitters', { ...base, name: 'Oficina', cnpj: '12345678000195', razao_social: 'OFICINA DEMONSTRACAO LTDA', provider: 'nfeio', environment: 'homologacao', secrets: { api_key: 'chave-de-exemplo' } });
+      await api('POST', '/fiscal/emitters', { ...base, name: 'MEI do João', cnpj: '11222333000181', razao_social: 'JOAO SOLDAS MEI', regime: 'mei', provider: 'manual' });
+      const list = await api('GET', '/orders?limit=60');
+      for (const o of (list.items || list)) {
+        if (o.status === 'cancelada' || !o.customer_id) continue;
+        const d = await api('GET', `/orders/${o.id}`);
+        if (d.items?.some((i) => i.kind === 'servico' && Number(i.unit_price) > 0)) {
+          await api('PUT', `/customers/${d.customer_id}`, { document: '529.982.247-25' });
+          return { number: d.number };
+        }
+      }
+      return {};
+    },
+    steps: [
+      { tag: 'Onde fica', act: (h) => h.spot(h.page.getByRole('button', { name: /Emitir nota/ }).first()), say: ['No menu Financeiro e fiscal, abra Notas fiscais. Clique em Emitir nota.', 'Também dá para emitir a nota de dentro da própria OS.'] },
+      { act: async (h, st) => { await h.click(h.page.getByRole('button', { name: /Emitir nota/ }).first(), { wait: 900 }); await h.type(h.page.getByPlaceholder('Nº da OS ou cliente…'), String(st.number), { delay: 120 }); await h.sleep(900); await h.click(h.page.getByRole('dialog').locator('button').filter({ hasText: `#${st.number}` }).first(), { wait: 1500 }); }, say: ['Digite o número da OS e clique nela na lista.'] },
+      { tag: 'Qual CNPJ', act: (h) => h.spot(h.page.locator('[data-tour="escolher-emitente"]')), say: ['Se a sua empresa tem mais de um CNPJ, escolha aqui qual vai emitir. O emitente padrão já vem marcado.'] },
+      { act: async (h) => { await h.unspot(); await h.select('Emitir pelo CNPJ', { index: 1 }); await h.sleep(1200); }, say: ['Neste exemplo, vamos emitir pelo MEI do João.'] },
+      { tag: 'Conferir', act: (h) => h.spot(h.page.getByText('Valor da nota').first()), say: ['Confira o cliente, os serviços e o valor da nota. Se aparecer um aviso amarelo, corrija antes de emitir, por exemplo o CPF do cliente.'] },
+      { tag: 'Site oficial', act: async (h) => { await h.unspot(); await h.spot(h.page.getByText(/Este CNPJ emite/).first()); }, say: ['Este CNPJ emite no site da prefeitura. O TORVEN separa os dados para você copiar: a descrição, os códigos e o valor.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.locator('[data-tour="emitir-nota"]'), { wait: 1500 }); }, say: ['Clique em Preparar para emitir no site. Depois, emita a nota no site da prefeitura, como você já faz.'] },
+      { tag: 'Informar o número', act: async (h) => { await h.click(h.page.getByRole('button', { name: /Informar nº/ }).first(), { wait: 900 }); await h.type('Número da nota', '1234', { delay: 140 }); }, say: ['Com a nota emitida, volte aqui e clique em Informar número. Digite o número da nota que saiu no site.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Registrar nota' }), { wait: 1400 }); await h.spot(h.page.getByText('Registrada manualmente').first()); }, say: ['Clique em Registrar nota. Ela fica marcada como registrada manualmente, ligada à OS.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Com integração', 'Quando o emissor está ligado', list(['Clique em Emitir nota.', 'Espere: Processando vira Autorizada.', 'Baixe o PDF e o XML na lista.', 'Errou? Cancelar, com o motivo.']))); }, say: ['Nos CNPJs ligados a um emissor, como Focus ou NFE.io, é só clicar em Emitir nota. A nota fica Processando e logo vira Autorizada.', 'O sistema nunca mostra uma nota como autorizada sem a confirmação da prefeitura ou da SEFAZ.'] },
+    ],
+  },
   // ───────────────────────── Relatórios
   {
     n: 22, file: '22-relatorios', mod: 'relatorios', title: 'Relatórios: como está a oficina', routes: ['/relatorios'], start: '/relatorios',
@@ -485,6 +535,26 @@ export const LESSONS = [
       { tag: 'Técnicos', act: async (h) => { await h.unspot(); await h.go('/tecnicos'); await h.spot(h.page.locator('main h1').first()); }, say: ['Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão.'] },
       { tag: 'Usuários', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=equipe'); await h.spot(btn(h, 'Novo acesso')); }, say: ['Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela.'] },
       { tag: 'Perfis', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=perfis'); await h.spot(h.page.getByRole('button', { name: /^Técnico/ }).first()); }, say: ['Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro.'] },
+    ],
+  },
+  {
+    n: 32, file: '32-cadastro-fiscal-emitentes', mod: 'config', title: 'Cadastro fiscal: CNPJ, emissor e certificado', routes: ['/configuracoes'], start: '/configuracoes?tab=fiscal',
+    desc: 'Cadastrar cada CNPJ que emite nota, escolher a empresa emissora e enviar o certificado digital.',
+    learn: ['O que é emitente, emissor e certificado', 'Cadastrar um CNPJ e escolher o emissor', 'Enviar o certificado e testar'],
+    setup: async () => ({ pfx: await demoPfx('12345678000195', 'senha123') }),
+    steps: [
+      { act: (h) => h.card(slide('Três palavras', 'Antes de começar', list(['Emitente: o CNPJ que emite a nota.', 'Emissor: a empresa que transmite a nota (Focus, NFE.io, PlugNotas…).', 'Certificado A1: o arquivo .pfx e a senha, comprados na certificadora.']))), say: ['Três palavras antes de começar. Emitente é o CNPJ que emite a nota.', 'Emissor é a empresa contratada que transmite a nota para a prefeitura. E o certificado A1 é a assinatura digital da empresa: um arquivo com senha.'] },
+      { tag: 'Novo emitente', act: async (h) => { await h.card(null); await h.click(h.page.locator('[data-tour="novo-emitente"]'), { wait: 900 }); }, say: ['Em Configurações, na aba Fiscal, clique em Novo emitente.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: /Copiar os dados da minha empresa/ }), { wait: 600 }); await h.type('Apelido', 'Oficina', { delay: 110 }); await h.type(h.page.getByRole('dialog').getByLabel('CNPJ', { exact: true }), '12345678000195', { delay: 80 }); await h.type('Razão social', 'OFICINA DEMONSTRAÇÃO LTDA', { delay: 40 }); }, say: ['Clique em Copiar os dados da minha empresa: o sistema preenche o endereço. Dê um apelido, como Oficina, e confira o CNPJ e a razão social.'] },
+      { tag: 'Escolher o emissor', act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Continuar' }), { wait: 800 }); await h.spot(h.page.locator('[data-tour="emissor-focus"]').locator('..')); }, say: ['Agora escolha a empresa emissora que você contratou. Cada cartão explica onde pegar a chave.', 'Não tem emissor? Escolha Emitir no site da prefeitura. O TORVEN prepara os dados para você copiar.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.locator('[data-tour="emissor-nfeio"]'), { wait: 600 }); await h.type(h.page.getByRole('dialog').locator('input[type="password"]').first(), 'chave-de-exemplo', { delay: 45 }); }, say: ['Neste exemplo, NFE.io. Cole a chave que o emissor te deu. Ela fica guardada com segurança e não aparece de novo.'] },
+      { act: async (h) => { await h.spot(h.page.getByLabel('Ambiente')); }, say: ['Deixe em Homologação no começo. É o modo de testes: as notas não valem de verdade.'] },
+      { tag: 'Impostos', act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: 'Continuar' }), { wait: 800 }); await h.spot(h.page.getByLabel('Item LC 116')); }, say: ['Na última parte ficam os códigos dos impostos. Já vêm preenchidos com o mais comum. Confirme com o seu contador.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: /Salvar emitente/ }), { wait: 1400 }); }, say: ['Clique em Salvar emitente.'] },
+      { tag: 'Certificado', act: async (h, st) => { await h.spot(h.page.getByText('Arquivo do certificado (.pfx ou .p12)').first().locator('..')); await h.page.locator('input[type="file"][accept*=".pfx"]').first().setInputFiles(st.pfx); await h.sleep(700); }, say: ['Agora o certificado. Clique para escolher o arquivo ponto pfx no computador.'] },
+      { act: async (h) => { await h.unspot(); await h.type('Senha do certificado', 'senha123', { delay: 110 }); await h.click(h.page.getByRole('button', { name: /Conferir e guardar/ }), { wait: 1500 }); await h.spot(h.page.getByText(/Válido até/).first()); }, say: ['Digite a senha e clique em Conferir e guardar. O TORVEN confere a senha, o CNPJ e mostra até quando o certificado vale.', 'Perto de vencer, o sistema avisa na tela de notas.'] },
+      { tag: 'Enviar e testar', act: async (h) => { await h.unspot(); await h.spot(h.page.locator('[data-tour="enviar-cadastro"]').locator('..')); }, say: ['Por fim, clique em Enviar cadastro ao emissor: ele recebe os dados e o certificado. Depois, Testar conexão confirma que a chave funciona.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Vários CNPJs', 'Tem mais de uma empresa?', list(['Clique em Novo emitente para cada CNPJ.', 'Cada um com o seu emissor e certificado.', 'Tornar padrão: o que já vem marcado na nota.']))); }, say: ['Tem mais de um CNPJ, como a oficina e um MEI? Cadastre um emitente para cada um. Na hora de emitir, você escolhe qual usar.'] },
     ],
   },
   {

@@ -17,20 +17,20 @@ r.get('/finance', need('reports'), async (req, res) => {
   const tz = req.settings.timezone;
   const P = [req.companyId, tz, from, to];
   const base = `from transactions where company_id = $1 and paid_at is not null and category <> 'Transferência entre contas'
-                 and (paid_at at time zone $2)::date between $3::date and $4::date`;
+                 and paid_at >= ($3::date)::timestamp at time zone $2 and paid_at < ($4::date + 1)::timestamp at time zone $2`;
   const [{ rows: byDay }, { rows: byCategory }, { rows: byMethod }, { rows: [cmv] }] = await Promise.all([
     q(`with d as (select generate_series($3::date, $4::date, '1 day')::date as day)
        select to_char(d.day,'YYYY-MM-DD') as day,
               coalesce(sum(t.amount) filter (where t.type='entrada'),0) as entradas,
               coalesce(sum(t.amount) filter (where t.type='saida'),0) as saidas
-         from d left join transactions t on t.company_id = $1 and t.paid_at is not null and (t.paid_at at time zone $2)::date = d.day
+         from d left join transactions t on t.company_id = $1 and t.paid_at is not null and t.paid_at >= d.day::timestamp at time zone $2 and t.paid_at < (d.day + 1)::timestamp at time zone $2
         group by d.day order by d.day`, P),
     q(`select type, category, sum(amount) as total, count(*)::int as n ${base} group by type, category order by total desc`, P),
     q(`select coalesce(method,'—') as method, sum(amount) as total, count(*)::int as n ${base} and type='entrada' group by 1 order by 2 desc`, P),
     q(`select coalesce(sum(i.qty * i.unit_cost),0) as cmv
          from order_items i join orders o on o.id = i.order_id
         where o.company_id = $1 and o.status = 'entregue' and i.kind = 'material'
-          and (o.delivered_at at time zone $2)::date between $3::date and $4::date`, P),
+          and o.delivered_at >= ($3::date)::timestamp at time zone $2 and o.delivered_at < ($4::date + 1)::timestamp at time zone $2`, P),
   ]);
   const income = round2(byCategory.filter((x) => x.type === 'entrada').reduce((a, x) => a + x.total, 0));
   const expense = round2(byCategory.filter((x) => x.type === 'saida').reduce((a, x) => a + x.total, 0));
@@ -54,7 +54,7 @@ r.get('/production', need('reports'), async (req, res) => {
   const [from, to] = range(req);
   const tz = req.settings.timezone;
   const P = [req.companyId, tz, from, to];
-  const delivered = `o.company_id = $1 and o.status = 'entregue' and (o.delivered_at at time zone $2)::date between $3::date and $4::date`;
+  const delivered = `o.company_id = $1 and o.status = 'entregue' and o.delivered_at >= ($3::date)::timestamp at time zone $2 and o.delivered_at < ($4::date + 1)::timestamp at time zone $2`;
   const [{ rows: [sum] }, { rows: services }, { rows: materials }, { rows: techs }, { rows: byCategory }, { rows: created }, { rows: customers }] = await Promise.all([
     q(`select count(*)::int as n, coalesce(sum(o.total),0) as total, coalesce(avg(o.total),0) as ticket,
               coalesce(sum(o.total) filter (where o.kind='os'),0) as os_total, count(*) filter (where o.kind='os')::int as os_n,
@@ -77,7 +77,7 @@ r.get('/production', need('reports'), async (req, res) => {
          from order_items i join orders o on o.id = i.order_id left join services s on s.id = i.service_id
         where ${delivered} and i.kind <> 'material' group by 1 order by 2 desc`, P),
     q(`select status, count(*)::int as n from orders o where o.company_id = $1 and o.kind = 'os'
-          and (o.created_at at time zone $2)::date between $3::date and $4::date group by status`, P),
+          and o.created_at >= ($3::date)::timestamp at time zone $2 and o.created_at < ($4::date + 1)::timestamp at time zone $2 group by status`, P),
     q(`select c.name, count(*)::int as orders, sum(o.total) as total from orders o join customers c on c.id = o.customer_id
         where ${delivered} group by c.id, c.name order by total desc limit 15`, P),
   ]);
@@ -98,11 +98,11 @@ r.get('/commissions', need('commissions', 'reports'), async (req, res) => {
        from order_items i join orders o on o.id = i.order_id join technicians t on t.id = i.technician_id
        left join customers c on c.id = o.customer_id
       where o.company_id = $1 and o.status = 'entregue' and i.commission_value > 0
-        and (o.delivered_at at time zone $2)::date between $3::date and $4::date ${extra}
+        and o.delivered_at >= ($3::date)::timestamp at time zone $2 and o.delivered_at < ($4::date + 1)::timestamp at time zone $2 ${extra}
       order by t.name, o.delivered_at`, params);
   const { rows: paid } = await q(
     `select technician_id, sum(amount) as total from transactions where company_id = $1 and type='saida' and category='Comissões'
-        and technician_id is not null and paid_at is not null and (paid_at at time zone $2)::date between $3::date and $4::date
+        and technician_id is not null and paid_at is not null and paid_at >= ($3::date)::timestamp at time zone $2 and paid_at < ($4::date + 1)::timestamp at time zone $2
       group by technician_id`, params.slice(0, 4));
   res.json({ items: rows, paid });
 });
@@ -122,7 +122,7 @@ r.get('/management', need('reports'), async (req, res) => {
   const [from, to] = range(req);
   const tz = req.settings.timezone;
   const P = [req.companyId, tz, from, to];
-  const inP = (col) => `(${col} at time zone $2)::date between $3::date and $4::date`;
+  const inP = (col) => `${col} >= ($3::date)::timestamp at time zone $2 and ${col} < ($4::date + 1)::timestamp at time zone $2`;
   const one1 = async (sql, p = P) => (await q(sql, p)).rows[0];
   const funnel = await one1(
     `select (select count(*) from service_requests where company_id = $1 and ${inP('created_at')})::int as requests,
@@ -187,14 +187,14 @@ r.get('/fiscal', need('invoices_issue', 'reports'), async (req, res) => {
   const tz = req.settings.timezone;
   const { rows: byStatus } = await q(
     `select kind, status, count(*)::int as n, coalesce(sum(amount), 0) as total from invoices
-      where company_id = $1 and coalesce(test, false) = false and (created_at at time zone $2)::date between $3::date and $4::date group by 1, 2`,
+      where company_id = $1 and coalesce(test, false) = false and created_at >= ($3::date)::timestamp at time zone $2 and created_at < ($4::date + 1)::timestamp at time zone $2 group by 1, 2`,
     [req.companyId, tz, from, to]);
   const { rows: pending } = await q(
     `select o.id, o.number, o.kind, o.total, o.delivered_at, c.name as customer_name, c.document as customer_document,
             coalesce((select sum(i.total) from order_items i where i.order_id = o.id and i.kind in ('material','consumivel') and i.product_id is not null), 0) as goods,
             (select string_agg(distinct iv.status, ',') from invoices iv where iv.order_id = o.id) as invoice_statuses
        from orders o left join customers c on c.id = o.customer_id
-      where o.company_id = $1 and o.status = 'entregue' and o.total > 0 and (o.delivered_at at time zone $2)::date between $3::date and $4::date
+      where o.company_id = $1 and o.status = 'entregue' and o.total > 0 and o.delivered_at >= ($3::date)::timestamp at time zone $2 and o.delivered_at < ($4::date + 1)::timestamp at time zone $2
         and not exists (select 1 from invoices iv where iv.order_id = o.id and iv.status in ('autorizada','processando'))
       order by o.delivered_at desc limit 500`, [req.companyId, tz, from, to]);
   res.json({

@@ -6,9 +6,9 @@ import { ROLES, maskPhone, maskDoc, maskCep, lookupCep } from '../lib/format';
 import { applyTheme, PRESET_COLORS, RADIUS, FONTS } from '../lib/theme';
 import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
-import FiscalSetup from '../components/FiscalSetup';
+import FiscalEmitters from '../components/FiscalEmitters';
 import IntegrationsSetup from '../components/IntegrationsSetup';
-import { OrderTypesSettings } from '../components/OrderTypes';
+import { ChecklistsSettings, OrderTypesTab } from '../components/OrderTypes';
 import { OrderDocument, SAMPLE_ORDER, docConfig } from '../components/DocumentTemplate';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, useAction, FAIL, cx } from '../components/ui';
@@ -50,7 +50,7 @@ export default function Settings() {
     <div className="pb-20">
       <PageHeader title="Configurações" subtitle="Dados da empresa, aparência, regras das OS, financeiro, fiscal e acessos" />
       <Tabs value={tab} onChange={setTab} tabs={[
-        ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' }, { value: 'documentos', label: 'Documentos (OS impressa)' },
+        ...(full ? [{ value: 'empresa', label: 'Empresa' }, { value: 'aparencia', label: 'Aparência' }, { value: 'os', label: 'OS e orçamentos' }, { value: 'tipos-os', label: 'Tipos de OS' }, { value: 'checklists', label: 'Checklists' }, { value: 'documentos', label: 'Documentos (OS impressa)' },
           { value: 'financeiro', label: 'Financeiro' }, { value: 'categorias', label: 'Categorias' }] : []),
         ...(can('fiscal_settings') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
         ...(can('integrations') ? [{ value: 'integracoes', label: 'Integrações' }] : []),
@@ -134,7 +134,11 @@ export default function Settings() {
             </div>
             <p className="text-xs text-ink-faint">O sistema só cria a lista de retornos; o contato é feito e registrado pela equipe.</p>
           </div>
-          <OrderTypesSettings />
+          <div className="card flex flex-wrap items-center gap-3 p-5 text-sm lg:col-span-2">
+            <span className="min-w-0 flex-1"><b>Tipos de OS e checklists</b> agora têm abas próprias.</span>
+            <button className="btn-outline h-8 text-xs" onClick={() => setTab('tipos-os')}>Tipos de OS</button>
+            <button className="btn-outline h-8 text-xs" onClick={() => setTab('checklists')}>Checklists</button>
+          </div>
           <div className="card space-y-4 p-6">
             <h3 className="font-semibold">Numeração dos documentos</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -295,7 +299,9 @@ export default function Settings() {
         </div>
       )}
 
-      {tab === 'fiscal' && <FiscalSetup />}
+      {tab === 'tipos-os' && <OrderTypesTab />}
+      {tab === 'checklists' && <ChecklistsSettings />}
+      {tab === 'fiscal' && <FiscalEmitters />}
       {tab === 'integracoes' && <IntegrationsSetup />}
       {tab === 'perfis' && <PermissionsTab s={s} setS={setS} />}
 

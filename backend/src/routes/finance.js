@@ -486,18 +486,19 @@ const DEDUCTIONS = ['Taxas de cartão', 'Impostos', 'Estornos'];
 r.get('/dre', need('reports'), async (req, res) => {
   const year = Number(req.query.year) || new Date().getFullYear();
   const tz = req.settings.timezone || 'America/Sao_Paulo';
-  const { rows: tx0 } = await q(
-    `select extract(month from (paid_at at time zone $3))::int as m, type, category, sum(amount) as total
-       from transactions where company_id = $1 and paid_at is not null and extract(year from (paid_at at time zone $3)) = $2
-        and category <> $4 group by 1,2,3`, [req.companyId, year, tz, TRANSFER_CATEGORY]);
-  const { rows: cmv } = await q(
-    `select extract(month from (o.delivered_at at time zone $3))::int as m, sum(i.qty * i.unit_cost) as cmv, sum(distinct o.labor_cost) as labor
-       from orders o join order_items i on i.order_id = o.id
-      where o.company_id = $1 and o.status = 'entregue' and extract(year from (o.delivered_at at time zone $3)) = $2
-        and i.kind in ('material','consumivel') group by 1`, [req.companyId, year, tz]);
-  const { rows: labor } = await q(
-    `select extract(month from (delivered_at at time zone $3))::int as m, sum(labor_cost) as labor from orders
-      where company_id = $1 and status = 'entregue' and extract(year from (delivered_at at time zone $3)) = $2 group by 1`, [req.companyId, year, tz]);
+  // faixa de datas do ano no fuso da empresa (usa os índices por data em vez de calcular o ano linha a linha)
+  const yr = (col) => `${col} >= make_date($2::int, 1, 1)::timestamp at time zone $3 and ${col} < make_date($2::int + 1, 1, 1)::timestamp at time zone $3`;
+  const [{ rows: tx0 }, { rows: cmv }, { rows: labor }] = await Promise.all([
+    q(`select extract(month from (paid_at at time zone $3))::int as m, type, category, sum(amount) as total
+         from transactions where company_id = $1 and paid_at is not null and ${yr('paid_at')}
+          and category <> $4 group by 1,2,3`, [req.companyId, year, tz, TRANSFER_CATEGORY]),
+    q(`select extract(month from (o.delivered_at at time zone $3))::int as m, sum(i.qty * i.unit_cost) as cmv
+         from orders o join order_items i on i.order_id = o.id
+        where o.company_id = $1 and o.status = 'entregue' and ${yr('o.delivered_at')}
+          and i.kind in ('material','consumivel') group by 1`, [req.companyId, year, tz]),
+    q(`select extract(month from (delivered_at at time zone $3))::int as m, sum(labor_cost) as labor from orders
+        where company_id = $1 and status = 'entregue' and ${yr('delivered_at')} group by 1`, [req.companyId, year, tz]),
+  ]);
   const months = Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
     const rows = tx0.filter((x) => x.m === m);
     const sum = (f) => round2(rows.filter(f).reduce((a, x) => a + Number(x.total), 0));

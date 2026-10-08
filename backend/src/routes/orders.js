@@ -149,11 +149,20 @@ r.get('/', async (req, res) => {
     params.push(`%${t}%`);
     const i = params.length;
     const num = /^\d+$/.test(t) ? ` or o.number = ${parseInt(t, 10)}` : '';
-    where += ` and (lower(coalesce(c.name,'')) like $${i} or lower(coalesce(e.description,'')) like $${i}
-                 or lower(coalesce(e.serial,'')) like $${i} or lower(coalesce(o.problem,'')) like $${i}
-                 or replace(lower(coalesce(e.plate,'')), '-', '') like replace($${i}, '-', '')${num})`;
+    // subconsultas por tabela (viram listas em memória) em vez de OR entre tabelas unidas: bem mais rápido com muitas OS
+    where += ` and (o.customer_id in (select id from customers where company_id = $1 and lower(name) like $${i})
+                 or o.equipment_id in (select id from equipment where company_id = $1 and (lower(description) like $${i}
+                      or lower(coalesce(serial,'')) like $${i} or replace(lower(coalesce(plate,'')), '-', '') like replace($${i}, '-', '')))
+                 or lower(coalesce(o.problem,'')) like $${i}${num})`;
   }
   where += scopeWhere(req, params);
+  const limit = Math.min(Number(req.query.limit) || 500, 2000);
+  const closedSort = "case when o.status in ('entregue','cancelada') then 1 else 0 end";
+  const prioSort = "case o.priority when 'urgente' then 0 when 'alta' then 1 when 'normal' then 2 else 3 end";
+  // em aberto (poucas, ordenadas por prioridade) + encerradas mais recentes (pelo índice de data): evita ordenar todas as OS da empresa
+  const ids = `(select o.id from orders o where ${where} and o.status not in ('entregue','cancelada') order by ${prioSort}, o.created_at desc limit ${limit})
+     union all
+     (select o.id from orders o where ${where} and o.status in ('entregue','cancelada') order by o.created_at desc limit ${limit})`;
   const { rows } = await q(
     `select o.id, o.number, o.kind, o.status, o.priority, o.service_location, o.received_at, o.promised_at, o.finished_at,
             o.delivered_at, o.created_at, o.updated_at, o.total, o.problem, o.customer_id, o.technician_id, o.equipment_id,
@@ -168,11 +177,9 @@ r.get('/', async (req, res) => {
                 - coalesce(sum(amount) filter (where type='saida' and category='Estornos'), 0) as paid,
                 sum(amount) filter (where type='entrada' and paid_at is null) as receivable
            from transactions where order_id = o.id) f on true
-      where ${where}
-      order by case when o.status in ('entregue','cancelada') then 1 else 0 end,
-               case o.priority when 'urgente' then 0 when 'alta' then 1 when 'normal' then 2 else 3 end,
-               o.created_at desc
-      limit ${Math.min(Number(req.query.limit) || 500, 2000)}`, params);
+      where ${search ? where : `o.id in (${ids})`}
+      order by ${closedSort}, ${prioSort}, o.created_at desc
+      limit ${limit}`, params);
   let out = rows.map((o) => ({ ...o, balance: round2(o.total - o.paid - o.receivable) }));
   if (payment === 'aberto') out = out.filter((o) => o.balance > 0.009 && o.status !== 'cancelada');
   res.json(out.map(stripValues(req)));

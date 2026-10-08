@@ -149,7 +149,7 @@ export function QualityCard({ o, onChanged }) {
   const editable = !['entregue', 'cancelada'].includes(o.status) && (can('orders_edit') || can('orders_create'));
   useEffect(() => {
     api.get(`/quality/templates${o.order_type_id ? `?order_type_id=${o.order_type_id}` : ''}`)
-      .then((l) => setTemplates(l.filter((t) => !t.order_type_id || t.order_type_id === o.order_type_id))).catch(() => setTemplates([]));
+      .then((l) => setTemplates(l.filter((t) => !t.order_type_ids?.length || t.order_type_ids.includes(o.order_type_id)))).catch(() => setTemplates([]));
   }, [o.order_type_id]);
   // aberta logo depois de criar a OS (tipo com checklist de recebimento)
   useEffect(() => {
@@ -235,7 +235,7 @@ function InspectionModal({ o, kind, all, onClose, onDone }) {
       <div className="space-y-3 text-sm">
         {templates.length > 1 && (
           <Select label="Checklist" value={tpl} onChange={(e) => pick(e.target.value)}>
-            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.order_type_name ? ` — ${t.order_type_name}` : ' — geral'}{t.required ? ' (obrigatório)' : ''}</option>)}
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.order_type_ids?.length ? ` — ${o.order_type_name || t.order_type_name}` : ' — geral'}{t.required ? ' (obrigatório)' : ''}</option>)}
           </Select>
         )}
         {templates.length === 1 && <p className="text-xs text-ink-faint">Checklist: <b>{templates[0].name}</b>{templates[0].required && ' (obrigatório)'}</p>}

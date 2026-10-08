@@ -331,16 +331,16 @@ export const LESSONS = [
     "n": 27,
     "file": "27-tipos-de-os-e-checklists",
     "mod": "producao",
-    "s": 122,
-    "title": "Tipos de OS e checklists de cada tipo",
+    "s": 143,
+    "title": "Tipos de OS e checklists obrigatórios",
     "routes": [],
-    "desc": "Criar os tipos de serviço da oficina e a lista de conferência de cada um.",
+    "desc": "Cadastrar os checklists (obrigatórios ou não), os tipos de serviço da oficina e ligar um ao outro.",
     "learn": [
-      "Criar um tipo de OS",
-      "Montar o checklist do tipo",
+      "Cadastrar um checklist obrigatório",
+      "Criar um tipo de OS e vincular o checklist",
       "Escolher o tipo ao abrir a OS"
     ],
-    "text": "Em Configurações, na aba OS e orçamentos, fica o quadro Tipos de OS e checklists. Tipo de OS é o tipo de serviço que você faz. Por exemplo: troca de óleo, funilaria ou solda. Clique no botão Novo tipo de OS, no alto, à direita. Escreva o nome do tipo. Clique em Salvar. O sistema já abre o primeiro checklist deste tipo: o de Recebimento. Dê um nome ao checklist. Depois escreva o primeiro item a conferir. Para mais itens, escreva no campo de baixo e clique em Adicionar. As setas mudam a ordem e o X apaga. Ligue Obrigatório se a OS só pode seguir depois que esse checklist for preenchido. Clique em Salvar checklist. O tipo aparece com as três etapas: recebimento, inspeção final e entrega. Em cada etapa, Criar checklist monta outra lista. Agora, ao abrir uma OS, escolha o Tipo de OS. Embaixo aparecem os checklists deste tipo. Quando você clicar em Abrir OS, o checklist de recebimento já aparece na tela para preencher. Os checklists gerais continuam valendo para todas as OS. Os do tipo aparecem só nas OS daquele tipo."
+    "text": "Em Configurações há duas abas: Checklists e Tipos de OS. Checklist é a lista de conferência. Tipo de OS é o tipo de serviço, por exemplo troca de óleo, funilaria ou solda. Na aba Checklists, clique em Novo checklist. Dê um nome e escreva o primeiro item a conferir. Para mais itens, escreva no campo de baixo e clique em Adicionar. As setas mudam a ordem e o X apaga. Ligue Obrigatório: a OS só segue depois que esse checklist for preenchido. Clique em Salvar checklist. Ele aparece na lista, com o aviso Obrigatório. Agora abra a aba Tipos de OS e clique em Novo tipo de OS. Escreva o nome do tipo. Em Checklists deste tipo, marque os checklists que valem para este serviço. Os obrigatórios aparecem marcados em vermelho. Clique em Salvar tipo. O cartão mostra os checklists ligados a ele. Ao abrir uma OS, escolha o Tipo de OS. Embaixo aparecem os checklists deste tipo. Quando você clicar em Abrir OS, o checklist de recebimento já aparece para preencher. Um checklist pode servir para vários tipos. E o checklist sem nenhum tipo marcado vale para todas as OS."
   },
   {
     "n": 28,
@@ -460,6 +460,23 @@ export const LESSONS = [
     "text": "No menu Financeiro, abra Contas, conciliação e DRE, e clique na aba Conciliação bancária. Primeiro, baixe o extrato no aplicativo ou no site do banco. Escolha o período e exporte no formato OFX ou CSV. Clique em Importar extrato, escolha a conta do banco e o arquivo que você baixou. Clique em Importar. O sistema confere cada entrada do banco com as ordens de serviço. Os quadros mostram o que já é de OS, o que provavelmente é de uma OS e o que ficou sem OS. Quando o sistema reconhece o nome do cliente ou o número da OS, aparece o botão Receber nesta OS. Clique nele, confira a forma de pagamento, como PIX, e clique em Confirmar recebimento. Pronto: o pagamento entrou na OS e a linha do banco ficou conferida. O último quadro avisa o que foi recebido no sistema, mas não apareceu no banco. Vale conferir. Se conferiu errado, clique na setinha ao lado da linha para desfazer. O pagamento sai da OS."
   },
   {
+    "n": 33,
+    "file": "33-emitir-nota-fiscal",
+    "mod": "financeiro",
+    "s": 125,
+    "title": "Emitir a nota fiscal da OS",
+    "routes": [
+      "/notas"
+    ],
+    "desc": "Escolher o CNPJ que emite, conferir a nota e emitir — ou registrar a nota feita no site da prefeitura.",
+    "learn": [
+      "Abrir a nota de uma OS",
+      "Escolher o CNPJ que emite",
+      "Emitir ou informar o número da nota"
+    ],
+    "text": "No menu Financeiro e fiscal, abra Notas fiscais. Clique em Emitir nota. Também dá para emitir a nota de dentro da própria OS. Digite o número da OS e clique nela na lista. Se a sua empresa tem mais de um CNPJ, escolha aqui qual vai emitir. O emitente padrão já vem marcado. Neste exemplo, vamos emitir pelo MEI do João. Confira o cliente, os serviços e o valor da nota. Se aparecer um aviso amarelo, corrija antes de emitir, por exemplo o CPF do cliente. Este CNPJ emite no site da prefeitura. O TORVEN separa os dados para você copiar: a descrição, os códigos e o valor. Clique em Preparar para emitir no site. Depois, emita a nota no site da prefeitura, como você já faz. Com a nota emitida, volte aqui e clique em Informar número. Digite o número da nota que saiu no site. Clique em Registrar nota. Ela fica marcada como registrada manualmente, ligada à OS. Nos CNPJs ligados a um emissor, como Focus ou NFE.io, é só clicar em Emitir nota. A nota fica Processando e logo vira Autorizada. O sistema nunca mostra uma nota como autorizada sem a confirmação da prefeitura ou da SEFAZ."
+  },
+  {
     "n": 22,
     "file": "22-relatorios",
     "mod": "relatorios",
@@ -531,6 +548,23 @@ export const LESSONS = [
     "text": "Em Configurações, a aba Empresa guarda os dados que saem nas impressões: nome, CNPJ, telefone e endereço. Em OS e orçamentos ficam as regras: garantia e prazo padrão, pesquisa por placa, ditado por voz e a regra de uma placa por cadastro. A Tabela de serviços tem os serviços com o preço e o custo. É dela que vem o valor que aparece na OS. Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão. Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela. Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro."
   },
   {
+    "n": 32,
+    "file": "32-cadastro-fiscal-emitentes",
+    "mod": "config",
+    "s": 164,
+    "title": "Cadastro fiscal: CNPJ, emissor e certificado",
+    "routes": [
+      "/configuracoes"
+    ],
+    "desc": "Cadastrar cada CNPJ que emite nota, escolher a empresa emissora e enviar o certificado digital.",
+    "learn": [
+      "O que é emitente, emissor e certificado",
+      "Cadastrar um CNPJ e escolher o emissor",
+      "Enviar o certificado e testar"
+    ],
+    "text": "Três palavras antes de começar. Emitente é o CNPJ que emite a nota. Emissor é a empresa contratada que transmite a nota para a prefeitura. E o certificado A1 é a assinatura digital da empresa: um arquivo com senha. Em Configurações, na aba Fiscal, clique em Novo emitente. Clique em Copiar os dados da minha empresa: o sistema preenche o endereço. Dê um apelido, como Oficina, e confira o CNPJ e a razão social. Agora escolha a empresa emissora que você contratou. Cada cartão explica onde pegar a chave. Não tem emissor? Escolha Emitir no site da prefeitura. O TORVEN prepara os dados para você copiar. Neste exemplo, NFE.io. Cole a chave que o emissor te deu. Ela fica guardada com segurança e não aparece de novo. Deixe em Homologação no começo. É o modo de testes: as notas não valem de verdade. Na última parte ficam os códigos dos impostos. Já vêm preenchidos com o mais comum. Confirme com o seu contador. Clique em Salvar emitente. Agora o certificado. Clique para escolher o arquivo ponto pfx no computador. Digite a senha e clique em Conferir e guardar. O TORVEN confere a senha, o CNPJ e mostra até quando o certificado vale. Perto de vencer, o sistema avisa na tela de notas. Por fim, clique em Enviar cadastro ao emissor: ele recebe os dados e o certificado. Depois, Testar conexão confirma que a chave funciona. Tem mais de um CNPJ, como a oficina e um MEI? Cadastre um emitente para cada um. Na hora de emitir, você escolhe qual usar."
+  },
+  {
     "n": 29,
     "file": "29-whatsapp-e-agente",
     "mod": "config",
@@ -549,7 +583,7 @@ export const LESSONS = [
     "n": 26,
     "file": "26-suporte-e-treinamento",
     "mod": "config",
-    "s": 73,
+    "s": 74,
     "title": "Como usar as aulas e pedir ajuda",
     "routes": [
       "/suporte"
@@ -564,7 +598,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 2737;
+export const TOTAL_SECONDS = 3048;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

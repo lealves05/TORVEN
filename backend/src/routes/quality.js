@@ -15,9 +15,12 @@ export const RESULT = { aprovado: 'Aprovado', aprovado_ressalva: 'Aprovado com r
 // ---------- tipos de OS ----------
 r.get('/types', async (req, res) => {
   const { rows } = await q(
-    `select t.*, (select count(*)::int from checklist_templates c where c.order_type_id = t.id and c.active) as checklists,
-            (select count(*)::int from orders o where o.order_type_id = t.id) as orders
-       from order_types t where t.company_id = $1 ${req.query.all === '1' ? '' : 'and t.active'} order by lower(t.name)`, [req.companyId]);
+    `select t.*, coalesce(l.ids, '{}') as checklist_ids, coalesce(l.n, 0) as checklists, coalesce(o.n, 0) as orders
+       from order_types t
+       left join lateral (select array_agg(x.template_id) as ids, count(*) filter (where c.active)::int as n
+                            from order_type_checklists x join checklist_templates c on c.id = x.template_id where x.order_type_id = t.id) l on true
+       left join lateral (select count(*)::int as n from orders where company_id = t.company_id and order_type_id = t.id) o on true
+      where t.company_id = $1 ${req.query.all === '1' ? '' : 'and t.active'} order by lower(t.name)`, [req.companyId]);
   res.json(rows);
 });
 
@@ -52,8 +55,11 @@ r.delete('/types/:id', need('settings', 'inspections'), async (req, res) => {
     if (!t) throw notFound('Tipo de OS não encontrado');
     const { rows: [u] } = await db.query('select count(*)::int as n from orders where order_type_id = $1', [t.id]);
     if (u.n) throw bad(`Há ${u.n} OS deste tipo. Para não usar mais, desative o tipo em vez de excluir.`);
-    // os checklists do tipo saem junto (ainda não foram usados por nenhuma OS deste tipo)
-    await db.query('update checklist_templates set active = false, order_type_id = null where order_type_id = $1 and company_id = $2', [t.id, req.companyId]);
+    // checklists usados só por este tipo são desativados (não viram "gerais" de repente); os vínculos saem com o tipo
+    await db.query(
+      `update checklist_templates c set active = false where c.company_id = $2
+          and exists (select 1 from order_type_checklists x where x.template_id = c.id and x.order_type_id = $1)
+          and not exists (select 1 from order_type_checklists x where x.template_id = c.id and x.order_type_id <> $1)`, [t.id, req.companyId]);
     await db.query('delete from order_types where id = $1', [t.id]);
     await audit(db, req, { entity: 'settings', entityId: t.id, action: 'order_type', summary: `Tipo de OS "${t.name}" excluído` });
   });
@@ -68,12 +74,44 @@ async function checkType(db, companyId, id, { activeOnly = true } = {}) {
 }
 export { checkType };
 
+/** Confere que os tipos existem na empresa e devolve os ids válidos (sem repetição). */
+async function checkTypes(db, companyId, ids) {
+  const list = [...new Set((ids || []).filter(Boolean))];
+  if (!list.length) return [];
+  const { rows } = await db.query('select id, name from order_types where company_id = $1 and id = any($2::uuid[])', [companyId, list]);
+  if (rows.length !== list.length) throw notFound('Tipo de OS não encontrado');
+  return rows;
+}
+
+/** Vincula os checklists ao tipo de OS (substitui a lista). */
+r.put('/types/:id/checklists', need('settings', 'inspections'), async (req, res) => {
+  const d = parse(z.object({ template_ids: z.array(z.string().uuid()).max(100) }), req.body);
+  const out = await tx(async (db) => {
+    const t = await checkType(db, req.companyId, req.params.id, { activeOnly: false });
+    const ids = [...new Set(d.template_ids)];
+    if (ids.length) {
+      const { rows } = await db.query('select id from checklist_templates where company_id = $1 and id = any($2::uuid[])', [req.companyId, ids]);
+      if (rows.length !== ids.length) throw notFound('Checklist não encontrado');
+    }
+    await db.query('delete from order_type_checklists where order_type_id = $1 and not (template_id = any($2::uuid[]))', [t.id, ids]);
+    if (ids.length) {
+      await db.query(
+        `insert into order_type_checklists (company_id, order_type_id, template_id) select $1, $2, unnest($3::uuid[]) on conflict do nothing`,
+        [req.companyId, t.id, ids]);
+    }
+    await audit(db, req, { entity: 'settings', entityId: t.id, action: 'order_type', summary: `Tipo de OS "${t.name}": ${ids.length} checklist(s) vinculado(s)` });
+    return { id: t.id, checklist_ids: ids };
+  });
+  res.json(out);
+});
+
 /** Checklists obrigatórios de uma OS (do tipo dela e os gerais) que ainda não foram registrados. */
 export async function missingChecklists(db, order, kinds) {
   const { rows } = await db.query(
     `select t.kind, t.name from checklist_templates t
       where t.company_id = $1 and t.active and t.required and t.kind = any($3::text[])
-        and (t.order_type_id is null or t.order_type_id = $2)
+        and (not exists (select 1 from order_type_checklists x where x.template_id = t.id)
+             or exists (select 1 from order_type_checklists x where x.template_id = t.id and x.order_type_id = $2))
         and not exists (select 1 from order_inspections i where i.order_id = $4 and i.kind = t.kind
                           and (i.result <> 'reprovado' or t.kind = 'recebimento'))
       order by t.kind, t.name`,
@@ -97,12 +135,16 @@ r.get('/templates', async (req, res) => {
     if (!/^[0-9a-f-]{36}$/i.test(String(req.query.order_type_id))) throw bad('Tipo de OS inválido.');
     // para a OS: os checklists do tipo dela primeiro, depois os gerais
     params.push(req.query.order_type_id);
-    where += ` and (c.order_type_id is null or c.order_type_id = $${params.length})`;
+    where += ` and (l.ids is null or $${params.length}::uuid = any(l.ids))`;
   }
   const { rows } = await q(
-    `select c.*, t.name as order_type_name from checklist_templates c left join order_types t on t.id = c.order_type_id
+    `select c.*, coalesce(l.ids, '{}') as order_type_ids, coalesce(l.names, '{}') as order_type_names,
+            l.ids[1] as order_type_id, l.names[1] as order_type_name
+       from checklist_templates c
+       left join lateral (select array_agg(t.id order by lower(t.name)) as ids, array_agg(t.name order by lower(t.name)) as names
+                            from order_type_checklists x join order_types t on t.id = x.order_type_id where x.template_id = c.id) l on true
       where c.company_id = $1${where}
-      order by c.kind, (c.order_type_id is null), lower(c.name)`, params);
+      order by c.kind, (l.ids is null), lower(c.name)`, params);
   res.json(rows);
 });
 
@@ -111,30 +153,47 @@ const tplSchema = z.object({
   kind: z.enum(Object.keys(CHECK_KIND)),
   items: z.array(z.string().trim().min(2)).min(1, 'inclua ao menos um item').max(60),
   active: z.boolean().default(true),
-  order_type_id: z.string().uuid().nullable().optional(),
+  order_type_id: z.string().uuid().nullable().optional(), // compatibilidade: um tipo só
+  order_type_ids: z.array(z.string().uuid()).max(100).optional(), // vazio = geral (todas as OS)
   required: z.boolean().default(false),
 });
+const typeIdsOf = (d) => d.order_type_ids ?? (d.order_type_id ? [d.order_type_id] : []);
+
+async function linkTemplate(db, companyId, templateId, types) {
+  await db.query('delete from order_type_checklists where template_id = $1', [templateId]);
+  if (types.length) {
+    await db.query('insert into order_type_checklists (company_id, order_type_id, template_id) select $1, unnest($2::uuid[]), $3',
+      [companyId, types.map((t) => t.id), templateId]);
+  }
+}
+const typesLabel = (types) => (types.length ? ` para ${types.map((t) => `"${t.name}"`).join(', ')}` : ' (geral)');
 
 r.post('/templates', need('settings', 'inspections'), async (req, res) => {
   const d = parse(tplSchema, req.body);
-  const type = await checkType({ query: q }, req.companyId, d.order_type_id, { activeOnly: false });
-  const row = await one(
-    `insert into checklist_templates (company_id, name, kind, items, active, order_type_id, required)
-     values ($1,$2,$3,$4,$5,$6,$7) returning *`,
-    [req.companyId, d.name, d.kind, JSON.stringify(d.items), d.active, type?.id || null, d.required]);
-  await audit(null, req, { entity: 'settings', entityId: row.id, action: 'checklist', summary: `Checklist "${d.name}" criado${type ? ` para o tipo "${type.name}"` : ''}` });
+  const row = await tx(async (db) => {
+    const types = await checkTypes(db, req.companyId, typeIdsOf(d));
+    const { rows: [x] } = await db.query(
+      `insert into checklist_templates (company_id, name, kind, items, active, required) values ($1,$2,$3,$4,$5,$6) returning *`,
+      [req.companyId, d.name, d.kind, JSON.stringify(d.items), d.active, d.required]);
+    await linkTemplate(db, req.companyId, x.id, types);
+    await audit(db, req, { entity: 'settings', entityId: x.id, action: 'checklist', summary: `Checklist "${d.name}"${d.required ? ' (obrigatório)' : ''} criado${typesLabel(types)}` });
+    return { ...x, order_type_ids: types.map((t) => t.id) };
+  });
   res.status(201).json(row);
 });
 
 r.put('/templates/:id', need('settings', 'inspections'), async (req, res) => {
   const d = parse(tplSchema, req.body);
-  const type = await checkType({ query: q }, req.companyId, d.order_type_id, { activeOnly: false });
-  const row = await one(
-    `update checklist_templates set name=$3, kind=$4, items=$5, active=$6, order_type_id=$7, required=$8
-      where id=$1 and company_id=$2 returning *`,
-    [req.params.id, req.companyId, d.name, d.kind, JSON.stringify(d.items), d.active, type?.id || null, d.required]);
-  if (!row) throw notFound();
-  await audit(null, req, { entity: 'settings', entityId: row.id, action: 'checklist', summary: `Checklist "${d.name}" alterado` });
+  const row = await tx(async (db) => {
+    const types = await checkTypes(db, req.companyId, typeIdsOf(d));
+    const { rows: [x] } = await db.query(
+      `update checklist_templates set name=$3, kind=$4, items=$5, active=$6, required=$7 where id=$1 and company_id=$2 returning *`,
+      [req.params.id, req.companyId, d.name, d.kind, JSON.stringify(d.items), d.active, d.required]);
+    if (!x) throw notFound();
+    await linkTemplate(db, req.companyId, x.id, types);
+    await audit(db, req, { entity: 'settings', entityId: x.id, action: 'checklist', summary: `Checklist "${d.name}"${d.required ? ' (obrigatório)' : ''} alterado${typesLabel(types)}` });
+    return { ...x, order_type_ids: types.map((t) => t.id) };
+  });
   res.json(row);
 });
 

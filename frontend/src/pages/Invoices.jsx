@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Receipt, RefreshCw, ExternalLink, FileCode2, XCircle, Trash2, Plus, Settings2, Printer } from 'lucide-react';
-import { api, qs, appPath } from '../lib/api';
+import { Receipt, RefreshCw, ExternalLink, FileCode2, XCircle, Trash2, Plus, Settings2, Printer, FileDown, PenLine } from 'lucide-react';
+import { api, qs, appPath, downloadFile } from '../lib/api';
 import { money, fmt, fmtDateTime, INVOICE_STATUS, downloadCSV, docNumber } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Input, Modal, Loading, Empty, Stat, useAction, FAIL, cx } from '../components/ui';
-import { PeriodPicker, monthRange } from '../components/charts';
+import { PeriodPicker, monthRange } from '../components/period';
 import InvoiceModal from '../components/InvoiceModal';
 
 export default function Invoices() {
@@ -20,6 +20,9 @@ export default function Invoices() {
   const [view, setView] = useState(null);
   const [pick, setPick] = useState(false);
   const [emitFor, setEmitFor] = useState(null);
+  const [manualFor, setManualFor] = useState(null);
+  const [emitters, setEmitters] = useState([]);
+  useEffect(() => { api.get('/fiscal/emitters/options').then(setEmitters).catch(() => setEmitters([])); }, []);
   const load = useCallback(() => api.get(`/invoices${qs({ ...f, ...period })}`).then(setList), [f, period]);
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
 
@@ -32,7 +35,11 @@ export default function Invoices() {
     if ((await run(() => api.del(`/invoices/${i.id}`), 'Nota descartada')) !== FAIL) load();
   };
   const valid = (list || []).filter((i) => i.status === 'autorizada' && !i.test);
-  const focus = company.fiscal_provider === 'focus';
+  const legacyFocus = company.fiscal_provider === 'focus';
+  const hasEmitters = emitters.length > 0;
+  const focus = legacyFocus || hasEmitters;
+  const testing = hasEmitters ? emitters.filter((e) => !e.manual && e.environment !== 'producao') : legacyFocus && company.fiscal_environment !== 'producao' ? [{ name: 'Focus NFe' }] : [];
+  const file = async (i, type) => { try { await downloadFile(`/invoices/${i.id}/file/${type}`, `${i.kind}.${type}`); } catch (e) { toast(e.message, 'error'); } };
 
   return (
     <div>
@@ -43,13 +50,13 @@ export default function Invoices() {
         </>} />
       {!focus && (
         <div className="mb-4 rounded-app border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-800 dark:text-sky-200">
-          <b>Emissão indisponível: integração fiscal não configurada.</b> Por enquanto é possível apenas preparar documentos para conferência (sem número e sem valor fiscal). {can('fiscal_settings') && <Link to="/configuracoes?tab=fiscal" className="font-medium underline">Configurar agora (passo a passo)</Link>}
+          <b>Emissão indisponível: nenhum emitente fiscal cadastrado.</b> Por enquanto é possível apenas preparar documentos para conferência (sem número e sem valor fiscal). Cadastre o seu CNPJ e escolha o emissor que você usa (Focus, NFE.io, PlugNotas, Nuvem Fiscal, eNotas ou o site da prefeitura). {can('fiscal_settings') && <Link to="/configuracoes?tab=fiscal" className="font-medium underline">Configurar agora (passo a passo)</Link>}
         </div>
       )}
-      <CertBanner company={company} />
-      {focus && company.fiscal_environment !== 'producao' && (
+      <CertBanner company={company} emitters={emitters} />
+      {testing.length > 0 && (
         <div className="mb-4 rounded-app border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-          Focus NFe em <b>homologação</b>: as notas emitidas são de teste e não têm validade fiscal.
+          Em <b>homologação</b> (testes): {testing.map((e) => e.name).join(', ')}. As notas emitidas por {testing.length > 1 ? 'esses emitentes' : 'esse emitente'} não têm validade fiscal.
         </div>
       )}
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
@@ -83,14 +90,17 @@ export default function Invoices() {
               <tbody>
                 {list.map((i) => (
                   <tr key={i.id}>
-                    <td className="whitespace-nowrap"><button className="text-left" onClick={() => setView(i)}><div className="font-medium">{i.kind === 'nfe' ? 'NF-e' : 'NFS-e'} {i.number ? `nº ${i.number}` : ''}</div><div className="text-xs text-ink-faint">{i.status === 'preparada' ? 'Sem emissão' : i.provider === 'focus' ? (i.environment === 'producao' ? 'Produção' : 'Homologação') : '—'}{i.test && ' · teste'}</div></button></td>
+                    <td className="whitespace-nowrap"><button className="text-left" onClick={() => setView(i)}><div className="font-medium">{i.kind === 'nfe' ? 'NF-e' : 'NFS-e'} {i.number ? `nº ${i.number}` : ''}</div><div className="text-xs text-ink-faint">{i.emitter_name && `${i.emitter_name} · `}{i.manual ? (i.status === 'preparada' ? 'Emitir no site oficial' : 'Registrada manualmente') : i.status === 'preparada' ? 'Sem emissão' : i.environment ? (i.environment === 'producao' ? 'Produção' : 'Homologação') : '—'}{i.test && ' · teste'}</div></button></td>
                     <td className="max-w-[220px] truncate">{i.customer_name || 'Consumidor'}</td>
                     <td className="hidden md:table-cell">{i.order_id ? <Link className="text-primary" to={`/os/${i.order_id}`}>{docNumber(company.settings, 'order', i.order_number)}</Link> : '—'}</td>
                     <td className="hidden whitespace-nowrap text-ink-soft md:table-cell">{fmt(i.issued_at || i.created_at, 'dd/MM/yy HH:mm')}</td>
                     <td><span className={cx('chip', INVOICE_STATUS[i.status]?.cls)}>{INVOICE_STATUS[i.status]?.label}</span>{i.status === 'erro' && <div className="mt-0.5 max-w-[200px] truncate text-xs text-red-600" title={i.message}>{i.message}</div>}</td>
                     <td className="text-right font-medium tabular-nums">{money(i.amount)}</td>
-                    <td className="w-40 whitespace-nowrap text-right">
-                      {i.provider === 'focus' && ['processando', 'erro'].includes(i.status) && <button className="btn-ghost btn-icon h-8" title="Consultar situação" disabled={busy} onClick={() => refresh(i)}><RefreshCw className="h-4 w-4" /></button>}
+                    <td className="min-w-[10rem] whitespace-nowrap text-right">
+                      {(i.provider === 'focus' || i.emitter_id) && !i.manual && (['processando', 'erro'].includes(i.status) || (i.status === 'autorizada' && /Cancelamento/.test(i.message || ''))) && <button className="btn-ghost btn-icon h-8" title="Consultar situação" disabled={busy} onClick={() => refresh(i)}><RefreshCw className="h-4 w-4" /></button>}
+                      {i.manual && i.status === 'preparada' && can('invoices_issue') && <button className="btn-outline h-8 text-xs" title="Informar o número da nota emitida no site oficial" onClick={() => setManualFor(i)}><PenLine className="h-3.5 w-3.5" /> Informar nº</button>}
+                      {i.files_proxy && ['autorizada', 'cancelada'].includes(i.status) && !i.pdf_url && <button className="btn-ghost btn-icon h-8" title="Baixar PDF" onClick={() => file(i, 'pdf')}><FileDown className="h-4 w-4" /></button>}
+                      {i.files_proxy && ['autorizada', 'cancelada'].includes(i.status) && !i.xml_url && <button className="btn-ghost btn-icon h-8" title="Baixar XML" onClick={() => file(i, 'xml')}><FileCode2 className="h-4 w-4" /></button>}
                       {i.pdf_url && <a className="btn-ghost btn-icon h-8" title="DANFE / PDF" href={i.pdf_url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a>}
                       {i.status === 'preparada' && i.order_id && <a className="btn-ghost btn-icon h-8" title="Imprimir recibo (sem valor fiscal)" href={appPath(`/imprimir/os/${i.order_id}?recibo=1`)} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /></a>}
                       {i.xml_url && <a className="btn-ghost btn-icon h-8" title="XML" href={i.xml_url} target="_blank" rel="noreferrer"><FileCode2 className="h-4 w-4" /></a>}
@@ -104,6 +114,7 @@ export default function Invoices() {
           </div>
         )}
       </div>
+      {manualFor && <ManualRegister inv={manualFor} onClose={() => setManualFor(null)} onDone={() => { setManualFor(null); load(); }} />}
       {cancel && <CancelInvoice inv={cancel} onClose={() => setCancel(null)} onDone={() => { setCancel(null); load(); }} />}
       {view && <InvoiceView id={view.id} onClose={() => setView(null)} />}
       {pick && <PickOrder onClose={() => setPick(false)} onPick={async (o) => { setPick(false); setEmitFor(await api.get(`/orders/${o.id}`)); }} />}
@@ -125,6 +136,29 @@ function CancelInvoice({ inv, onClose, onDone }) {
   );
 }
 
+/** Nota emitida fora do TORVEN (site da prefeitura/SEFAZ): a pessoa informa o número que saiu lá. */
+export function ManualRegister({ inv, onClose, onDone }) {
+  const [run, busy] = useAction();
+  const today = new Date().toISOString().slice(0, 10);
+  const [f, setF] = useState({ number: '', series: '', verification_code: '', access_key: '', issued_at: today, pdf_url: '' });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const go = async () => { if ((await run(() => api.post(`/invoices/${inv.id}/manual`, f), 'Nota registrada')) !== FAIL) onDone(); };
+  return (
+    <Modal open onClose={onClose} title={`Informar ${inv.kind === 'nfe' ? 'NF-e' : 'NFS-e'} emitida`} subtitle={`${money(inv.amount)} · ${inv.customer_name || inv.customer?.name || 'Consumidor'}`}
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy || !f.number.trim()} onClick={go}>Registrar nota</button></>}>
+      <p className="mb-3 text-sm text-ink-soft">Copie os dados da nota que você emitiu no site da prefeitura ou da SEFAZ. Ela ficará marcada como <b>registrada manualmente</b>.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input label="Número da nota" value={f.number} onChange={set('number')} autoFocus />
+        <Input label="Data de emissão" type="date" max={today} value={f.issued_at} onChange={set('issued_at')} />
+        <Input label="Série (se houver)" value={f.series} onChange={set('series')} />
+        <Input label="Código de verificação (se houver)" value={f.verification_code} onChange={set('verification_code')} />
+        {inv.kind === 'nfe' && <Input label="Chave de acesso (44 números)" value={f.access_key} onChange={set('access_key')} className="sm:col-span-2" />}
+        <Input label="Link da nota (opcional)" placeholder="https://..." value={f.pdf_url} onChange={set('pdf_url')} className="sm:col-span-2" />
+      </div>
+    </Modal>
+  );
+}
+
 function InvoiceView({ id, onClose }) {
   const [i, setI] = useState(null);
   useEffect(() => { api.get(`/invoices/${id}`).then(setI); }, [id]);
@@ -142,7 +176,7 @@ function InvoiceView({ id, onClose }) {
           {i.message && <div className="rounded-app-sm bg-muted/60 p-3">{i.message}</div>}
           {i.cancel_reason && <div className="rounded-app-sm bg-red-500/10 p-3 text-red-700 dark:text-red-300">Cancelada: {i.cancel_reason}</div>}
           <div><div className="mb-1 text-xs text-ink-faint">Descrição</div><pre className="whitespace-pre-wrap rounded-app-sm bg-muted/60 p-3 text-xs">{i.description}</pre></div>
-          {i.response && <details><summary className="cursor-pointer text-xs text-ink-faint">Resposta da Focus NFe</summary><pre className="mt-2 max-h-60 overflow-auto rounded-app-sm bg-muted/60 p-3 text-xs">{JSON.stringify(i.response, null, 2)}</pre></details>}
+          {i.response && <details><summary className="cursor-pointer text-xs text-ink-faint">Resposta do emissor</summary><pre className="mt-2 max-h-60 overflow-auto rounded-app-sm bg-muted/60 p-3 text-xs">{JSON.stringify(i.response, null, 2)}</pre></details>}
         </div>
       )}
     </Modal>
@@ -172,7 +206,19 @@ function PickOrder({ onClose, onPick }) {
   );
 }
 
-export function CertBanner({ company }) {
+export function CertBanner({ company, emitters: given }) {
+  const [loaded, setLoaded] = useState([]);
+  useEffect(() => { if (!given) api.get('/fiscal/emitters/options').then(setLoaded).catch(() => setLoaded([])); }, [given]);
+  const emitters = given || loaded;
+  const soon = emitters.filter((e) => e.cert_days_left != null && e.cert_days_left <= 30);
+  if (soon.length) {
+    return (
+      <div className="mb-4 rounded-app border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        {soon.map((e) => <div key={e.id}>Certificado de <b>{e.name}</b> {e.cert_days_left < 0 ? 'está VENCIDO — as notas desse CNPJ serão rejeitadas.' : `vence em ${e.cert_days_left} dia(s).`}</div>)}
+        <Link to="/configuracoes?tab=fiscal" className="font-medium underline">Renovar certificado</Link>
+      </div>
+    );
+  }
   if (company.fiscal_provider !== 'focus' || !company.fiscal_cert_until) return null;
   const days = Math.floor((new Date(company.fiscal_cert_until) - Date.now()) / 86400000);
   if (days > 30) return null;

@@ -384,7 +384,7 @@ await check('tipo de OS: cria, recusa nome repetido e checklist obrigatório vin
   assert.equal(t.status, 201, JSON.stringify(t.data)); otype = t.data;
   assert.equal((await api('POST', '/quality/types', { name: 'TROCA DE ÓLEO' }, T)).status, 400);
   const c = await api('POST', '/quality/templates', { name: 'Recebimento óleo', kind: 'recebimento', items: ['Nível de óleo', 'Vazamentos'], order_type_id: otype.id, required: true }, T);
-  assert.equal(c.status, 201, JSON.stringify(c.data)); assert.equal(c.data.order_type_id, otype.id);
+  assert.equal(c.status, 201, JSON.stringify(c.data)); assert.deepEqual(c.data.order_type_ids, [otype.id]);
   const l = await api('GET', `/quality/templates?order_type_id=${otype.id}`, null, T);
   assert.ok(l.data.some((x) => x.id === c.data.id));
 });
@@ -410,6 +410,29 @@ await check('OS do tipo só avança depois do checklist obrigatório de recebime
   const ch = await api('PUT', `/quality/orders/${free.data.id}/type`, { order_type_id: otype.id }, T);
   assert.equal(ch.status, 200);
   assert.equal((await api('DELETE', `/quality/types/${otype.id}`, null, T)).status, 400);
+});
+await check('um checklist em vários tipos; vincular pelo tipo; geral vale para todos', async () => {
+  const t2 = (await api('POST', '/quality/types', { name: 'Funilaria' }, T)).data;
+  const t3 = (await api('POST', '/quality/types', { name: 'Solda' }, T)).data;
+  const c = await api('POST', '/quality/templates', { name: 'Entrega lavada', kind: 'entrega', items: ['Veículo lavado'], order_type_ids: [t2.id, t3.id], required: true }, T);
+  assert.equal(c.status, 201, JSON.stringify(c.data)); assert.equal(c.data.order_type_ids.length, 2);
+  const forT2 = (await api('GET', `/quality/templates?order_type_id=${t2.id}`, null, T)).data;
+  assert.ok(forT2.some((x) => x.id === c.data.id));
+  assert.ok(!(await api('GET', `/quality/templates?order_type_id=${otype.id}`, null, T)).data.some((x) => x.id === c.data.id));
+  // vincular a partir do tipo
+  const g = await api('POST', '/quality/templates', { name: 'Inspeção geral', kind: 'inspecao', items: ['Aperto'] }, T);
+  const link = await api('PUT', `/quality/types/${otype.id}/checklists`, { template_ids: [c.data.id] }, T);
+  assert.equal(link.status, 200, JSON.stringify(link.data));
+  const types = (await api('GET', '/quality/types?all=1', null, T)).data;
+  assert.deepEqual(types.find((x) => x.id === otype.id).checklist_ids, [c.data.id]);
+  assert.ok((await api('GET', `/quality/templates?order_type_id=${t3.id}`, null, T)).data.some((x) => x.id === g.data.id));
+  // outra empresa não vincula
+  assert.equal((await api('PUT', `/quality/types/${otype.id}/checklists`, { template_ids: [] }, T2)).status, 404);
+  assert.equal((await api('PUT', `/quality/types/${t2.id}/checklists`, { template_ids: [g.data.id] }, T2)).status, 404);
+  // excluir tipo: checklist usado também por outro tipo continua ativo
+  assert.equal((await api('DELETE', `/quality/types/${t3.id}`, null, T)).status, 204);
+  const after = (await api('GET', '/quality/templates?all=1', null, T)).data.find((x) => x.id === c.data.id);
+  assert.equal(after.active, true); assert.equal(after.order_type_ids.length, 2);
 });
 await check('várias fotos na OS: até 40 por OS, depois recusa', async () => {
   const o = await api('POST', '/orders', { customer_id: quick.customer_id, items: [] }, T);

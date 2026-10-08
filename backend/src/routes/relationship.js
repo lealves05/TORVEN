@@ -61,12 +61,23 @@ export async function generateFollowups(db, companyId, settings) {
             case f.kind when 'orcamento' then 'o cliente já respondeu o orçamento' else 'a conta foi paga' end, done_at = now()
       where f.company_id = $1 and f.status = 'pendente' and (
         (f.kind = 'orcamento' and exists (select 1 from quotes qt where qt.id = f.quote_id and qt.status not in ('enviado','aguardando_decisao')))
-        or (f.kind = 'cobranca' and exists (select 1 from transactions t where 'cob:' || t.id = f.auto_key and t.paid_at is not null)))`, [companyId]);
+        or (f.kind = 'cobranca' and f.auto_key like 'cob:%'
+            and exists (select 1 from transactions t where t.id = substring(f.auto_key from 5)::uuid and t.paid_at is not null)))`, [companyId]);
   return created;
 }
 
+// a lista de retornos é recalculada no máximo a cada 2 minutos por empresa (as telas chamam lista e resumo juntas)
+const lastRun = new Map();
+export async function refreshFollowups(companyId, settings, { force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - (lastRun.get(companyId) || 0) < 120_000) return 0;
+  lastRun.set(companyId, now);
+  if (lastRun.size > 5000) lastRun.clear();
+  try { return await generateFollowups({ query: q }, companyId, settings); } catch (e) { lastRun.delete(companyId); throw e; }
+}
+
 r.get('/followups', async (req, res) => {
-  await generateFollowups({ query: q }, req.companyId, req.settings);
+  await refreshFollowups(req.companyId, req.settings, { force: req.query.refresh === '1' });
   const params = [req.companyId];
   let where = 'f.company_id = $1';
   const { status = 'pendente', kind } = req.query;
@@ -85,7 +96,7 @@ r.get('/followups', async (req, res) => {
 });
 
 r.get('/summary', async (req, res) => {
-  await generateFollowups({ query: q }, req.companyId, req.settings);
+  await refreshFollowups(req.companyId, req.settings);
   const { rows } = await q(
     `select kind, count(*) filter (where due_date <= current_date)::int as due, count(*)::int as pending
        from followups where company_id = $1 and status = 'pendente' group by kind`, [req.companyId]);

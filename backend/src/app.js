@@ -10,6 +10,7 @@ import authRoutes from './routes/auth.js';
 import publicRoutes from './routes/public.js';
 import companyRoutes from './routes/company.js';
 import fiscalSetupRoutes from './routes/fiscalSetup.js';
+import fiscalEmitterRoutes from './routes/fiscalEmitters.js';
 import userRoutes from './routes/users.js';
 import { technicians, suppliers, services } from './routes/catalog.js';
 import customerRoutes from './routes/customers.js';
@@ -83,6 +84,7 @@ export function createApp() {
   api.use(autoAudit);
   api.use('/billing', billing);
   api.use('/company/fiscal', fiscalSetupRoutes);
+  api.use('/fiscal/emitters', fiscalEmitterRoutes);
   api.use('/company', companyRoutes);
   api.use('/users', userRoutes);
   api.use('/technicians', technicians);

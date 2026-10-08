@@ -1,0 +1,69 @@
+WEBVTT
+
+1
+00:00:00.154 --> 00:00:14.313
+Aula 32: Cadastro fiscal: CNPJ, emissor e certificado. Nesta aula você vai aprender: O que é emitente, emissor e certificado; Cadastrar um CNPJ e escolher o emissor; Enviar o certificado e testar.
+
+2
+00:00:15.961 --> 00:00:21.177
+Três palavras antes de começar. Emitente é o CNPJ que emite a nota.
+
+3
+00:00:21.197 --> 00:00:30.450
+Emissor é a empresa contratada que transmite a nota para a prefeitura. E o certificado A1 é a assinatura digital da empresa: um arquivo com senha.
+
+4
+00:00:33.313 --> 00:00:37.019
+Em Configurações, na aba Fiscal, clique em Novo emitente.
+
+5
+00:00:44.025 --> 00:00:53.363
+Clique em Copiar os dados da minha empresa: o sistema preenche o endereço. Dê um apelido, como Oficina, e confira o CNPJ e a razão social.
+
+6
+00:00:57.631 --> 00:01:03.614
+Agora escolha a empresa emissora que você contratou. Cada cartão explica onde pegar a chave.
+
+7
+00:01:03.634 --> 00:01:10.049
+Não tem emissor? Escolha Emitir no site da prefeitura. O TORVEN prepara os dados para você copiar.
+
+8
+00:01:14.175 --> 00:01:21.145
+Neste exemplo, NFE.io. Cole a chave que o emissor te deu. Ela fica guardada com segurança e não aparece de novo.
+
+9
+00:01:22.725 --> 00:01:28.522
+Deixe em Homologação no começo. É o modo de testes: as notas não valem de verdade.
+
+10
+00:01:32.129 --> 00:01:39.568
+Na última parte ficam os códigos dos impostos. Já vêm preenchidos com o mais comum. Confirme com o seu contador.
+
+11
+00:01:42.673 --> 00:01:44.843
+Clique em Salvar emitente.
+
+12
+00:01:47.247 --> 00:01:52.446
+Agora o certificado. Clique para escolher o arquivo ponto pfx no computador.
+
+13
+00:01:59.581 --> 00:02:07.824
+Digite a senha e clique em Conferir e guardar. O TORVEN confere a senha, o CNPJ e mostra até quando o certificado vale.
+
+14
+00:02:07.844 --> 00:02:11.379
+Perto de vencer, o sistema avisa na tela de notas.
+
+15
+00:02:12.992 --> 00:02:21.562
+Por fim, clique em Enviar cadastro ao emissor: ele recebe os dados e o certificado. Depois, Testar conexão confirma que a chave funciona.
+
+16
+00:02:22.050 --> 00:02:30.236
+Tem mais de um CNPJ, como a oficina e um MEI? Cadastre um emitente para cada um. Na hora de emitir, você escolhe qual usar.
+
+17
+00:02:30.769 --> 00:02:43.179
+Recapitulando: O que é emitente, emissor e certificado; Cadastrar um CNPJ e escolher o emissor; Enviar o certificado e testar. Se precisar, assista de novo quando quiser. Até a próxima aula!

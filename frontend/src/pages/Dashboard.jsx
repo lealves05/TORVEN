@@ -5,12 +5,12 @@ import {
   ClipboardList, AlertTriangle, PackageCheck, FileText, TrendingUp, ArrowDownCircle, ArrowUpCircle, PackageX, ArrowRight, Plus, ShoppingCart, Clock,
   MessageCircle, CheckCircle2, Circle, X, Rocket, HardHat,
 } from 'lucide-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { api, appUrl } from '../lib/api';
 import { money, fmt, qty, ORDER_STATUS, OPEN_STATUSES, PRIORITY, orderNo, fillTemplate, waLink, isTechnician } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { Stat, Loading, Empty, useFetch, cx } from '../components/ui';
-import { InOutChart } from '../components/charts';
+const InOutChart = lazy(() => import('../components/charts').then((m) => ({ default: m.InOutChart })));
 import { CertBanner } from './Invoices';
 import { StatusBadge } from '../components/StatusBadge';
 
@@ -189,7 +189,7 @@ export default function Dashboard() {
       {f && (
         <div className="card p-5">
           <h2 className="mb-2 font-semibold">Fluxo de caixa — últimos 30 dias</h2>
-          <InOutChart data={f.series} />
+          <Suspense fallback={<div className="h-[240px] animate-pulse rounded-app-sm bg-muted/50" />}><InOutChart data={f.series} /></Suspense>
         </div>
       )}
     </div>

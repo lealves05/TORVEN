@@ -200,6 +200,7 @@ function Board({ list, onMove, canMove }) {
 export function OrdersTable({ list, compact }) {
   const nav = useNavigate();
   const settings = useSettings();
+  const [shown, setShown] = useState(150); // desenha aos poucos: listas grandes ficam leves no celular
   if (!list.length) return <div className="card"><Empty icon={ClipboardList} title="Nenhuma OS encontrada" /></div>;
   return (
     <div className="card overflow-hidden">
@@ -207,7 +208,7 @@ export function OrdersTable({ list, compact }) {
         <table className="table-clean">
           <thead><tr><th>Nº</th><th>Cliente / equipamento</th>{!compact && <th className="hidden lg:table-cell">Técnico</th>}<th>Situação</th><th className="hidden md:table-cell">Entrada</th><th className="hidden md:table-cell">Prazo</th><th className="text-right">Total</th></tr></thead>
           <tbody>
-            {list.map((o) => {
+            {list.slice(0, shown).map((o) => {
               const late = o.promised_at && !['entregue', 'cancelada'].includes(o.status) && new Date(o.promised_at) < new Date();
               return (
                 <tr key={o.id} className={cx('cursor-pointer', o.status === 'cancelada' && 'opacity-60')} onClick={() => nav(`/os/${o.id}`)}>
@@ -234,6 +235,11 @@ export function OrdersTable({ list, compact }) {
           </tbody>
         </table>
       </div>
+      {list.length > shown && (
+        <div className="border-t border-line p-3 text-center">
+          <button className="btn-outline h-9 text-sm" onClick={() => setShown(shown + 300)}>Mostrar mais ({list.length - shown} restantes)</button>
+        </div>
+      )}
     </div>
   );
 }

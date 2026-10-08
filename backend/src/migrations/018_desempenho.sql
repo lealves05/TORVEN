@@ -1,0 +1,31 @@
+-- TORVEN — 018: índices de desempenho (telas de OS, relatórios, financeiro, retornos e exclusões em cascata).
+-- Somente índices novos. Rollback: migrations/rollback/018_desempenho.down.sql
+create index if not exists orders_company_delivered_idx on orders(company_id, delivered_at) where delivered_at is not null;
+create index if not exists orders_equipment_idx on orders(equipment_id, created_at) where equipment_id is not null;
+create index if not exists orders_technician_idx on orders(technician_id) where technician_id is not null;
+create index if not exists orders_quote_idx on orders(quote_id) where quote_id is not null;
+create index if not exists orders_request_idx on orders(request_id) where request_id is not null;
+create index if not exists orders_warranty_of_idx on orders(warranty_of) where warranty_of is not null;
+create index if not exists order_items_product_idx on order_items(product_id) where product_id is not null;
+create index if not exists order_items_service_idx on order_items(service_id) where service_id is not null;
+create index if not exists order_items_technician_idx on order_items(technician_id) where technician_id is not null;
+create index if not exists transactions_customer_idx on transactions(customer_id) where customer_id is not null;
+create index if not exists transactions_cash_session_idx on transactions(cash_session_id) where cash_session_id is not null;
+create index if not exists transactions_company_created_idx on transactions(company_id, created_at desc);
+create index if not exists transactions_purchase_idx on transactions(purchase_id) where purchase_id is not null;
+create index if not exists invoices_customer_idx on invoices(customer_id) where customer_id is not null;
+create index if not exists invoices_emitter_idx on invoices(emitter_id) where emitter_id is not null;
+create index if not exists quotes_customer_idx on quotes(customer_id) where customer_id is not null;
+create index if not exists quotes_company_sent_idx on quotes(company_id, sent_at) where sent_at is not null;
+create index if not exists service_requests_customer_idx on service_requests(customer_id) where customer_id is not null;
+create index if not exists service_requests_company_created_idx on service_requests(company_id, created_at desc);
+create index if not exists followups_customer_idx on followups(customer_id);
+create index if not exists followups_order_idx on followups(order_id) where order_id is not null;
+create index if not exists statement_lines_order_idx on statement_lines(order_id) where order_id is not null;
+create index if not exists statement_lines_transaction_idx on statement_lines(transaction_id) where transaction_id is not null;
+create index if not exists stock_movements_purchase_idx on stock_movements(purchase_id) where purchase_id is not null;
+create index if not exists warranty_claims_customer_idx on warranty_claims(customer_id);
+create index if not exists purchases_supplier_idx on purchases(supplier_id) where supplier_id is not null;
+create index if not exists products_supplier_idx on products(supplier_id) where supplier_id is not null;
+create index if not exists equipment_company_idx on equipment(company_id);
+create index if not exists audit_log_user_idx on audit_log(user_id) where user_id is not null;

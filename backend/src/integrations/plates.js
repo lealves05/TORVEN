@@ -69,7 +69,7 @@ export function privateIp(ip) {
 }
 
 /** Só https e só destino público: confere o nome e os IPs para onde ele aponta (bloqueia acesso à rede interna). */
-async function httpsOnly(u) {
+export async function httpsOnly(u) {
   let x;
   try { x = new URL(u); } catch { throw new HttpError(400, 'Endereço da consulta inválido.'); }
   if (x.protocol !== 'https:') throw new HttpError(400, 'Use um endereço https:// para a consulta de placa.');

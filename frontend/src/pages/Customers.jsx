@@ -18,6 +18,7 @@ export default function Customers() {
   const [search, setSearch] = useState('');
   const [list, setList] = useState(null);
   const [edit, setEdit] = useState(null);
+  const [shown, setShown] = useState(150);
   const load = useCallback(() => api.get(`/customers${qs({ search })}`).then(setList), [search]);
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
 
@@ -42,7 +43,7 @@ export default function Customers() {
             <table className="table-clean">
               <thead><tr><th>Cliente</th><th className="hidden md:table-cell">Contato</th><th className="hidden lg:table-cell">Cidade</th><th className="text-center">OS</th><th className="hidden text-right sm:table-cell">Total gasto</th><th className="hidden md:table-cell">Última OS</th></tr></thead>
               <tbody>
-                {list.map((c) => (
+                {list.slice(0, shown).map((c) => (
                   <tr key={c.id} className="cursor-pointer" onClick={() => nav(`/clientes/${c.id}`)}>
                     <td>
                       <div className="flex items-center gap-2">
@@ -59,6 +60,11 @@ export default function Customers() {
                 ))}
               </tbody>
             </table>
+            {list.length > shown && (
+              <div className="border-t border-line p-3 text-center">
+                <button className="btn-outline h-9 text-sm" onClick={() => setShown(shown + 300)}>Mostrar mais ({list.length - shown} restantes)</button>
+              </div>
+            )}
           </div>
         )}
       </div>
