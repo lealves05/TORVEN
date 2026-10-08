@@ -9,8 +9,10 @@ const connectionString =
   process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/torven';
 
 const isLocal = /@(localhost|127\.0\.0\.1|db)(:|\/)/.test(connectionString);
+// Com o certificado raiz do provedor (DATABASE_SSL_CA, conteúdo PEM) a conexão confere o servidor; sem ele, só cifra.
+const ca = process.env.DATABASE_SSL_CA ? process.env.DATABASE_SSL_CA.replace(/\\n/g, '\n') : null;
 const ssl =
-  process.env.DATABASE_SSL === 'false' || isLocal ? false : { rejectUnauthorized: false };
+  process.env.DATABASE_SSL === 'false' || isLocal ? false : ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
 
 export const pool = new pg.Pool({
   connectionString,

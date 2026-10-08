@@ -38,10 +38,14 @@ Estados técnicos (OS), comerciais (solicitação/orçamento), fiscais (document
 | **Fiscal** | Focus NFe (NFS-e nacional/municipal e NF-e) com cadastro guiado dentro do sistema. **Sem provedor configurado nada é emitido**: o sistema mostra *“Emissão indisponível: integração fiscal não configurada”* e só permite preparar o documento para conferência (sem número, protocolo ou valor fiscal) |
 | **Auditoria** | Registro permanente de preços, aprovações, estoque, caixa, pagamentos, documentos fiscais, usuários, perfis, unidades e configurações (sem gravar senhas, tokens ou certificados) |
 
-Não implementado: **Torven Pay** (opcional na especificação) e envio automático de WhatsApp/e-mail — dependem de provedores contratados.
-Enquanto não houver integração, o menu não mostra esses itens e o sistema nunca registra pagamento ou envio sem confirmação real. Nenhum desses itens aparece no menu até estar funcionando.
+Não implementado: **Torven Pay** (opcional na especificação) e envio automático de e-mail — dependem de provedores contratados.
+Enquanto não houver integração, o sistema nunca registra pagamento ou envio sem confirmação real.
 
-> Mensagens externas: o TORVEN **não envia** WhatsApp/e-mail sozinho. O usuário escolhe o canal, confirma e a mensagem abre no aparelho dele; o sistema registra o envio.
+> **WhatsApp:** sem integração, o TORVEN não envia nada sozinho (o usuário escolhe o canal, confirma e a mensagem abre no aparelho dele).
+> Com a **API oficial da Meta** ligada pela empresa em Configurações › Integrações, o **agente de atendimento** responde no número da empresa:
+> mostra como está a OS pela placa (detalhes só para o telefone cadastrado do cliente), e registra pedidos de serviço e de horário como
+> **pré-OS** — a OS e a agenda só são criadas quando a equipe aprova em Atendimento › WhatsApp. A IA (opcional, Anthropic) só interpreta o texto da
+> mensagem (pode conter o nome que o cliente digitou); as respostas usam sempre os dados do sistema.
 
 ## Tecnologias
 

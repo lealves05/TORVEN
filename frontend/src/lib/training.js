@@ -259,6 +259,23 @@ export const LESSONS = [
     "text": "Em Novo orçamento, escolha o cliente e dê um título que o cliente entenda. Em Itens, escreva o nome do serviço ou do material e clique nele na lista. O preço da tabela entra sozinho e pode ser mudado. Em Condições ficam a validade, o prazo de execução, a garantia e a forma de pagamento. Os textos padrão já vêm preenchidos. Clique em Salvar orçamento. Agora envie para o cliente. O orçamento gera um link: o cliente abre no celular, confere e aprova com um toque. Quando o cliente aprova, o orçamento muda de situação e aparece o botão para gerar a ordem de serviço, já com os itens. O cliente pediu mudança? Crie uma revisão. O sistema guarda as versões anteriores."
   },
   {
+    "n": 30,
+    "file": "30-pedidos-do-whatsapp",
+    "mod": "comercial",
+    "s": 97,
+    "title": "Pedidos do WhatsApp: aprovar e responder",
+    "routes": [
+      "/whatsapp"
+    ],
+    "desc": "Aprovar os pedidos que o agente anotou no WhatsApp e conversar com o cliente.",
+    "learn": [
+      "Ver os pedidos que chegaram",
+      "Aprovar: abrir a OS e marcar o horário",
+      "Ler e responder as conversas"
+    ],
+    "text": "No menu Atendimento, clique em WhatsApp. Aqui chegam os pedidos que o agente anotou na conversa com o cliente. Cada cartão mostra o nome do cliente, a placa, o serviço e o horário que ele pediu. Para aceitar, clique em Aprovar. Se quiser, escolha o técnico e confira o dia e a hora. Deixe ligado Avisar o cliente pelo WhatsApp. Assim ele recebe a confirmação com o número da OS. Clique em Aprovar e abrir OS. O sistema abre a OS, marca o horário na agenda e avisa o cliente. Na aba Conversas você lê tudo o que o cliente e o agente escreveram. Quer falar você mesmo? Clique em Assumir conversa e escreva embaixo. O agente para de responder nessa conversa. Depois, clique em Devolver ao agente. O agente nunca abre OS sozinho: ele anota, e a equipe confirma. Se não der para atender, clique em Recusar e diga o motivo."
+  },
+  {
     "n": 14,
     "file": "14-agenda",
     "mod": "producao",
@@ -428,6 +445,21 @@ export const LESSONS = [
     "text": "Em Retornos e pós-venda, o TORVEN monta sozinho a lista de clientes para contatar. Pós-venda, orçamento sem resposta, garantia vencendo, manutenção e cobrança. O filtro Para hoje mostra o que precisa ser feito hoje. Clique em WhatsApp para abrir a conversa com o cliente, com uma mensagem já escrita. Depois de falar com o cliente, clique em Registrar contato e anote o que foi conversado. Na pós-venda, dá para guardar a nota que o cliente deu, de zero a dez. Cliente pediu para falar outro dia? Use Reagendar. Assim ninguém fica esquecido."
   },
   {
+    "n": 31,
+    "file": "31-conferir-extrato-com-as-os",
+    "mod": "financeiro",
+    "s": 106,
+    "title": "Conferir o extrato do banco com as OS",
+    "routes": [],
+    "desc": "Importar o extrato do banco e ver quais entradas são pagamentos de ordens de serviço.",
+    "learn": [
+      "Importar o arquivo do extrato",
+      "Ver o que é pagamento de OS",
+      "Receber na OS com um clique"
+    ],
+    "text": "No menu Financeiro, abra Contas, conciliação e DRE, e clique na aba Conciliação bancária. Primeiro, baixe o extrato no aplicativo ou no site do banco. Escolha o período e exporte no formato OFX ou CSV. Clique em Importar extrato, escolha a conta do banco e o arquivo que você baixou. Clique em Importar. O sistema confere cada entrada do banco com as ordens de serviço. Os quadros mostram o que já é de OS, o que provavelmente é de uma OS e o que ficou sem OS. Quando o sistema reconhece o nome do cliente ou o número da OS, aparece o botão Receber nesta OS. Clique nele, confira a forma de pagamento, como PIX, e clique em Confirmar recebimento. Pronto: o pagamento entrou na OS e a linha do banco ficou conferida. O último quadro avisa o que foi recebido no sistema, mas não apareceu no banco. Vale conferir. Se conferiu errado, clique na setinha ao lado da linha para desfazer. O pagamento sai da OS."
+  },
+  {
     "n": 22,
     "file": "22-relatorios",
     "mod": "relatorios",
@@ -499,10 +531,25 @@ export const LESSONS = [
     "text": "Em Configurações, a aba Empresa guarda os dados que saem nas impressões: nome, CNPJ, telefone e endereço. Em OS e orçamentos ficam as regras: garantia e prazo padrão, pesquisa por placa, ditado por voz e a regra de uma placa por cadastro. A Tabela de serviços tem os serviços com o preço e o custo. É dela que vem o valor que aparece na OS. Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão. Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela. Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro."
   },
   {
+    "n": 29,
+    "file": "29-whatsapp-e-agente",
+    "mod": "config",
+    "s": 104,
+    "title": "WhatsApp: ligar o agente e testar",
+    "routes": [],
+    "desc": "O agente que responde o cliente no WhatsApp: horários de atendimento e teste antes de ligar.",
+    "learn": [
+      "Onde fica o WhatsApp",
+      "Dias e horários do agente",
+      "Testar o agente sem enviar nada"
+    ],
+    "text": "Em Configurações, na aba Integrações, fica o quadro WhatsApp e agente de atendimento. O agente responde o cliente sozinho: diz como está o serviço pela placa e anota pedidos de serviço e de horário. Ligar o WhatsApp oficial é feito uma vez só, normalmente por quem cuida do computador da empresa. O passo a passo está nesta tela. Em Agente automático, marque os dias e o horário em que a oficina atende. O agente só oferece horários livres dentro deles. Antes de ligar, teste o agente aqui embaixo. Nada é enviado de verdade. Escreva como se fosse o cliente, por exemplo oi. O agente mostra as opções numeradas. Responda 2 para agendar. O agente pede a placa e o serviço, e mostra os horários livres. O cliente escolhe o horário, diz o nome e confirma. O pedido vai para a equipe aprovar. Por segurança, os detalhes da OS só são informados para o telefone cadastrado do cliente."
+  },
+  {
     "n": 26,
     "file": "26-suporte-e-treinamento",
     "mod": "config",
-    "s": 72,
+    "s": 73,
     "title": "Como usar as aulas e pedir ajuda",
     "routes": [
       "/suporte"
@@ -517,7 +564,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 2429;
+export const TOTAL_SECONDS = 2737;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

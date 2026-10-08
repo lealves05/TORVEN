@@ -41,6 +41,7 @@ async function assertRefs(companyId, d) {
 
 r.post('/', async (req, res) => {
   const d = parse(z.object({ ...base, password: passwordSchema }), req.body);
+  if (d.role === 'admin' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode criar um administrador.');
   await assertRefs(req.companyId, d);
   const u = await one(
     `insert into users (company_id, name, email, password_hash, role, technician_id, unit_id)
@@ -59,6 +60,10 @@ r.put('/:id', async (req, res) => {
   const cur = await one('select * from users where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
   await assertRefs(req.companyId, d);
+  // só o próprio proprietário altera o cadastro dele; administrador só é alterado pelo proprietário ou por ele mesmo
+  if (cur.role === 'owner' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode alterar o próprio cadastro.');
+  if (cur.role === 'admin' && cur.id !== req.user.id && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode alterar outro administrador.');
+  if (d.role === 'admin' && cur.role !== 'admin' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode tornar alguém administrador.');
   if (cur.role === 'owner' && d.role !== 'owner') throw new HttpError(400, 'O proprietário não pode ter o papel alterado.');
   if (cur.role !== 'owner' && d.role === 'owner') throw new HttpError(400, 'Só pode haver um proprietário.');
   if (cur.id === req.user.id && d.active === false) throw new HttpError(400, 'Você não pode desativar a si mesmo.');
@@ -66,13 +71,14 @@ r.put('/:id', async (req, res) => {
     `update users set name=$1, email=$2, role=$3, technician_id=$4, active=$5, unit_id=$6,
        auth_version = auth_version + case when $8::boolean then 1 else 0 end where id=$7 and company_id=$9 returning ${cols}`,
     [d.name, d.email, d.role, d.technician_id || null, d.active ?? cur.active, d.unit_id ?? cur.unit_id ?? null, cur.id,
-      (d.active === false && cur.active) || cur.role !== d.role, req.companyId]);
+      (d.active === false && cur.active) || cur.role !== d.role || String(cur.email).toLowerCase() !== String(d.email).toLowerCase(), req.companyId]);
   // senha redefinida pelo administrador: derruba as sessões do usuário (nenhuma sessão é criada em nome dele)
   if (d.password) await setPassword(null, cur.id, req.companyId, d.password);
   const changes = [];
   if (cur.role !== d.role) changes.push(`perfil ${ROLES[cur.role]} → ${ROLES[d.role]}`);
   if (cur.active !== u.active) changes.push(u.active ? 'reativado' : 'desativado');
   if (d.password) changes.push('senha redefinida');
+  if (String(cur.email).toLowerCase() !== String(u.email).toLowerCase()) changes.push(`e-mail ${cur.email} → ${u.email}`);
   await audit(null, req, { entity: 'user', entityId: u.id, action: 'update', summary: `Usuário ${u.name} alterado${changes.length ? `: ${changes.join(', ')}` : ''}` });
   res.json(u);
 });
@@ -81,6 +87,7 @@ r.delete('/:id', async (req, res) => {
   const cur = await one('select * from users where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
   if (cur.role === 'owner' || cur.id === req.user.id) throw new HttpError(400, 'Este usuário não pode ser removido.');
+  if (cur.role === 'admin' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode remover um administrador.');
   await q('delete from users where id = $1', [cur.id]);
   await audit(null, req, { entity: 'user', entityId: cur.id, action: 'delete', summary: `Usuário ${cur.name} removido` });
   res.status(204).end();

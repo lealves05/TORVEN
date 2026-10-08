@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import {
   LayoutDashboard, LifeBuoy, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
   LogOut, Menu, X, Sun, Moon, BadgePercent, ChevronDown, Plus, ShoppingCart, Truck, PackagePlus, Receipt, HardHat,
-  Inbox, HeartHandshake, Headset, Boxes, CircleHelp, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
+  Inbox, HeartHandshake, Headset, MessageCircle, Boxes, CircleHelp, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
 import VoiceCommand from './VoiceCommand';
@@ -66,6 +66,7 @@ export function useNav() {
   ].filter(Boolean);
   const groups = [
     { label: 'Atendimento', icon: Headset, children: [
+      can('requests_manage') && { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
       can('requests_view', 'requests_manage') && feature('comercial') && { to: '/solicitacoes', label: 'Solicitações', icon: Inbox },
       can('orders_create') && can('checkout') && { to: '/venda', label: 'Venda de balcão', icon: ShoppingCart },
       can('followups') && feature('relacionamento') && { to: '/relacionamento', label: 'Retornos e pós-venda', icon: HeartHandshake },

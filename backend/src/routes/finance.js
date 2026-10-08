@@ -5,6 +5,7 @@ import { q, one, tx } from '../db.js';
 import { need } from '../auth.js';
 import { parse, notFound, bad, round2 } from '../util.js';
 import { audit } from '../audit.js';
+import { logEvent, orderFinance, assertNoOpenCharge } from '../domain.js';
 
 const r = Router();
 r.use(need('cash', 'reports'));
@@ -116,21 +117,66 @@ export function parseOfx(text) {
   const tag = (b, t) => { const m = b.match(new RegExp(`<${t}>([^<\\r\\n]*)`, 'i')); return m ? m[1].trim() : null; };
   return blocks.map((b) => ({
     posted_on: toYmd(tag(b, 'DTPOSTED') || ''), amount: brNumber(tag(b, 'TRNAMT') || 'NaN'), fitid: tag(b, 'FITID'),
-    description: [tag(b, 'NAME'), tag(b, 'MEMO')].filter(Boolean).join(' — ') || null,
+    description: ([tag(b, 'NAME'), tag(b, 'MEMO')].filter(Boolean).join(' — ') || '').slice(0, 300) || null,
   }));
 }
 
-/** CSV: data;descrição;valor (aceita ; ou , como separador, cabeçalho opcional, valor em formato brasileiro). */
+/** Divide uma linha de CSV respeitando aspas. */
+function splitCsv(line, sep) {
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') { if (quoted && line[i + 1] === '"') { cur += '"'; i += 1; } else quoted = !quoted; } else if (ch === sep && !quoted) { out.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
+const plain = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/**
+ * CSV de extrato. Reconhece o cabeçalho dos bancos mais comuns (Data / Descrição ou Histórico / Valor, ou Crédito e Débito,
+ * Identificador). Sem cabeçalho: data;descrição;valor. Aceita ; , ou tabulação e valores no formato brasileiro.
+ */
 export function parseCsv(text) {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const sep = (lines[0] || '').split(';').length >= 3 ? ';' : ',';
+  const lines = String(text).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
+  const first = lines.find((l) => /[;,\t]/.test(l)) || '';
+  const sep = ['\t', ';', ','].map((c) => [c, first.split(c).length]).sort((x, y) => y[1] - x[1])[0][0];
+  let col = null;
   const out = [];
   for (const l of lines) {
-    const cols = l.split(sep).map((c) => c.replace(/^"|"$/g, '').trim());
+    const cols = splitCsv(l, sep).map((c) => c.replace(/^"|"$/g, ''));
+    if (!col) {
+      const h = cols.map(plain);
+      const find = (re) => h.findIndex((x) => re.test(x));
+      const date = find(/^data|^dt\b|date/);
+      if (date >= 0 && !toYmd(cols[date])) {
+        col = {
+          date, desc: find(/descri|histor|lancamento|memo|titulo|detalhe/), value: find(/^valor|^amount|quantia/),
+          credit: find(/credito|entrada/), debit: find(/debito|saida/), id: find(/identificador|documento|^id$|fitid/),
+        };
+        continue;
+      }
+    }
+    if (col) {
+      const date = toYmd(cols[col.date] || '');
+      if (!date) continue;
+      let amount;
+      if (col.value >= 0) amount = brNumber(cols[col.value]);
+      else {
+        const cr = col.credit >= 0 && cols[col.credit] ? Math.abs(brNumber(cols[col.credit])) : 0;
+        const db = col.debit >= 0 && cols[col.debit] ? Math.abs(brNumber(cols[col.debit])) : 0;
+        amount = round2((Number.isFinite(cr) ? cr : 0) - (Number.isFinite(db) ? db : 0));
+      }
+      const desc = col.desc >= 0 ? cols[col.desc] : cols.filter((_, i) => ![col.date, col.value, col.credit, col.debit, col.id].includes(i)).join(' ');
+      out.push({ posted_on: date, amount, description: String(desc || '').slice(0, 300) || null, fitid: col.id >= 0 && cols[col.id] ? `csv:${String(cols[col.id]).slice(0, 80)}` : null });
+      continue;
+    }
     const date = toYmd(cols[0]);
-    if (!date) continue; // cabeçalho
+    if (!date) continue; // cabeçalho sem coluna de data reconhecível
     const amount = brNumber(cols[cols.length - 1]);
-    out.push({ posted_on: date, amount, description: cols.slice(1, -1).join(' ') || null, fitid: null });
+    out.push({ posted_on: date, amount, description: cols.slice(1, -1).join(' ').slice(0, 300) || null, fitid: null });
   }
   return out;
 }
@@ -199,10 +245,126 @@ r.get('/statements/:id', async (req, res) => {
     [req.params.id, req.companyId]);
   if (!st) throw notFound('Extrato não encontrado');
   const { rows: lines } = await q(
-    `select l.*, t.description as tx_description, t.category as tx_category from statement_lines l left join transactions t on t.id = l.transaction_id
+    `select l.*, t.description as tx_description, t.category as tx_category, o.number as order_number, o.kind as order_kind
+       from statement_lines l left join transactions t on t.id = l.transaction_id left join orders o on o.id = l.order_id
       where l.statement_id = $1 order by l.posted_on, l.amount`, [st.id]);
-  for (const l of lines) l.candidates = l.status === 'pendente' ? await candidates({ query: q }, l) : [];
+  const open = await openOrders({ query: q }, req.companyId);
+  for (const l of lines) {
+    l.candidates = l.status === 'pendente' ? await candidates({ query: q }, l) : [];
+    l.order_candidates = l.status === 'pendente' ? orderCandidates(l, open) : [];
+  }
   res.json({ ...st, lines });
+});
+
+// ---------- Conferência com as OS ----------
+/** OS e vendas com saldo a receber (para reconhecer créditos do extrato). */
+async function openOrders(db, companyId) {
+  const { rows } = await db.query(
+    `select o.id, o.number, o.kind, o.status, o.total, o.customer_id, c.name as customer_name, o.created_at,
+            round(o.total - coalesce(f.paid, 0) + coalesce(f.refunded, 0) - coalesce(f.receivable, 0), 2) as balance
+       from orders o left join customers c on c.id = o.customer_id
+       left join lateral (
+         select sum(amount) filter (where type='entrada' and paid_at is not null and category <> 'Taxas de cartão') as paid,
+                sum(amount) filter (where type='entrada' and paid_at is null) as receivable,
+                sum(amount) filter (where type='saida' and category = 'Estornos') as refunded
+           from transactions t where t.order_id = o.id) f on true
+      where o.company_id = $1 and o.status <> 'cancelada' and o.created_at > now() - interval '18 months'
+      order by o.created_at desc limit 2000`, [companyId]);
+  return rows.filter((o) => Number(o.balance) > 0.009);
+}
+
+const nameTokens = (n) => plain(n).split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !['ltda', 'eireli', 'me', 'dos', 'das', 'com'].includes(t));
+
+/**
+ * Sugere a OS de um crédito do extrato. Pontos: nº da OS escrito na descrição (forte), nome do cliente
+ * na descrição (comum em PIX/TED), valor igual ao saldo da OS.
+ */
+export function orderCandidates(line, open) {
+  const amount = Number(line.amount);
+  if (!(amount > 0)) return [];
+  const desc = plain(String(line.description || '').slice(0, 300));
+  const nums = new Set([...desc.matchAll(/\b(?:os|ordem|o\.s\.?|no|nº|n°)[\s\-:#nº°.]{0,6}0*(\d{1,6})\b/g)].map((m) => Number(m[1])));
+  const out = [];
+  for (const o of open) {
+    const bal = Number(o.balance);
+    let score = 0;
+    const why = [];
+    if (nums.has(o.number)) { score += 100; why.push(`nº ${o.number} na descrição`); }
+    o.tokens ??= nameTokens(o.customer_name);
+    const toks = o.tokens;
+    const hit = toks.filter((t) => desc.includes(t)).length;
+    if (toks.length && (hit >= 2 || (hit === 1 && toks.length === 1))) { score += 40; why.push('nome do cliente'); }
+    if (Math.abs(bal - amount) < 0.01) { score += 30; why.push('valor igual ao saldo'); } else if (amount < bal) { score += 5; why.push('pagamento parcial'); } else if (!score) continue;
+    if (amount > bal + 0.009) continue; // não cabe no saldo da OS
+    if (score >= 30) out.push({ order_id: o.id, number: o.number, kind: o.kind, customer_name: o.customer_name, balance: bal, score, why });
+  }
+  return out.sort((a, b) => b.score - a.score || b.balance - a.balance).slice(0, 4);
+}
+
+r.post('/lines/:id/receive-order', need('cash'), async (req, res) => {
+  const d = parse(z.object({ order_id: z.string().uuid(), method: s.min(2).max(40).default('pix') }), req.body);
+  if (d.method === 'dinheiro') throw bad('Crédito no banco não é pagamento em dinheiro. Escolha PIX, transferência, cartão ou boleto.');
+  if (!(req.settings.paymentMethods || []).some((m) => m.id === d.method)) throw bad('Forma de pagamento desconhecida.');
+  const out = await tx(async (db) => {
+    const line = await lockLine(db, req);
+    if (line.status !== 'pendente') throw bad('Lançamento já tratado.');
+    if (!(Number(line.amount) > 0)) throw bad('Só créditos (entradas) podem ser recebidos numa OS.');
+    const { rows: [o] } = await db.query("select * from orders where id = $1 and company_id = $2 and status <> 'cancelada' for update", [d.order_id, req.companyId]);
+    if (!o) throw notFound('OS não encontrada');
+    await assertNoOpenCharge(db, o.id);
+    const fin = await orderFinance(db, o.id);
+    const balance = round2(Number(o.total) - (Number(fin.paid) - Number(fin.refunded)) - Number(fin.receivable));
+    const amount = round2(Number(line.amount));
+    if (amount > balance + 0.009) throw bad(`O crédito (${amount.toFixed(2)}) é maior que o saldo da OS nº ${o.number} (${balance.toFixed(2)}).`);
+    const label = o.kind === 'venda' ? `Venda nº ${o.number}` : `OS nº ${o.number}`;
+    const { rows: [t] } = await db.query(
+      `insert into transactions (company_id, type, category, description, amount, method, due_date, paid_at, account_id, order_id, customer_id, auto, created_by, origin)
+       values ($1,'entrada',$2,$3,$4,$5,$6,$7::timestamptz,$8,$9,$10,true,$11,'extrato_os') returning *`,
+      [req.companyId, o.kind === 'venda' ? 'Venda de materiais' : 'Ordens de serviço', `${label} — identificado no extrato`, amount, d.method,
+        line.posted_on, `${line.posted_on}T12:00:00-03:00`, line.account_id, o.id, o.customer_id, req.user.id]);
+    await reconcile(db, req, line, t);
+    await logEvent(db, o.id, { type: 'pagamento', message: `Pagamento de R$ ${amount.toFixed(2).replace('.', ',')} identificado no extrato do banco (${line.posted_on.split('-').reverse().join('/')})`, userId: req.user.id });
+    await audit(db, req, { entity: 'payment', entityId: t.id, action: 'reconcile_order', summary: `Crédito do extrato recebido na ${label}: ${amount.toFixed(2)}` });
+    return { transaction_id: t.id, order_number: o.number, balance: round2(balance - amount) };
+  });
+  res.status(201).json(out);
+});
+
+/** Resumo da conferência do extrato com as OS: o que entrou e é de OS, o que tem sugestão, e o que foi lançado e não apareceu no banco. */
+r.get('/statements/:id/orders-check', async (req, res) => {
+  const st = await one('select * from bank_statements where id = $1 and company_id = $2', [req.params.id, req.companyId]);
+  if (!st) throw notFound('Extrato não encontrado');
+  const { rows: lines } = await q(
+    `select l.*, o.number as order_number, o.kind as order_kind, t.order_id as tx_order_id from statement_lines l
+       left join transactions t on t.id = l.transaction_id left join orders o on o.id = coalesce(l.order_id, t.order_id)
+      where l.statement_id = $1 and l.amount > 0 order by l.posted_on`, [st.id]);
+  const open = await openOrders({ query: q }, req.companyId);
+  const linked = [];
+  const suggested = [];
+  const unknown = [];
+  for (const l of lines) {
+    if (l.order_number) linked.push({ id: l.id, posted_on: l.posted_on, amount: Number(l.amount), description: l.description, order_number: l.order_number, order_kind: l.order_kind });
+    else if (l.status === 'pendente') {
+      const c = orderCandidates(l, open);
+      if (c[0]?.score >= 60) suggested.push({ id: l.id, posted_on: l.posted_on, amount: Number(l.amount), description: l.description, best: c[0] });
+      else unknown.push({ id: l.id, posted_on: l.posted_on, amount: Number(l.amount), description: l.description });
+    }
+  }
+  // recebimentos de OS fora do dinheiro, no período do extrato, que não foram encontrados no banco
+  const { rows: missing } = await q(
+    `select t.id, t.amount, t.method, t.paid_at, o.number as order_number, o.kind as order_kind, c.name as customer_name
+       from transactions t join orders o on o.id = t.order_id left join customers c on c.id = o.customer_id
+      where t.company_id = $1 and t.type = 'entrada' and t.paid_at is not null and t.reconciled_at is null
+        and coalesce(t.method, '') not in ('dinheiro', '') and t.category <> 'Taxas de cartão'
+        and (t.account_id = $2 or t.account_id is null)
+        and t.paid_at::date between $3::date - 1 and $4::date + 1
+      order by t.paid_at limit 500`, [req.companyId, st.account_id, st.period_start, st.period_end]);
+  const sum = (l) => round2(l.reduce((a, x) => a + Number(x.amount), 0));
+  res.json({
+    period: { start: st.period_start, end: st.period_end },
+    totals: { credits: sum(lines), linked: sum(linked), suggested: sum(suggested), unknown: sum(unknown), missing: sum(missing) },
+    linked, suggested, unknown, missing: missing.map((m) => ({ ...m, amount: Number(m.amount) })),
+  });
 });
 
 async function lockLine(db, req) {
@@ -216,7 +378,8 @@ async function reconcile(db, req, line, t) {
   await db.query(
     `update transactions set paid_at = coalesce(paid_at, $2::timestamptz), account_id = $3, reconciled_at = now(), statement_line_id = $4 where id = $1`,
     [t.id, at, line.account_id, line.id]);
-  await db.query(`update statement_lines set status = 'conciliado', transaction_id = $2, reconciled_by = $3, reconciled_at = now() where id = $1`, [line.id, t.id, req.user.id]);
+  await db.query(`update statement_lines set status = 'conciliado', transaction_id = $2, order_id = coalesce($4, order_id), reconciled_by = $3, reconciled_at = now() where id = $1`,
+    [line.id, t.id, req.user.id, t.order_id || null]);
 }
 
 r.post('/lines/:id/match', need('cash'), async (req, res) => {
@@ -241,9 +404,12 @@ r.post('/lines/:id/create', need('cash'), async (req, res) => {
   await tx(async (db) => {
     const line = await lockLine(db, req);
     if (line.status !== 'pendente') throw bad('Lançamento já tratado.');
+    for (const [table, key] of [['customers', 'customer_id'], ['suppliers', 'supplier_id']]) {
+      if (d[key] && !(await db.query(`select 1 from ${table} where id = $1 and company_id = $2`, [d[key], req.companyId])).rows[0]) throw notFound('Cadastro não encontrado');
+    }
     const { rows: [t] } = await db.query(
-      `insert into transactions (company_id, type, category, description, amount, method, due_date, paid_at, account_id, customer_id, supplier_id, created_by)
-       values ($1,$2,$3,$4,$5,'transferencia',$6,$7::timestamptz,$8,$9,$10,$11) returning *`,
+      `insert into transactions (company_id, type, category, description, amount, method, due_date, paid_at, account_id, customer_id, supplier_id, created_by, origin)
+       values ($1,$2,$3,$4,$5,'transferencia',$6,$7::timestamptz,$8,$9,$10,$11,'extrato') returning *`,
       [req.companyId, Number(line.amount) > 0 ? 'entrada' : 'saida', d.category, d.description || line.description, Math.abs(Number(line.amount)),
         line.posted_on, `${line.posted_on}T12:00:00-03:00`, line.account_id, d.customer_id || null, d.supplier_id || null, req.user.id]);
     await reconcile(db, req, line, t);
@@ -266,8 +432,16 @@ r.post('/lines/:id/undo', need('cash'), async (req, res) => {
   await tx(async (db) => {
     const line = await lockLine(db, req);
     if (line.status === 'pendente') throw bad('Nada a desfazer.');
-    if (line.transaction_id) await db.query('update transactions set reconciled_at = null, statement_line_id = null where id = $1', [line.transaction_id]);
-    await db.query(`update statement_lines set status = 'pendente', transaction_id = null, reconciled_by = null, reconciled_at = null where id = $1`, [line.id]);
+    if (line.transaction_id) {
+      const { rows: [t] } = await db.query('select * from transactions where id = $1 and company_id = $2 for update', [line.transaction_id, req.companyId]);
+      if (t?.origin) {
+        // lançamento que nasceu do extrato: desfazer apaga o lançamento (e o pagamento da OS), senão ficaria em dobro
+        await db.query('update statement_lines set transaction_id = null where id = $1', [line.id]);
+        await db.query('delete from transactions where id = $1', [t.id]);
+        if (t.order_id) await logEvent(db, t.order_id, { type: 'pagamento', message: `Pagamento de R$ ${Number(t.amount).toFixed(2).replace('.', ',')} identificado no extrato foi desfeito`, userId: req.user.id });
+      } else if (t) await db.query('update transactions set reconciled_at = null, statement_line_id = null where id = $1', [t.id]);
+    }
+    await db.query(`update statement_lines set status = 'pendente', transaction_id = null, order_id = null, reconciled_by = null, reconciled_at = null where id = $1`, [line.id]);
     await audit(db, req, { entity: 'payment', entityId: line.transaction_id, action: 'reconcile_undo', summary: `Conciliação desfeita (${line.amount} em ${line.posted_on})` });
   });
   res.json({ ok: true });

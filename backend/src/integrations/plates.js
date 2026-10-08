@@ -1,6 +1,8 @@
 // Consulta de placa (serviço pago, cadastrado pela empresa em Configurações › Integrações).
 // Devolve só dados do VEÍCULO (marca, modelo, ano, cor, município/UF). Dados do proprietário não são obtidos (LGPD):
 // nome e telefone do cliente são digitados no cadastro simples.
+import dns from 'node:dns';
+import net from 'node:net';
 import { HttpError } from '../util.js';
 
 export const PLATE_RE = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
@@ -52,13 +54,39 @@ export const PLATE_COMMON = [
   { key: 'price', label: 'Preço por consulta (informativo, R$)', type: 'number', default: 0, min: 0, max: 100, step: 0.01 },
 ];
 
-const httpsOnly = (u) => {
+/** Endereço de rede interna/reservada (IPv4, IPv6 e IPv4 dentro de IPv6). */
+export function privateIp(ip) {
+  let a = String(ip || '').toLowerCase().replace(/^\[|\]$/g, '');
+  const mapped = a.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) a = mapped[1];
+  if (net.isIPv4(a)) {
+    const [x, y] = a.split('.').map(Number);
+    return x === 0 || x === 10 || x === 127 || (x === 100 && y >= 64 && y <= 127) || (x === 169 && y === 254) || (x === 172 && y >= 16 && y <= 31)
+      || (x === 192 && y === 168) || (x === 192 && y === 0) || (x === 198 && (y === 18 || y === 19)) || x >= 224;
+  }
+  if (net.isIPv6(a)) return a === '::' || a === '::1' || /^(fc|fd|fe8|fe9|fea|feb|ff)/.test(a) || a.startsWith('::ffff:') || a.startsWith('64:ff9b:');
+  return false;
+}
+
+/** Só https e só destino público: confere o nome e os IPs para onde ele aponta (bloqueia acesso à rede interna). */
+async function httpsOnly(u) {
   let x;
   try { x = new URL(u); } catch { throw new HttpError(400, 'Endereço da consulta inválido.'); }
   if (x.protocol !== 'https:') throw new HttpError(400, 'Use um endereço https:// para a consulta de placa.');
-  if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(x.hostname) || x.hostname.endsWith('.internal')) throw new HttpError(400, 'Endereço da consulta não permitido.');
+  if (x.username || x.password) throw new HttpError(400, 'Endereço da consulta não permitido.');
+  const host = x.hostname.replace(/^\[|\]$/g, '');
+  const denied = () => new HttpError(400, 'Endereço da consulta não permitido.');
+  if (/^(localhost)$/i.test(host) || /\.(internal|local|localhost)$/i.test(host) || privateIp(host)) throw denied();
+  if (!net.isIP(host)) {
+    let addrs = [];
+    try { addrs = await dns.promises.lookup(host, { all: true }); } catch (e) {
+      if (e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN') throw new HttpError(400, 'Endereço da consulta não encontrado.');
+      addrs = []; // ambiente sem resolução de nomes: fica a conferência pelo nome
+    }
+    if (addrs.some((r0) => privateIp(r0.address))) throw denied();
+  }
   return x.toString();
-};
+}
 
 async function fetchJson(url, init, timeoutMs = 12000) {
   let res;
@@ -95,7 +123,7 @@ export async function lookupPlate(provider, cfg, secrets, plate) {
   if (provider === 'personalizado') {
     const token = secrets.token || '';
     const fill = (t) => String(t || '').replaceAll('{placa}', plate).replaceAll('{token}', encodeURIComponent(token));
-    const url = httpsOnly(fill(cfg.url));
+    const url = await httpsOnly(fill(cfg.url));
     const headers = { accept: 'application/json' };
     if (cfg.header && token) headers[String(cfg.header).trim()] = `${cfg.header_prefix || ''}${token}`;
     const init = { method: cfg.method === 'POST' ? 'POST' : 'GET', headers };

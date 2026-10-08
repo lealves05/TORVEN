@@ -31,6 +31,7 @@ export const FEATURES = {
   fiscal: { label: 'Documentos fiscais', routes: ['/invoices', '/company/fiscal'] },
   relatorios: { label: 'Relatórios e indicadores', routes: ['/reports'] },
   exportacao: { label: 'Exportação de dados', routes: ['/export'] },
+  whatsapp: { label: 'Atendimento pelo WhatsApp', routes: ['/whatsapp'] },
 };
 /** Rotas liberadas mesmo com a empresa bloqueada (regularização e leitura mínima). */
 const BLOCKED_ALLOWED = ['/billing'];
@@ -203,6 +204,9 @@ export async function verifyHubRequest(req, _res, next) {
   const body = req.rawBody ? req.rawBody.toString('utf8') : '';
   const want = sign(cfg.secret, ts, req.method, req.url, body);
   if (!crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) throw deny();
+  // a mesma chamada assinada não vale duas vezes (repetição dentro da janela de 5 min)
+  const { hit } = await import('./security.js');
+  if ((await hit(`hub-sig:${sig}`, 1, SKEW * 2)).blocked) throw deny();
   next();
 }
 

@@ -1,7 +1,7 @@
 // Gestão financeira: contas e saldos, transferências, conciliação bancária, fluxo de caixa projetado e DRE gerencial.
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, ArrowLeftRight, Upload, Landmark, Wand2, CheckCircle2, Undo2, EyeOff, FilePlus2, Wallet } from 'lucide-react';
+import { Plus, ArrowLeftRight, Upload, Landmark, Wand2, CheckCircle2, Undo2, EyeOff, FilePlus2, Wallet, Wrench, AlertTriangle, SearchCheck } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { api } from '../lib/api';
 import { money, fmt } from '../lib/format';
@@ -128,15 +128,21 @@ function Reconciliation() {
   const [create, setCreate] = useState(null);
   const [ignore, setIgnore] = useState(null);
   const [reason, setReason] = useState('');
+  const [receive, setReceive] = useState(null);
+  const [check, setCheck] = useState(null);
+  const [filter, setFilter] = useState('todos');
   const loadList = useCallback(() => api.get('/finance/statements').then(setStatements).catch(() => setStatements([])), []);
-  const open = useCallback((id) => api.get(`/finance/statements/${id}`).then(setCurrent), []);
+  const open = useCallback((id) => {
+    api.get(`/finance/statements/${id}`).then(setCurrent);
+    api.get(`/finance/statements/${id}/orders-check`).then(setCheck).catch(() => setCheck(null));
+  }, []);
   useEffect(() => { loadList(); api.get('/finance/accounts').then((a) => setAccounts(a.filter((x) => x.active))).catch(() => {}); }, [loadList]);
   const act = async (fn, msg) => { const r = await run(fn, msg); if (r !== FAIL) { open(current.id); loadList(); } };
   if (!statements) return <Loading />;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-soft">Importe o extrato (OFX do internet banking ou CSV data;descrição;valor) e confirme cada lançamento.</p>
+        <p className="text-sm text-ink-soft">Importe o extrato do banco (arquivo OFX ou CSV). O sistema confere cada entrada com as ordens de serviço e mostra o que é de cada OS.</p>
         <button className="btn-primary" onClick={() => setImp(true)}><Upload className="h-4 w-4" /> Importar extrato</button>
       </div>
       <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
@@ -156,19 +162,35 @@ function Reconciliation() {
                 <div className="font-semibold">{current.account_name} · {current.filename || current.format.toUpperCase()}</div>
                 <button className="btn-outline h-8 text-xs" disabled={busy} onClick={() => act(() => api.post(`/finance/statements/${current.id}/auto`), 'Conciliação automática concluída')}><Wand2 className="h-3.5 w-3.5" /> Conciliar automaticamente</button>
               </div>
-              <ul className="divide-y divide-line text-sm">
-                {current.lines.map((l) => (
+              {check && <OrdersCheck check={check} onFilter={setFilter} />}
+              <div className="flex flex-wrap gap-1.5 border-b border-line px-4 py-2" role="group" aria-label="Filtrar lançamentos">
+                {[['todos', 'Todos'], ['pendentes', 'Pendentes'], ['os', 'Pagamentos de OS'], ['sugeridos', 'Prováveis de OS']].map(([k, label]) => (
+                  <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}
+                    className={cx('rounded-full border px-3 py-1 text-xs', filter === k ? 'border-primary bg-primary/10 text-primary' : 'border-line text-ink-soft')}>{label}</button>
+                ))}
+              </div>
+              <ul className="divide-y divide-line text-sm" id="linhas-extrato">
+                {current.lines.filter((l) => filter === 'todos' || (filter === 'pendentes' && l.status === 'pendente')
+                  || (filter === 'os' && l.order_number) || (filter === 'sugeridos' && l.status === 'pendente' && l.order_candidates?.length)).map((l) => (
                   <li key={l.id} className="p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="w-16 text-xs tabular-nums text-ink-faint">{fmt(l.posted_on, 'dd/MM')}</span>
                       <span className="min-w-0 flex-1 truncate">{l.description || '—'}</span>
                       <span className={cx('font-medium tabular-nums', l.amount < 0 ? 'text-red-600' : 'text-emerald-700')}>{money(l.amount)}</span>
-                      {l.status === 'conciliado' && <span className="chip bg-emerald-500/15 text-emerald-700"><CheckCircle2 className="h-3 w-3" /> {l.tx_description || l.tx_category}</span>}
+                      {l.status === 'conciliado' && <span className="chip bg-emerald-500/15 text-emerald-700"><CheckCircle2 className="h-3 w-3" /> {l.order_number ? `${l.order_kind === 'venda' ? 'Venda' : 'OS'} nº ${l.order_number}` : l.tx_description || l.tx_category}</span>}
                       {l.status === 'ignorado' && <span className="chip bg-muted text-ink-faint">Ignorado</span>}
                       {l.status !== 'pendente' && <button className="btn-ghost btn-icon h-7" title="Desfazer" aria-label="Desfazer" onClick={() => act(() => api.post(`/finance/lines/${l.id}/undo`), 'Desfeito')}><Undo2 className="h-3.5 w-3.5" /></button>}
                     </div>
                     {l.status === 'pendente' && (
-                      <div className="mt-2 space-y-1 pl-16">
+                      <div className="mt-2 space-y-1 sm:pl-16">
+                        {l.order_candidates?.map((c) => (
+                          <div key={c.order_id} className="flex flex-wrap items-center gap-2 rounded-app-sm border border-primary/30 bg-primary/5 px-2 py-1.5 text-xs">
+                            <Wrench className="h-3.5 w-3.5 text-primary" />
+                            <span className="min-w-0 flex-1"><b>{c.kind === 'venda' ? 'Venda' : 'OS'} nº {c.number}</b> · {c.customer_name || 'sem cliente'} · saldo {money(c.balance)}
+                              <span className="text-ink-faint"> · {c.why.join(', ')}</span></span>
+                            <button className="btn-primary h-7 text-xs" disabled={busy} onClick={() => setReceive({ line: l, c })}>Receber nesta OS</button>
+                          </div>
+                        ))}
                         {l.candidates.map((c) => (
                           <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-app-sm bg-muted/50 px-2 py-1.5 text-xs">
                             <span className="flex-1">{c.description || c.category}{c.customer_name && ` · ${c.customer_name}`}{c.supplier_name && ` · ${c.supplier_name}`}{c.order_number && ` · OS ${c.order_number}`}
@@ -197,6 +219,7 @@ function Reconciliation() {
           <Input label="Motivo" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: estorno automático do banco, lançamento duplicado" />
         </Modal>
       )}
+      {receive && <ReceiveInOrder receive={receive} settings={settings} onClose={() => setReceive(null)} onDone={() => { setReceive(null); open(current.id); loadList(); }} />}
       {create && <CreateFromLine line={create} settings={settings} onClose={() => setCreate(null)} onDone={() => { setCreate(null); open(current.id); loadList(); }} />}
     </div>
   );
@@ -225,7 +248,11 @@ function ImportModal({ accounts, onClose, onDone }) {
       <div className="space-y-3 text-sm">
         <Select label="Conta" value={account} onChange={(e) => setAccount(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>
         <input type="file" accept=".ofx,.csv,.txt" onChange={pick} aria-label="Arquivo do extrato" />
-        <p className="text-xs text-ink-faint">Lançamentos já importados (mesmo identificador do banco) são ignorados automaticamente.</p>
+        <div className="rounded-app-sm bg-muted/60 p-2 text-xs text-ink-soft">
+          <b>Como pegar o arquivo:</b> no aplicativo ou site do banco, abra o extrato, escolha o período e toque em <i>Exportar</i> ou <i>Baixar</i>.
+          Escolha o formato <b>OFX</b> (o melhor) ou <b>CSV</b>/planilha. Funciona com Itaú, Bradesco, Banco do Brasil, Caixa, Santander, Nubank, Inter, Sicoob e outros.
+        </div>
+        <p className="text-xs text-ink-faint">Se o arquivo tiver lançamentos já importados, eles são pulados sozinhos.</p>
       </div>
     </Modal>
   );
@@ -242,6 +269,74 @@ function CreateFromLine({ line, settings, onClose, onDone }) {
       <div className="grid gap-3">
         <Select label="Categoria" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{[...new Set(cats)].map((c) => <option key={c}>{c}</option>)}</Select>
         <Input label="Descrição" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
+      </div>
+    </Modal>
+  );
+}
+
+/** Quadro "Conferência com as OS" do extrato aberto. */
+function OrdersCheck({ check, onFilter }) {
+  const [show, setShow] = useState(false);
+  const t = check.totals;
+  const tiles = [
+    { k: 'os', label: 'Pagamentos de OS identificados', value: t.linked, n: check.linked.length, cls: 'text-emerald-700', icon: CheckCircle2 },
+    { k: 'sugeridos', label: 'Prováveis pagamentos de OS', value: t.suggested, n: check.suggested.length, cls: 'text-primary', icon: SearchCheck },
+    { k: 'pendentes', label: 'Entradas sem OS', value: t.unknown, n: check.unknown.length, cls: 'text-ink-soft', icon: Landmark },
+  ];
+  return (
+    <section className="space-y-2 border-b border-line bg-muted/30 px-4 py-3" aria-label="Conferência com as OS">
+      <div className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Conferência com as ordens de serviço</div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {tiles.map((x) => (
+          <button key={x.k} type="button" onClick={() => onFilter(x.k)} className="rounded-app-sm border border-line bg-surface p-2 text-left hover:border-primary">
+            <div className="flex items-center gap-1.5 text-xs text-ink-faint"><x.icon className="h-3.5 w-3.5" />{x.label}</div>
+            <div className={cx('text-lg font-semibold tabular-nums', x.cls)}>{money(x.value)}</div>
+            <div className="text-[11px] text-ink-faint">{x.n} lançamento(s)</div>
+          </button>
+        ))}
+        <button type="button" onClick={() => setShow(!show)} aria-expanded={show}
+          className={cx('rounded-app-sm border bg-surface p-2 text-left', check.missing.length ? 'border-amber-500/60 hover:border-amber-500' : 'border-line')}>
+          <div className="flex items-center gap-1.5 text-xs text-ink-faint"><AlertTriangle className="h-3.5 w-3.5" />Recebido no sistema e não achado no banco</div>
+          <div className={cx('text-lg font-semibold tabular-nums', check.missing.length ? 'text-amber-700' : 'text-ink-soft')}>{money(t.missing)}</div>
+          <div className="text-[11px] text-ink-faint">{check.missing.length ? `${check.missing.length} recebimento(s) · toque para ver` : 'tudo certo'}</div>
+        </button>
+      </div>
+      {show && check.missing.length > 0 && (
+        <ul className="divide-y divide-line rounded-app-sm border border-amber-500/40 bg-surface text-xs">
+          {check.missing.map((m) => (
+            <li key={m.id} className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+              <span className="w-12 tabular-nums text-ink-faint">{fmt(m.paid_at, 'dd/MM')}</span>
+              <b>{m.order_kind === 'venda' ? 'Venda' : 'OS'} nº {m.order_number}</b>
+              <span className="min-w-0 flex-1 truncate">{m.customer_name || '—'} · {m.method}</span>
+              <span className="tabular-nums">{money(m.amount)}</span>
+            </li>
+          ))}
+          <li className="px-2 py-1.5 text-ink-faint">Confira se o dinheiro caiu em outra conta, em outro dia, ou se o recebimento foi lançado errado na OS.</li>
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ReceiveInOrder({ receive, settings, onClose, onDone }) {
+  const [run, busy] = useAction();
+  const methods = (settings.paymentMethods || []).filter((m) => m.id !== 'dinheiro' && m.active !== false);
+  const [method, setMethod] = useState(methods.find((m) => m.id === 'pix')?.id || methods[0]?.id || 'pix');
+  const { line, c } = receive;
+  const go = async () => {
+    const r = await run(() => api.post(`/finance/lines/${line.id}/receive-order`, { order_id: c.order_id, method }), `Recebido na ${c.kind === 'venda' ? 'venda' : 'OS'} nº ${c.number}`);
+    if (r !== FAIL) onDone();
+  };
+  const rest = Math.max(0, Number(c.balance) - Number(line.amount));
+  return (
+    <Modal open onClose={onClose} size="sm" title={`Receber na ${c.kind === 'venda' ? 'venda' : 'OS'} nº ${c.number}`} subtitle={`${fmt(line.posted_on)} · ${money(line.amount)}`}
+      footer={<><button className="btn-ghost" onClick={onClose}>Voltar</button><button className="btn-primary" disabled={busy} onClick={go}>Confirmar recebimento</button></>}>
+      <div className="space-y-3 text-sm">
+        <p>O valor que entrou no banco será lançado como pagamento da {c.kind === 'venda' ? 'venda' : 'OS'} de <b>{c.customer_name || 'cliente'}</b> e já fica conferido.</p>
+        <Select label="Forma de pagamento" value={method} onChange={(e) => setMethod(e.target.value)}>
+          {methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </Select>
+        <p className="text-xs text-ink-faint">{rest > 0.009 ? `Depois disso ainda faltam ${money(rest)} para quitar.` : 'Com isso a OS fica quitada.'}</p>
       </div>
     </Modal>
   );

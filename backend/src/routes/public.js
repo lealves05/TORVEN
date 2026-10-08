@@ -55,6 +55,7 @@ r.post('/quote/:token/:action', async (req, res) => {
   const status = await tx(async (db) => {
     const { rows: [qt] } = await db.query('select * from quotes where public_token = $1 for update', [req.params.token]);
     if (!qt) throw notFound();
+    await companyInfo(qt.company_id); // links públicos desligados nas configurações: recusa também a resposta
     if (!['enviado', 'aguardando_decisao'].includes(qt.status)) throw bad('Este orçamento não está mais aguardando resposta.');
     if (qt.valid_until && qt.valid_until < new Date().toISOString().slice(0, 10)) throw bad('Orçamento vencido. Fale com a empresa.');
     const decision = approve ? 'aprovado' : 'recusado';
@@ -94,6 +95,7 @@ r.post('/order/:token/approve', async (req, res) => {
   await tx(async (db) => {
     const { rows: [o] } = await db.query('select * from orders where public_token = $1 for update', [req.params.token]);
     if (!o) throw notFound();
+    await companyInfo(o.company_id);
     if (o.status !== 'aguardando_aprovacao') throw bad('Esta OS não está aguardando aprovação.');
     await db.query("update orders set status = 'aprovada', updated_at = now() where id = $1", [o.id]);
     await logEvent(db, o.id, { type: 'status', from: o.status, to: 'aprovada', isPublic: true,

@@ -5,6 +5,7 @@ import { q, one } from '../db.js';
 import { can } from '../auth.js';
 import { parse, notFound, bad, HttpError } from '../util.js';
 import { audit } from '../audit.js';
+import { scopeWhere } from './orders.js';
 
 const r = Router();
 const TABLE = { equipment: 'equipment', request: 'service_requests', quote: 'quotes', order: 'orders', customer: 'customers', warranty: 'warranty_claims', inspection: 'order_inspections', purchase: 'purchases', purchase_order: 'purchase_orders' };
@@ -22,12 +23,26 @@ async function checkParent(req, entity, id) {
   if (!TABLE[entity]) throw bad('Tipo de anexo inválido.');
   const row = await one(`select id from ${TABLE[entity]} where id = $1 and company_id = $2`, [id, req.companyId]);
   if (!row) throw notFound('Registro não encontrado');
+  await assertOrderScope(req, entity, id);
+}
+
+/** Técnico que só vê as próprias OS também só vê (e anexa) fotos dessas OS. */
+async function assertOrderScope(req, entity, id) {
+  if (!['order', 'inspection'].includes(entity)) return;
+  const params = [id, req.companyId];
+  const scope = scopeWhere(req, params);
+  if (!scope) return;
+  const sql = entity === 'order'
+    ? `select 1 from orders o where o.id = $1 and o.company_id = $2 ${scope}`
+    : `select 1 from order_inspections i join orders o on o.id = i.order_id where i.id = $1 and o.company_id = $2 ${scope}`;
+  if (!(await one(sql, params))) throw notFound('Registro não encontrado');
 }
 
 r.get('/', async (req, res) => {
   const { entity, entity_id } = req.query;
   if (!TABLE[entity] || !entity_id) throw bad('Informe entity e entity_id.');
   if (!allowed(req, READ[entity])) throw new HttpError(403, 'Seu perfil de acesso não permite esta ação.');
+  await checkParent(req, entity, entity_id); // registro de outra empresa: 404 (e escopo da OS para técnico)
   const { rows } = await q(
     `select a.id, a.entity, a.entity_id, a.filename, a.mime, a.size, a.caption, a.authorized, a.created_at, u.name as created_by_name
        from attachments a left join users u on u.id = a.created_by
@@ -39,6 +54,7 @@ r.get('/:id', async (req, res) => {
   const a = await one('select * from attachments where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!a) throw notFound();
   if (!allowed(req, READ[a.entity])) throw new HttpError(403, 'Seu perfil de acesso não permite esta ação.');
+  await assertOrderScope(req, a.entity, a.entity_id);
   if (req.query.raw === '1') {
     res.setHeader('Content-Type', a.mime);
     res.setHeader('Cache-Control', 'private, max-age=3600');
@@ -81,6 +97,7 @@ r.delete('/:id', async (req, res) => {
   const a = await one('select id, entity, entity_id, filename from attachments where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!a) throw notFound();
   if (!allowed(req, WRITE[a.entity])) throw new HttpError(403, 'Seu perfil de acesso não permite esta ação.');
+  await assertOrderScope(req, a.entity, a.entity_id);
   await q('delete from attachments where id = $1', [a.id]);
   await audit(null, req, { entity: 'attachment', entityId: a.id, action: 'delete', summary: `Anexo "${a.filename}" removido (${a.entity})`, data: { entity: a.entity, entity_id: a.entity_id } });
   res.status(204).end();

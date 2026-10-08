@@ -40,6 +40,7 @@ import { edgeProxyIp } from './edgeProxy.js';
 import integrationRoutes from './routes/integrations.js';
 import vehicleRoutes from './routes/vehicles.js';
 import terminalChargeRoutes from './routes/terminalCharges.js';
+import whatsappRoutes, { webhook as whatsappWebhook } from './routes/whatsapp.js';
 
 export function createApp() {
   const app = express();
@@ -56,15 +57,17 @@ export function createApp() {
   app.use(cors({
     origin(origin, cb) {
       if (!origin) return cb(null, false);
-      const ok = origins.includes(origin) || (!prod && (origins.length === 0 || /^http:\/\/localhost(:\d+)?$/.test(origin)));
+      const ok = origins.includes(origin) || (!prod && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
       cb(null, ok); // origem desconhecida: sem cabeçalho de permissão (o navegador barra); a rota continua exigindo login
     },
   }));
   // respostas da API não ficam em cache (dados privados, tokens, exportações) — F11
   app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); res.set('Pragma', 'no-cache'); next(); });
   app.use((_req, res, next) => { res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); next(); }); // respostas da API (o site define as suas)
+  // webhooks externos: limite pequeno e corpo bruto para conferir a assinatura (antes do leitor geral)
+  app.use('/api/webhooks', express.json({ limit: '256kb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
   // corpo bruto para conferir a assinatura das chamadas da central da plataforma
-  app.use(express.json({ limit: '3mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/')) req.rawBody = buf; } }));
+  app.use(express.json({ limit: '3mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/') || req.originalUrl?.includes('/api/webhooks/')) req.rawBody = buf; } }));
 
   app.get('/', (_req, res) => res.json({ name: 'TORVEN API', status: 'ok' }));
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
@@ -72,6 +75,7 @@ export function createApp() {
   app.use('/api/auth', authRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/platform/v1', platformApi); // central da plataforma (chamadas assinadas)
+  app.use('/api/webhooks/whatsapp', whatsappWebhook); // Meta (assinatura X-Hub-Signature-256 conferida por empresa)
 
   const api = express.Router();
   api.use(requireAuth);
@@ -108,6 +112,7 @@ export function createApp() {
   api.use('/integrations', integrationRoutes);   // consulta de placa e maquininhas (configuração)
   api.use('/vehicles', vehicleRoutes);           // placa → cadastro / consulta / cadastro simples
   api.use('/terminal-charges', terminalChargeRoutes); // cobrança da OS na maquininha
+  api.use('/whatsapp', whatsappRoutes);          // atendimento e agente do WhatsApp
   api.use('/', workspaceRoutes);
   app.use('/api', api);
 

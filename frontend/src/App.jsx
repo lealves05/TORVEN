@@ -33,6 +33,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Account = lazy(() => import('./pages/Account'));
 const Support = lazy(() => import('./pages/Support'));
 const Requests = lazy(() => import('./pages/Requests'));
+const WhatsApp = lazy(() => import('./pages/WhatsApp'));
 const RequestNew = lazy(() => import('./pages/Requests').then((m) => ({ default: m.RequestNew })));
 const RequestDetail = lazy(() => import('./pages/Requests').then((m) => ({ default: m.RequestDetail })));
 const Audit = lazy(() => import('./pages/Audit'));
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="os/nova" element={<Guard perms={['orders_create']}><OrderNew /></Guard>} />
             <Route path="os/:id" element={<Guard perms={['orders_view', 'orders_create']}><OrderDetail /></Guard>} />
             <Route path="venda" element={<Guard perms={['checkout']}><QuickSale /></Guard>} />
+            <Route path="whatsapp" element={<Guard perms={['requests_manage']}><WhatsApp /></Guard>} />
             <Route path="solicitacoes" element={<Guard perms={['requests_view', 'requests_manage']}><Requests /></Guard>} />
             <Route path="solicitacoes/nova" element={<Guard perms={['requests_manage']}><RequestNew /></Guard>} />
             <Route path="solicitacoes/:id" element={<Guard perms={['requests_view', 'requests_manage']}><RequestDetail /></Guard>} />

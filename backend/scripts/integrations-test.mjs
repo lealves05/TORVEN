@@ -7,13 +7,24 @@ import http from 'node:http';
 if (!/test/.test(process.env.DATABASE_URL || '')) { console.error('Use um banco de teste (nome contendo "test")'); process.exit(1); }
 
 // ---------- provedores falsos ----------
-const calls = { plate: 0, mpCreate: 0, mpGet: 0, ipLinks: 0, ipCheck: 0 };
+const calls = { plate: 0, mpCreate: 0, mpGet: 0, ipLinks: 0, ipCheck: 0, wa: [], ai: 0 };
 const orders = new Map(); // id → { amount, status, gets, ref, pay }
 const fake = http.createServer((req, res) => {
   let body = ''; req.on('data', (c) => { body += c; });
   req.on('end', () => {
     const send = (st, obj) => { res.writeHead(st, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
     const u = new URL(req.url, 'http://x');
+    // WhatsApp (Graph da Meta) e IA (Anthropic) falsos
+    let w = u.pathname.match(/^\/graph\/(\d+)\/messages$/);
+    if (w) {
+      if (req.headers.authorization !== 'Bearer wa-token') return send(401, { error: { message: 'token' } });
+      const b = JSON.parse(body); calls.wa.push({ to: b.to, text: b.text?.body });
+      return send(200, { messages: [{ id: `wamid.${calls.wa.length}` }] });
+    }
+    if (u.pathname === '/anthropic') {
+      calls.ai += 1;
+      return send(200, { content: [{ type: 'text', text: JSON.stringify({ intent: 'status', plate: null, date: null, time: null, problem: null, name: null }) }] });
+    }
     // API Placas
     let m = u.pathname.match(/^\/consulta\/([A-Z0-9]+)\/(.+)$/);
     if (m) {
@@ -52,6 +63,7 @@ const fake = http.createServer((req, res) => {
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
 const FAKE = `http://127.0.0.1:${fake.address().port}`;
 process.env.APIPLACAS_URL = FAKE; process.env.MERCADOPAGO_API_URL = FAKE; process.env.INFINITEPAY_API_URL = FAKE;
+process.env.WHATSAPP_GRAPH_URL = `${FAKE}/graph`; process.env.ANTHROPIC_URL = `${FAKE}/anthropic`;
 
 const { pool } = await import('../src/db.js');
 await pool.query('drop schema public cascade; create schema public;');
@@ -409,6 +421,152 @@ await check('várias fotos na OS: até 40 por OS, depois recusa', async () => {
   const over = await api('POST', '/attachments', { entity: 'order', entity_id: o.data.id, filename: 'x.png', mime: 'image/png', data: png, authorized: true }, T);
   assert.equal(over.status, 400); assert.match(over.data.error, /40/);
   assert.equal((await api('GET', `/attachments?entity=order&entity_id=${o.data.id}`, null, T2)).data.length || 0, 0);
+});
+
+// ---------- WhatsApp: agente, webhook assinado, privacidade, aprovação ----------
+const crypto = await import('node:crypto');
+const APP_SECRET = 'segredo-do-app-123';
+const PID = '1234567890';
+const hookBody = (from, text, id, pid = PID) => JSON.stringify({ object: 'whatsapp_business_account', entry: [{ changes: [{ value: {
+  messaging_product: 'whatsapp', metadata: { phone_number_id: pid }, contacts: [{ wa_id: from, profile: { name: 'Cliente Zap' } }],
+  messages: [{ from, id, type: 'text', text: { body: text } }] } }] }] });
+const sig = (raw, secret = APP_SECRET) => `sha256=${crypto.createHmac('sha256', secret).update(raw).digest('hex')}`;
+let seq = 0;
+const zap = async (from, text, opts = {}) => {
+  const raw = hookBody(from, text, `wamid.in.${++seq}`, opts.pid);
+  const r = await fetch(`${base}/api/webhooks/whatsapp`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': opts.sig ?? sig(raw) }, body: raw });
+  return r.status;
+};
+const lastTo = (to) => calls.wa.filter((x) => x.to === to).map((x) => x.text);
+let waCust;
+await check('WhatsApp: ligar exige número, token e chave; mesmo número não serve a duas empresas', async () => {
+  assert.equal((await api('PUT', '/whatsapp/config', { enabled: true, config: { phone_number_id: PID } }, T)).status, 400);
+  const ok = await api('PUT', '/whatsapp/config', { enabled: true, config: { phone_number_id: PID, agent_enabled: true, hours_start: '00:00', hours_end: '23:59', work_days: '0,1,2,3,4,5,6' }, secrets: { access_token: 'wa-token', app_secret: APP_SECRET } }, T);
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  assert.equal(ok.data.secrets.access_token.set, true); assert.ok(!JSON.stringify(ok.data).includes('wa-token'));
+  assert.equal((await api('PUT', '/whatsapp/config', { enabled: false, config: { phone_number_id: PID } }, T2)).status, 409);
+});
+await check('WhatsApp: verificação do webhook só com o token da empresa', async () => {
+  const cfg = await api('GET', '/whatsapp/config', null, T);
+  const vt = cfg.data.whatsapp.config.verify_token;
+  const good = await fetch(`${base}/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=${vt}&hub.challenge=987654`);
+  assert.equal(good.status, 200); assert.equal(await good.text(), '987654');
+  assert.equal((await fetch(`${base}/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=${'x'.repeat(24)}&hub.challenge=1`)).status, 403);
+});
+await check('WhatsApp: webhook sem assinatura válida é recusado e não grava nada', async () => {
+  assert.equal(await zap('5519900000001', 'oi', { sig: 'sha256=00' }), 401);
+  assert.equal(await zap('5519900000001', 'oi', { sig: sig(hookBody('5519900000001', 'outro', 'x'), 'errado') }), 401);
+  const many = JSON.stringify({ entry: [{ changes: Array.from({ length: 8 }, (_, i) => ({ value: { metadata: { phone_number_id: String(100 + i) } } })) }] });
+  assert.equal((await fetch(`${base}/api/webhooks/whatsapp`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig(many) }, body: many })).status, 400);
+  const { rows: [n] } = await pool.query("select count(*)::int n from wa_conversations where phone = '5519900000001'");
+  assert.equal(n.n, 0);
+});
+await check('WhatsApp: agente responde pelo número da empresa e mensagem repetida não duplica', async () => {
+  const raw = hookBody('5519900000002', 'oi', 'wamid.dup.1');
+  for (let i = 0; i < 2; i += 1) {
+    const r = await fetch(`${base}/api/webhooks/whatsapp`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig(raw) }, body: raw });
+    assert.equal(r.status, 200);
+  }
+  assert.equal(lastTo('5519900000002').length, 1); assert.match(lastTo('5519900000002')[0], /Digite o número da opção/);
+});
+await check('WhatsApp: status pela placa só com detalhes para o telefone do cliente', async () => {
+  const c = await api('POST', '/customers', { name: 'Dono do Carro', phone: '(19) 98888-7777', vehicles: [{ plate: 'QWE1R23', brand: 'Fiat', model: 'Uno' }] }, T);
+  assert.equal(c.status, 201, JSON.stringify(c.data)); waCust = c.data;
+  const eq = (await api('GET', `/customers/${c.data.id}`, null, T)).data;
+  const eqId = (eq.equipment || eq.vehicles || [])[0].id;
+  const o = await api('POST', '/orders', { customer_id: c.data.id, equipment_id: eqId, items: [{ kind: 'servico', description: 'Solda', qty: 1, unit_price: 300 }] }, T);
+  assert.equal(o.status, 201);
+  await zap('5511977776666', 'status da placa QWE1R23');
+  const other = lastTo('5511977776666').join('\n');
+  assert.ok(!/OS nº/.test(other) && /Por segurança/.test(other), other);
+  await zap('5519988887777', 'como está meu carro QWE-1R23?');
+  assert.match(lastTo('5519988887777').join('\n'), new RegExp(`OS nº ${o.data.number}`));
+  await zap('551988887777', 'status QWE1R23'); // cadastro antigo sem o 9: mesmo celular
+  assert.match(lastTo('551988887777').join('\n'), /OS nº/);
+});
+let waReq;
+await check('WhatsApp: pedido de horário vira pré-OS; aprovação abre OS, agenda e avisa o cliente', async () => {
+  const p = '5511955554444';
+  for (const t of ['2', 'BRA2E19', 'troca de óleo', '1', 'José Teste', '1']) assert.equal(await zap(p, t), 200);
+  assert.match(lastTo(p).at(-1), /pedido nº/i);
+  const list = await api('GET', '/whatsapp/requests', null, T);
+  waReq = list.data.find((x) => x.contact_phone === `+${p}`);
+  assert.ok(waReq?.requested_start, JSON.stringify(list.data));
+  assert.equal((await api('GET', '/requests', null, T)).data.find((x) => x.id === waReq.id)?.status, 'nova');
+  assert.equal((await api('POST', `/whatsapp/requests/${waReq.id}/approve`, {}, T2)).status, 404); // outra empresa
+  const ap = await api('POST', `/whatsapp/requests/${waReq.id}/approve`, { starts_at: waReq.requested_start, notify: true }, T);
+  assert.equal(ap.status, 201, JSON.stringify(ap.data)); assert.ok(ap.data.schedule_id); assert.equal(ap.data.notified.sent, true);
+  assert.match(lastTo(p).at(-1), new RegExp(`OS nº ${ap.data.number}`));
+  assert.equal((await api('POST', `/whatsapp/requests/${waReq.id}/approve`, {}, T)).status, 400); // já tratado
+  const od = await api('GET', `/orders/${ap.data.order_id}`, null, T);
+  assert.equal(od.data.equipment_plate, 'BRA2E19');
+});
+await check('WhatsApp: outra empresa não vê a conversa; resposta da equipe respeita a janela de 24 h', async () => {
+  const convs = await api('GET', '/whatsapp/conversations', null, T);
+  const cv = convs.data.find((x) => x.phone === '5511955554444');
+  assert.equal((await api('GET', `/whatsapp/conversations/${cv.id}`, null, T2)).status, 404);
+  assert.equal((await api('GET', '/whatsapp/conversations', null, T2)).data.length, 0);
+  const ok = await api('POST', `/whatsapp/conversations/${cv.id}/reply`, { text: 'Olá, aqui é a equipe.' }, T);
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  await pool.query("update wa_conversations set last_inbound_at = now() - interval '25 hours' where id = $1", [cv.id]);
+  assert.equal((await api('POST', `/whatsapp/conversations/${cv.id}/reply`, { text: 'oi' }, T)).status, 400);
+  assert.equal((await api('DELETE', `/whatsapp/conversations/${cv.id}`, null, T)).status, 400); // conversa real não se apaga
+});
+await check('WhatsApp: teste do agente não envia nada e não captura conversa real', async () => {
+  const before = calls.wa.length;
+  const sim = await api('POST', '/whatsapp/simulate', { phone: '11933332222', text: 'oi' }, T);
+  assert.equal(sim.status, 200); assert.equal(calls.wa.length, before);
+  assert.equal((await api('POST', '/whatsapp/simulate', { phone: '11955554444', text: 'oi' }, T)).status, 400); // telefone com conversa real
+  await zap('5511933332222', 'oi'); // cliente real escreve do mesmo número
+  const { rows } = await pool.query("select simulated from wa_conversations where phone = '5511933332222'");
+  assert.deepEqual(rows.map((r) => r.simulated), [false]);
+  assert.equal(calls.wa.length, before + 1);
+});
+await check('WhatsApp: muitas mensagens seguidas passam para a equipe', async () => {
+  const p = '5511944443333';
+  for (let i = 0; i < 22; i += 1) await zap(p, `oi ${i}`);
+  const { rows: [c] } = await pool.query('select mode from wa_conversations where phone = $1', [p]);
+  assert.equal(c.mode, 'humano');
+  assert.ok(lastTo(p).length <= 21);
+});
+
+// ---------- conferência do extrato com as OS ----------
+await check('extrato: crédito com nome do cliente vira pagamento da OS; desfazer devolve o saldo', async () => {
+  const accs = (await api('GET', '/finance/accounts', null, T)).data;
+  const bank = accs.find((a) => a.kind === 'banco') || accs[0];
+  const o = (await api('GET', '/orders?limit=50', null, T)).data;
+  const list = o.items || o;
+  const os = list.find((x) => x.customer_name === 'Dono do Carro');
+  const before = (await api('GET', `/orders/${os.id}`, null, T)).data.balance;
+  const csv = `Data;Histórico;Valor\n07/10/2026;PIX RECEBIDO DONO DO CARRO;${before.toFixed(2).replace('.', ',')}\n08/10/2026;TARIFA;-9,90\n`;
+  const st = await api('POST', '/finance/statements', { account_id: bank.id, filename: 'x.csv', content: csv }, T);
+  assert.equal(st.status, 201, JSON.stringify(st.data));
+  const det = (await api('GET', `/finance/statements/${st.data.id}`, null, T)).data;
+  const line = det.lines.find((l) => l.amount > 0);
+  assert.equal(line.order_candidates[0]?.order_id, os.id, JSON.stringify(line.order_candidates));
+  const chk = (await api('GET', `/finance/statements/${st.data.id}/orders-check`, null, T)).data;
+  assert.equal(chk.suggested.length, 1);
+  assert.equal((await api('POST', `/finance/lines/${line.id}/receive-order`, { order_id: os.id, method: 'dinheiro' }, T)).status, 400);
+  assert.equal((await api('POST', `/finance/lines/${line.id}/receive-order`, { order_id: os.id, method: 'pix' }, T2)).status, 404);
+  const rc = await api('POST', `/finance/lines/${line.id}/receive-order`, { order_id: os.id, method: 'pix' }, T);
+  assert.equal(rc.status, 201, JSON.stringify(rc.data));
+  assert.equal((await api('GET', `/orders/${os.id}`, null, T)).data.balance, 0);
+  assert.equal((await api('GET', `/finance/statements/${st.data.id}/orders-check`, null, T)).data.linked.length, 1);
+  assert.equal((await api('POST', `/finance/lines/${line.id}/undo`, {}, T)).status, 200);
+  assert.equal((await api('GET', `/orders/${os.id}`, null, T)).data.balance, before);
+});
+
+// ---------- segurança de usuários ----------
+await check('administrador não altera senha nem e-mail do proprietário', async () => {
+  const adm = await api('POST', '/users', { name: 'Admin', email: 'admin@int.dev', password: 'Oficina2026xy', role: 'admin' }, T);
+  assert.equal(adm.status, 201, JSON.stringify(adm.data));
+  const lg = await api('POST', '/auth/login', { email: 'admin@int.dev', password: 'Oficina2026xy' });
+  const TA = lg.data.token;
+  const owner = (await api('GET', '/users', null, T)).data.find((u) => u.role === 'owner');
+  const r = await api('PUT', `/users/${owner.id}`, { name: owner.name, email: 'atacante@x.dev', role: 'owner', password: 'Invasor2026xy' }, TA);
+  assert.equal(r.status, 403);
+  assert.equal((await api('POST', '/auth/login', { email: 'dono@int.dev', password: 'Oficina2026xy' })).status, 200);
+  assert.equal((await api('POST', '/users', { name: 'Admin2', email: 'admin2@int.dev', password: 'Oficina2026xy', role: 'admin' }, TA)).status, 403);
 });
 
 console.log(`\n${passed} verificações OK, ${fails.length} falhas`);

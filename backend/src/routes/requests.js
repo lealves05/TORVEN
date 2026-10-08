@@ -48,7 +48,7 @@ const schema = z.object({
   unit_id: uuidOpt,
 });
 
-async function addEvent(db, requestId, userId, { from = null, to = null, message = null }) {
+export async function addEvent(db, requestId, userId, { from = null, to = null, message = null }) {
   await db.query('insert into request_events (request_id, from_status, to_status, message, user_id) values ($1,$2,$3,$4,$5)',
     [requestId, from, to, message, userId]);
 }
@@ -293,34 +293,36 @@ r.post('/:id/quote', need('quotes'), async (req, res) => {
   res.status(201).json({ quote_id: out.id, number: out.number });
 });
 
+/** Cria a OS a partir da solicitação travada (sem orçamento formal). Usado em "Gerar OS" e na aprovação dos pedidos do WhatsApp. */
+export async function createOrderFromRequest(db, req, cur) {
+  if (!OPEN_REQUEST.includes(cur.status)) throw bad('Solicitação encerrada.');
+  if (cur.order_id) throw bad('Esta solicitação já gerou uma OS.');
+  if (!cur.customer_id) throw bad('Vincule um cliente cadastrado à solicitação antes de gerar a OS.');
+  if (cur.quote_id) {
+    const { rows: [qt] } = await db.query('select status from quotes where id = $1', [cur.quote_id]);
+    if (qt && !['recusado', 'vencido'].includes(qt.status)) throw bad('Há um orçamento vinculado. Converta o orçamento aprovado em OS.');
+  }
+  const number = await nextNumber(db, 'orders', req.companyId);
+  const cfg = req.settings.orders;
+  const promised = cur.desired_date ? `${cur.desired_date}T18:00:00-03:00`
+    : cfg.defaultPromiseDays ? new Date(Date.now() + cfg.defaultPromiseDays * 86400000).toISOString() : null;
+  const { rows: [o] } = await db.query(
+    `insert into orders (company_id, number, kind, unit_id, request_id, customer_id, equipment_id, technician_id, status, priority,
+            service_location, service_address, promised_at, problem, diagnosis, warranty_days, public_token, created_by)
+     values ($1,$2,'os',$3,$4,$5,$6,$7,'aberta',$8,$9,$10,$11,$12,$13,$14,$15,$16) returning id, number, public_token`,
+    [req.companyId, number, cur.unit_id, cur.id, cur.customer_id, cur.equipment_id, cur.visit_technician_id, cur.priority,
+      cur.service_location, cur.address, promised, [cur.title, cur.description].filter(Boolean).join('\n'), cur.diagnosis,
+      cfg.defaultWarrantyDays, publicToken(), req.user.id]);
+  await logEvent(db, o.id, { type: 'criacao', to: 'aberta', message: `OS aberta a partir da solicitação nº ${cur.number}`, isPublic: true, userId: req.user.id });
+  await db.query("update service_requests set status = 'convertida', order_id = $2, updated_at = now() where id = $1", [cur.id, o.id]);
+  await addEvent(db, cur.id, req.user.id, { from: cur.status, to: 'convertida', message: `OS nº ${o.number} gerada` });
+  await audit(db, req, { entity: 'order', entityId: o.id, action: 'create', summary: `OS nº ${o.number} gerada da solicitação nº ${cur.number}` });
+  return o;
+}
+
 /** Gera OS direto da solicitação (serviço simples, sem orçamento formal). */
 r.post('/:id/order', need('orders_create'), async (req, res) => {
-  const out = await tx(async (db) => {
-    const cur = await lockRequest(db, req);
-    if (!OPEN_REQUEST.includes(cur.status)) throw bad('Solicitação encerrada.');
-    if (cur.order_id) throw bad('Esta solicitação já gerou uma OS.');
-    if (!cur.customer_id) throw bad('Vincule um cliente cadastrado à solicitação antes de gerar a OS.');
-    if (cur.quote_id) {
-      const { rows: [qt] } = await db.query('select status from quotes where id = $1', [cur.quote_id]);
-      if (qt && !['recusado', 'vencido'].includes(qt.status)) throw bad('Há um orçamento vinculado. Converta o orçamento aprovado em OS.');
-    }
-    const number = await nextNumber(db, 'orders', req.companyId);
-    const cfg = req.settings.orders;
-    const promised = cur.desired_date ? `${cur.desired_date}T18:00:00-03:00`
-      : cfg.defaultPromiseDays ? new Date(Date.now() + cfg.defaultPromiseDays * 86400000).toISOString() : null;
-    const { rows: [o] } = await db.query(
-      `insert into orders (company_id, number, kind, unit_id, request_id, customer_id, equipment_id, technician_id, status, priority,
-              service_location, service_address, promised_at, problem, diagnosis, warranty_days, public_token, created_by)
-       values ($1,$2,'os',$3,$4,$5,$6,$7,'aberta',$8,$9,$10,$11,$12,$13,$14,$15,$16) returning id, number`,
-      [req.companyId, number, cur.unit_id, cur.id, cur.customer_id, cur.equipment_id, cur.visit_technician_id, cur.priority,
-        cur.service_location, cur.address, promised, [cur.title, cur.description].filter(Boolean).join('\n'), cur.diagnosis,
-        cfg.defaultWarrantyDays, publicToken(), req.user.id]);
-    await logEvent(db, o.id, { type: 'criacao', to: 'aberta', message: `OS aberta a partir da solicitação nº ${cur.number}`, isPublic: true, userId: req.user.id });
-    await db.query("update service_requests set status = 'convertida', order_id = $2, updated_at = now() where id = $1", [cur.id, o.id]);
-    await addEvent(db, cur.id, req.user.id, { from: cur.status, to: 'convertida', message: `OS nº ${o.number} gerada` });
-    await audit(db, req, { entity: 'order', entityId: o.id, action: 'create', summary: `OS nº ${o.number} gerada da solicitação nº ${cur.number}` });
-    return o;
-  });
+  const out = await tx(async (db) => createOrderFromRequest(db, req, await lockRequest(db, req)));
   res.status(201).json({ order_id: out.id, number: out.number });
 });
 

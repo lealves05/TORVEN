@@ -1,0 +1,49 @@
+WEBVTT
+
+1
+00:00:00.157 --> 00:00:11.010
+Aula 31: Conferir o extrato do banco com as OS. Nesta aula você vai aprender: Importar o arquivo do extrato; Ver o que é pagamento de OS; Receber na OS com um clique.
+
+2
+00:00:13.527 --> 00:00:19.708
+No menu Financeiro, abra Contas, conciliação e DRE, e clique na aba Conciliação bancária.
+
+3
+00:00:20.197 --> 00:00:27.935
+Primeiro, baixe o extrato no aplicativo ou no site do banco. Escolha o período e exporte no formato OFX ou CSV.
+
+4
+00:00:33.255 --> 00:00:38.134
+Clique em Importar extrato, escolha a conta do banco e o arquivo que você baixou.
+
+5
+00:00:43.730 --> 00:00:49.202
+Clique em Importar. O sistema confere cada entrada do banco com as ordens de serviço.
+
+6
+00:00:49.222 --> 00:00:55.381
+Os quadros mostram o que já é de OS, o que provavelmente é de uma OS e o que ficou sem OS.
+
+7
+00:00:56.995 --> 00:01:03.346
+Quando o sistema reconhece o nome do cliente ou o número da OS, aparece o botão Receber nesta OS.
+
+8
+00:01:07.538 --> 00:01:13.121
+Clique nele, confira a forma de pagamento, como PIX, e clique em Confirmar recebimento.
+
+9
+00:01:17.162 --> 00:01:21.546
+Pronto: o pagamento entrou na OS e a linha do banco ficou conferida.
+
+10
+00:01:21.566 --> 00:01:27.427
+O último quadro avisa o que foi recebido no sistema, mas não apareceu no banco. Vale conferir.
+
+11
+00:01:27.917 --> 00:01:34.034
+Se conferiu errado, clique na setinha ao lado da linha para desfazer. O pagamento sai da OS.
+
+12
+00:01:34.570 --> 00:01:45.145
+Recapitulando: Importar o arquivo do extrato; Ver o que é pagamento de OS; Receber na OS com um clique. Se precisar, assista de novo quando quiser. Até a próxima aula!

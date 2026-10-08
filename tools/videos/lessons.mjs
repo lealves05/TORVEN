@@ -249,6 +249,25 @@ export const LESSONS = [
     ],
   },
 
+  {
+    n: 30, file: '30-pedidos-do-whatsapp', mod: 'comercial', title: 'Pedidos do WhatsApp: aprovar e responder', routes: ['/whatsapp'], start: '/whatsapp',
+    desc: 'Aprovar os pedidos que o agente anotou no WhatsApp e conversar com o cliente.',
+    learn: ['Ver os pedidos que chegaram', 'Aprovar: abrir a OS e marcar o horário', 'Ler e responder as conversas'],
+    setup: async (api) => {
+      for (const t of ['oi', '2', 'BRA2E19', 'troca de óleo e barulho no freio', '1', 'Maria Souza', '1']) await api('POST', '/whatsapp/simulate', { phone: '11977771234', text: t });
+      return {};
+    },
+    steps: [
+      { tag: 'Onde fica', act: async (h) => { await h.go('/whatsapp'); await h.spot(h.page.locator('main h1').first()); }, say: ['No menu Atendimento, clique em WhatsApp.', 'Aqui chegam os pedidos que o agente anotou na conversa com o cliente.'] },
+      { tag: 'O pedido', act: (h) => h.spot(h.page.locator('li[aria-label^="Pedido nº"]').first()), say: ['Cada cartão mostra o nome do cliente, a placa, o serviço e o horário que ele pediu.'] },
+      { tag: 'Aprovar', act: async (h) => { await h.unspot(); await h.click(btn(h, 'Aprovar'), { wait: 1000 }); }, say: ['Para aceitar, clique em Aprovar. Se quiser, escolha o técnico e confira o dia e a hora.'] },
+      { act: async (h) => { const d = h.page.getByRole('dialog').last(); await h.spot(d.getByText('Avisar o cliente pelo WhatsApp', { exact: true })); }, say: ['Deixe ligado Avisar o cliente pelo WhatsApp. Assim ele recebe a confirmação com o número da OS.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: /Aprovar e abrir OS/ }), { wait: 1800 }); }, say: ['Clique em Aprovar e abrir OS. O sistema abre a OS, marca o horário na agenda e avisa o cliente.'] },
+      { tag: 'Conversas', act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Conversas', exact: true }), { wait: 1000 }); await h.click(h.page.locator('main ul button').first(), { wait: 1500 }); }, say: ['Na aba Conversas você lê tudo o que o cliente e o agente escreveram.'] },
+      { tag: 'Responder', act: (h) => h.spot(btn(h, 'Assumir conversa')), say: ['Quer falar você mesmo? Clique em Assumir conversa e escreva embaixo. O agente para de responder nessa conversa.', 'Depois, clique em Devolver ao agente.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Lembre', 'A equipe sempre confirma', list(['O agente só anota o pedido.', 'A OS e a agenda nascem quando você aprova.', 'Recusar também avisa o cliente.']))); }, say: ['O agente nunca abre OS sozinho: ele anota, e a equipe confirma. Se não der para atender, clique em Recusar e diga o motivo.'] },
+    ],
+  },
   // ───────────────────────── Agenda, produção e qualidade
   {
     n: 14, file: '14-agenda', mod: 'producao', title: 'Agenda da equipe', routes: ['/agenda'], start: '/agenda',
@@ -385,6 +404,37 @@ export const LESSONS = [
     ],
   },
 
+  {
+    n: 31, file: '31-conferir-extrato-com-as-os', mod: 'financeiro', title: 'Conferir o extrato do banco com as OS', routes: [], start: '/financeiro/gestao?aba=conciliacao',
+    desc: 'Importar o extrato do banco e ver quais entradas são pagamentos de ordens de serviço.',
+    learn: ['Importar o arquivo do extrato', 'Ver o que é pagamento de OS', 'Receber na OS com um clique'],
+    setup: async (api) => {
+      const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+      const list = await api('GET', '/orders?limit=60');
+      let pick = null;
+      for (const o of (list.items || list)) {
+        if (!(Number(o.total) > 0) || !o.customer_name || ['cancelada', 'entregue'].includes(o.status)) continue;
+        const d = await api('GET', `/orders/${o.id}`);
+        if (d.balance > 1) { pick = d; break; }
+      }
+      const money = (v) => v.toFixed(2).replace('.', ',');
+      const csv = ['Data;Histórico;Valor', `07/10/2026;PIX RECEBIDO - ${pick.customer_name.toUpperCase()};${money(pick.balance)}`,
+        '07/10/2026;TRANSFERENCIA RECEBIDA;180,00', '08/10/2026;TARIFA PACOTE DE SERVICOS;-29,90'].join('\n');
+      const file = path.join(os.tmpdir(), 'extrato-banco.csv');
+      fs.writeFileSync(file, csv);
+      return { file };
+    },
+    steps: [
+      { tag: 'Onde fica', act: (h) => h.spot(btn(h, 'Conciliação bancária')), say: ['No menu Financeiro, abra Contas, conciliação e DRE, e clique na aba Conciliação bancária.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Antes', 'Baixe o extrato no banco', list(['No aplicativo ou site do banco, abra o extrato.', 'Escolha o período e toque em Exportar.', 'Formato OFX (o melhor) ou CSV.']))); }, say: ['Primeiro, baixe o extrato no aplicativo ou no site do banco. Escolha o período e exporte no formato OFX ou CSV.'] },
+      { tag: 'Importar', act: async (h, st) => { await h.card(null); await h.click(btn(h, 'Importar extrato'), { wait: 800 }); await h.page.getByLabel('Arquivo do extrato').setInputFiles(st.file); await h.sleep(600); await h.spot(h.page.getByRole('dialog').last()); }, say: ['Clique em Importar extrato, escolha a conta do banco e o arquivo que você baixou.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Importar', exact: true }), { wait: 1800 }); await h.spot(h.page.locator('section[aria-label="Conferência com as OS"]')); }, say: ['Clique em Importar. O sistema confere cada entrada do banco com as ordens de serviço.', 'Os quadros mostram o que já é de OS, o que provavelmente é de uma OS e o que ficou sem OS.'] },
+      { tag: 'Receber na OS', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('button', { name: 'Receber nesta OS' }).first()); }, say: ['Quando o sistema reconhece o nome do cliente ou o número da OS, aparece o botão Receber nesta OS.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Receber nesta OS' }).first(), { wait: 900 }); await h.spot(h.page.getByRole('button', { name: 'Confirmar recebimento' })); }, say: ['Clique nele, confira a forma de pagamento, como PIX, e clique em Confirmar recebimento.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Confirmar recebimento' }), { wait: 1500 }); await h.spot(h.page.locator('section[aria-label="Conferência com as OS"] button').last()); }, say: ['Pronto: o pagamento entrou na OS e a linha do banco ficou conferida.', 'O último quadro avisa o que foi recebido no sistema, mas não apareceu no banco. Vale conferir.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Dica', 'Errou? Dá para desfazer', list(['A setinha ao lado da linha desfaz.', 'Desfazer tira o pagamento da OS.', 'Entradas sem OS: use Lançar novo.']))); }, say: ['Se conferiu errado, clique na setinha ao lado da linha para desfazer. O pagamento sai da OS.'] },
+    ],
+  },
   // ───────────────────────── Relatórios
   {
     n: 22, file: '22-relatorios', mod: 'relatorios', title: 'Relatórios: como está a oficina', routes: ['/relatorios'], start: '/relatorios',
@@ -435,6 +485,21 @@ export const LESSONS = [
       { tag: 'Técnicos', act: async (h) => { await h.unspot(); await h.go('/tecnicos'); await h.spot(h.page.locator('main h1').first()); }, say: ['Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão.'] },
       { tag: 'Usuários', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=equipe'); await h.spot(btn(h, 'Novo acesso')); }, say: ['Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela.'] },
       { tag: 'Perfis', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=perfis'); await h.spot(h.page.getByRole('button', { name: /^Técnico/ }).first()); }, say: ['Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro.'] },
+    ],
+  },
+  {
+    n: 29, file: '29-whatsapp-e-agente', mod: 'config', title: 'WhatsApp: ligar o agente e testar', routes: [], start: '/configuracoes?tab=integracoes',
+    desc: 'O agente que responde o cliente no WhatsApp: horários de atendimento e teste antes de ligar.',
+    learn: ['Onde fica o WhatsApp', 'Dias e horários do agente', 'Testar o agente sem enviar nada'],
+    steps: [
+      { tag: 'Onde fica', act: (h) => h.spot(h.page.locator('#whatsapp-config h3')), say: ['Em Configurações, na aba Integrações, fica o quadro WhatsApp e agente de atendimento.', 'O agente responde o cliente sozinho: diz como está o serviço pela placa e anota pedidos de serviço e de horário.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Uma vez só', 'Ligar o WhatsApp oficial', list(['Usa o WhatsApp oficial da Meta.', 'Quem cuida do computador da empresa faz a ligação.', 'O passo a passo está nesta tela, em Como ligar.']))); }, say: ['Ligar o WhatsApp oficial é feito uma vez só, normalmente por quem cuida do computador da empresa. O passo a passo está nesta tela.'] },
+      { tag: 'Horários', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('group', { name: 'Dias de atendimento' })); }, say: ['Em Agente automático, marque os dias e o horário em que a oficina atende. O agente só oferece horários livres dentro deles.'] },
+      { tag: 'Testar', act: async (h) => { await h.unspot(); await h.spot(h.page.locator('#testar-agente')); }, say: ['Antes de ligar, teste o agente aqui embaixo. Nada é enviado de verdade.'] },
+      { act: async (h) => { await h.unspot(); for (const t of ['oi', '2']) { await h.type(h.page.getByLabel('Mensagem de teste'), t, { delay: 90 }); await h.page.keyboard.press('Enter'); await h.sleep(1300); } }, say: ['Escreva como se fosse o cliente, por exemplo oi. O agente mostra as opções numeradas. Responda 2 para agendar.'] },
+      { act: async (h) => { for (const t of ['BRA2E19', 'troca de óleo']) { await h.type(h.page.getByLabel('Mensagem de teste'), t, { delay: 70 }); await h.page.keyboard.press('Enter'); await h.sleep(1300); } }, say: ['O agente pede a placa e o serviço, e mostra os horários livres.'] },
+      { act: async (h) => { for (const t of ['1', 'Maria Souza', '1']) { await h.type(h.page.getByLabel('Mensagem de teste'), t, { delay: 80 }); await h.page.keyboard.press('Enter'); await h.sleep(1300); } }, say: ['O cliente escolhe o horário, diz o nome e confirma. O pedido vai para a equipe aprovar.'] },
+      { act: async (h) => { await h.card(slide('Resumo', 'O agente anota, a equipe aprova', list(['Status da OS pela placa.', 'Pedidos de serviço e de horário.', 'Detalhes da OS só para o telefone do cliente.']))); }, say: ['Por segurança, os detalhes da OS só são informados para o telefone cadastrado do cliente.'] },
     ],
   },
   {

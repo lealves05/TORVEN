@@ -5,6 +5,7 @@ import { Car, CreditCard, Save, FlaskConical, Plus, Trash2, Star, RefreshCw, Ext
 import { api } from '../lib/api';
 import { useUI } from '../context/UIContext';
 import { Input, Select, Toggle, Modal, Loading, useAction, FAIL, cx } from './ui';
+import WhatsAppSetup from './WhatsAppSetup';
 
 const OPTION_LABEL = {
   no_ticket: 'Não imprimir', ticket: 'Imprimir', seller: 'Por conta da empresa', buyer: 'Por conta do cliente',
@@ -260,6 +261,7 @@ function Terminals() {
 export default function IntegrationsSetup() {
   return (
     <div className="grid max-w-5xl gap-6 lg:grid-cols-2">
+      <WhatsAppSetup />
       <PlateService />
       <Terminals />
     </div>

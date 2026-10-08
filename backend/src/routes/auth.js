@@ -91,13 +91,15 @@ r.post('/login', loginLimiter, async (req, res) => {
     email: z.string().trim().toLowerCase().email('e-mail inválido'),
     password: z.string().min(1, 'informe a senha'),
   }), req.body);
-  await limitByKey('login', d.email, 10, 15 * 60, res, 'Muitas tentativas para esta conta. Aguarde 15 minutos ou use "Esqueci minha senha".');
+  // limite por conta + endereço (quem erra a senha não bloqueia o dono da conta em outro lugar) e um teto geral por conta
+  await limitByKey('login', `${d.email}|${req.ip}`, 10, 15 * 60, res, 'Muitas tentativas para esta conta. Aguarde 15 minutos ou use "Esqueci minha senha".');
+  await limitByKey('login-acct', d.email, 60, 15 * 60, res, 'Muitas tentativas para esta conta. Aguarde 15 minutos ou use "Esqueci minha senha".');
   const user = await one('select id, company_id, password_hash, active from users where email = $1', [d.email]);
   if (!(await bcrypt.compare(d.password, user?.password_hash || DUMMY_HASH)) || !user) {
     throw new HttpError(401, 'E-mail ou senha incorretos.');
   }
   if (!user.active) throw new HttpError(403, 'Usuário desativado. Fale com o administrador.');
-  await clearHits(`login:id:${d.email}`);
+  await clearHits(`login:id:${d.email}|${req.ip}`.toLowerCase());
   await q('update users set last_login_at=now() where id=$1', [user.id]);
   res.json(await sessionWithToken(user.id));
 });

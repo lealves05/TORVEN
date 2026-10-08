@@ -122,6 +122,14 @@ const txSchema = z.object({
   repeat: z.coerce.number().int().min(1).max(36).default(1),
   account_id: z.string().uuid().nullable().optional(),
 });
+/** Cliente, fornecedor e técnico informados precisam ser da mesma empresa. */
+async function checkRefs(db, companyId, d) {
+  for (const [table, key, label] of [['customers', 'customer_id', 'Cliente'], ['suppliers', 'supplier_id', 'Fornecedor'], ['technicians', 'technician_id', 'Técnico']]) {
+    if (!d[key]) continue;
+    const { rows: [x] } = await db.query(`select id from ${table} where id = $1 and company_id = $2`, [d[key], companyId]);
+    if (!x) throw notFound(`${label} não encontrado`);
+  }
+}
 const RECONCILED = 'Lançamento conciliado com o extrato bancário: desfaça a conciliação antes.';
 const checkAccount = async (db, companyId, id) => {
   if (!id) return null;
@@ -136,6 +144,7 @@ r.post('/transactions', async (req, res) => {
     const { rows: [session] } = await db.query(
       'select id from cash_sessions where company_id=$1 and closed_at is null limit 1', [req.companyId]);
     const accountId = await checkAccount(db, req.companyId, d.account_id);
+    await checkRefs(db, req.companyId, d);
     const created = [];
     for (let i = 0; i < d.repeat; i++) {
       const paidNow = d.paid && i === 0;
@@ -160,6 +169,7 @@ r.put('/transactions/:id', async (req, res) => {
   const cur = await one('select * from transactions where id=$1 and company_id=$2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
   if (cur.reconciled_at) throw bad(RECONCILED);
+  await checkRefs({ query: q }, req.companyId, d);
   if (cur.transfer_id) throw bad('Transferência entre contas: exclua e lance novamente.');
   if (cur.auto && (cur.order_id || cur.purchase_id) && cur.paid_at) throw bad('Lançamento gerado por OS/entrada já baixado. Estorne pela própria OS.');
   if (cur.auto && (cur.order_id || cur.purchase_id) && (d.amount !== Number(cur.amount) || d.type !== cur.type)) throw bad('Valor e tipo de lançamentos gerados por OS/entrada não podem ser alterados.');
