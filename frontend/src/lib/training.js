@@ -314,7 +314,7 @@ export const LESSONS = [
     "n": 16,
     "file": "16-qualidade-e-checklist",
     "mod": "producao",
-    "s": 78,
+    "s": 81,
     "title": "Qualidade: checklist de inspeção",
     "routes": [
       "/os/"
@@ -325,7 +325,7 @@ export const LESSONS = [
       "Marcar cada item da lista",
       "Aprovar ou reprovar o serviço"
     ],
-    "text": "Na ficha da OS, em Qualidade e checklists, ficam as listas de conferência do serviço. Antes de entregar, clique em Inspeção final. Abre uma lista com o que deve ser conferido. Para cada item, clique em OK se está certo, em Não conforme se tem problema, ou em N/A quando não se aplica. No fim, escolha Aprovada, Aprovada com ressalva ou Reprovada, e clique em Registrar. Reprovado, o serviço volta para a execução. As listas são da sua oficina. Você muda os itens em Configurações, e pode exigir a inspeção aprovada antes da entrega. Também dá para usar a lista de recebimento, na chegada do equipamento, para registrar como ele chegou."
+    "text": "Na ficha da OS, em Qualidade e checklists, ficam as listas de conferência do serviço. Antes de entregar, clique em Inspeção final. Abre uma lista com o que deve ser conferido. Para cada item, clique em OK se está certo, em Não conforme se tem problema, ou em N/A quando não se aplica. No fim, escolha Aprovada, Aprovada com ressalva ou Reprovada, e clique em Registrar. Reprovado, o serviço volta para a execução. As listas são da sua oficina. Você muda os itens em Configurações, na aba Checklists, e pode deixar a inspeção obrigatória antes da entrega. Também dá para usar a lista de recebimento, na chegada do equipamento, para registrar como ele chegou."
   },
   {
     "n": 27,
@@ -341,6 +341,23 @@ export const LESSONS = [
       "Escolher o tipo ao abrir a OS"
     ],
     "text": "Em Configurações há duas abas: Checklists e Tipos de OS. Checklist é a lista de conferência. Tipo de OS é o tipo de serviço, por exemplo troca de óleo, funilaria ou solda. Na aba Checklists, clique em Novo checklist. Dê um nome e escreva o primeiro item a conferir. Para mais itens, escreva no campo de baixo e clique em Adicionar. As setas mudam a ordem e o X apaga. Ligue Obrigatório: a OS só segue depois que esse checklist for preenchido. Clique em Salvar checklist. Ele aparece na lista, com o aviso Obrigatório. Agora abra a aba Tipos de OS e clique em Novo tipo de OS. Escreva o nome do tipo. Em Checklists deste tipo, marque os checklists que valem para este serviço. Os obrigatórios aparecem marcados em vermelho. Clique em Salvar tipo. O cartão mostra os checklists ligados a ele. Ao abrir uma OS, escolha o Tipo de OS. Embaixo aparecem os checklists deste tipo. Quando você clicar em Abrir OS, o checklist de recebimento já aparece para preencher. Um checklist pode servir para vários tipos. E o checklist sem nenhum tipo marcado vale para todas as OS."
+  },
+  {
+    "n": 34,
+    "file": "34-preencher-checklist-na-os",
+    "mod": "producao",
+    "s": 208,
+    "title": "Preencher o checklist na OS, passo a passo",
+    "routes": [
+      "/os/"
+    ],
+    "desc": "Como preencher o checklist na chegada do veículo e antes de entregar, e o que acontece quando ele é obrigatório.",
+    "learn": [
+      "Onde o checklist aparece na OS",
+      "Marcar OK, Não conforme ou N/A",
+      "Registrar e aprovar ou reprovar"
+    ],
+    "text": "O checklist é uma lista de conferência. Ele protege a oficina e o cliente. Na chegada, anota como o veículo chegou. Antes de entregar, confere se o serviço ficou certo. Abra a ordem de serviço. Desça até o quadro Qualidade e checklists. Aqui aparecem os botões das etapas: Recebimento, Inspeção final e Entrega. Quando o checklist é obrigatório, aparece este aviso amarelo, e o botão da etapa fica destacado em laranja. Enquanto ele não for preenchido, a OS não passa para a próxima etapa. Clique no botão Recebimento. Abre a lista com os itens para conferir. Todos os itens começam marcados como OK. Você só precisa mudar o que estiver diferente. Achou um problema? Clique em Não conforme naquele item. Abre um campo: escreva o que encontrou, por exemplo um risco na porta. Se o item não serve para este veículo, clique em N/A, que quer dizer não se aplica. Por exemplo, um carro sem estepe. Embaixo fica o resultado. Como teve um item Não conforme, o sistema já mudou para Aprovada com ressalva. Ressalva quer dizer: está tudo certo, mas com uma observação. Em Observações, escreva o que for importante. Para guardar fotos, use o quadro Fotos e documentos da OS. Clique em Registrar. O checklist fica guardado na OS, com a data, o nome de quem preencheu e cada item marcado. O Recebimento saiu do aviso amarelo. Agora a OS pode seguir para o serviço. A OS segue o caminho normal: diagnóstico, aprovação e execução. Aqui ela já está em execução. A Inspeção final só fica liberada quando o serviço está em execução ou pronto. Quando o serviço terminar, faça a Inspeção final. Clique no botão Inspeção final. Confira cada item no veículo. Se estiver tudo certo, use Marcar todos como OK e escolha Aprovada. Se o serviço não ficou bom, escolha Reprovada. A OS volta para a execução, para a equipe corrigir antes de entregar. Clique em Registrar. Pronto: as duas conferências ficam na OS, uma embaixo da outra. Resumindo: OK quando está certo, Não conforme quando tem problema, e N/A quando não se aplica. Os checklists são montados em Configurações, na aba Checklists."
   },
   {
     "n": 28,
@@ -583,7 +600,7 @@ export const LESSONS = [
     "n": 26,
     "file": "26-suporte-e-treinamento",
     "mod": "config",
-    "s": 74,
+    "s": 75,
     "title": "Como usar as aulas e pedir ajuda",
     "routes": [
       "/suporte"
@@ -598,7 +615,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 3076;
+export const TOTAL_SECONDS = 3288;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

@@ -16,7 +16,7 @@ import { useOrderTypes, OrderTypeSelect } from './OrderTypes';
 
 export const INSPECTION_RESULT = {
   aprovado: { label: 'Aprovada', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
-  aprovado_ressalva: { label: 'Aprovada c/ ressalva', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
+  aprovado_ressalva: { label: 'Aprovada com ressalva', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
   reprovado: { label: 'Reprovada', cls: 'bg-red-500/10 text-red-700 dark:text-red-300' },
 };
 const CHECK_KIND = { recebimento: 'Recebimento', inspecao: 'Inspeção final', entrega: 'Entrega' };
@@ -169,11 +169,16 @@ export function QualityCard({ o, onChanged }) {
         <h2 className="flex items-center gap-2 font-semibold"><ClipboardCheck className="h-4 w-4 text-ink-faint" /> Qualidade e checklists</h2>
         {!closed && kinds.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {kinds.map((k) => (
-              <button key={k} className={cx('h-8 text-xs', pending.includes(k) ? 'btn-primary' : 'btn-outline')} onClick={() => setModal(k)}>
-                <Plus className="h-3.5 w-3.5" /> {CHECK_KIND[k]}
-              </button>
-            ))}
+            {kinds.map((k) => {
+              // a inspeção final só vale com o serviço em andamento ou pronto (o servidor também confere)
+              const wait = k === 'inspecao' && !['em_execucao', 'pronta', 'aguardando_material', 'aprovada'].includes(o.status);
+              return (
+                <button key={k} disabled={wait} title={wait ? 'Fica disponível quando a OS estiver em execução' : undefined}
+                  className={cx('h-8 text-xs', pending.includes(k) && !wait ? 'btn-primary' : 'btn-outline', wait && 'opacity-50')} onClick={() => setModal(k)}>
+                  <Plus className="h-3.5 w-3.5" /> {CHECK_KIND[k]}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -183,6 +188,7 @@ export function QualityCard({ o, onChanged }) {
       {pending.length > 0 && !closed && (
         <p className="mb-3 rounded-app-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
           Falta preencher o checklist obrigatório: <b>{pending.map((k) => CHECK_KIND[k]).join(', ')}</b>. Toque no botão destacado acima.
+          {pending.includes('inspecao') && !['em_execucao', 'pronta', 'aguardando_material', 'aprovada'].includes(o.status) && ' A inspeção final é feita quando o serviço estiver em execução ou pronto.'}
         </p>
       )}
       {!o.inspections?.length ? <p className="text-sm text-ink-faint">Nenhum checklist registrado.</p> : (
@@ -239,7 +245,7 @@ function InspectionModal({ o, kind, all, onClose, onDone }) {
           </Select>
         )}
         {templates.length === 1 && <p className="text-xs text-ink-faint">Checklist: <b>{templates[0].name}</b>{templates[0].required && ' (obrigatório)'}</p>}
-        {!templates.length && <p className="text-xs text-ink-faint">Não há checklist cadastrado para esta etapa. Inclua os itens abaixo ou crie um em Configurações › OS e orçamentos.</p>}
+        {!templates.length && <p className="text-xs text-ink-faint">Não há checklist cadastrado para esta etapa. Inclua os itens abaixo ou crie um em Configurações › Checklists.</p>}
         {items.length > 1 && (
           <button type="button" className="btn-ghost h-8 text-xs" onClick={() => setItems(items.map((x) => ({ ...x, result: 'ok' })))}>Marcar todos como OK</button>
         )}
