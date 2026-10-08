@@ -7,7 +7,7 @@ import http from 'node:http';
 if (!/test/.test(process.env.DATABASE_URL || '')) { console.error('Use um banco de teste (nome contendo "test")'); process.exit(1); }
 
 // ---------- provedores falsos ----------
-const calls = { plate: 0, mpCreate: 0, mpGet: 0, ipLinks: 0, ipCheck: 0, wa: [], ai: 0 };
+const calls = { fipe: 0, fipeDown: false, plate: 0, mpCreate: 0, mpGet: 0, ipLinks: 0, ipCheck: 0, wa: [], ai: 0 };
 const orders = new Map(); // id → { amount, status, gets, ref, pay }
 const fake = http.createServer((req, res) => {
   let body = ''; req.on('data', (c) => { body += c; });
@@ -24,6 +24,19 @@ const fake = http.createServer((req, res) => {
     if (u.pathname === '/anthropic') {
       calls.ai += 1;
       return send(200, { content: [{ type: 'text', text: JSON.stringify({ intent: 'status', plate: null, date: null, time: null, problem: null, name: null }) }] });
+    }
+    // Tabela FIPE (v2)
+    if (u.pathname.startsWith('/fipe/')) {
+      calls.fipe += 1;
+      if (calls.fipeDown) return send(503, { error: 'fora' });
+      const p = u.pathname.slice(6);
+      if (p === 'cars/brands') return send(200, [{ code: '59', name: 'VW - VolksWagen' }, { code: '21', name: 'Fiat' }]);
+      if (p === 'cars/brands/21/models') return send(200, [{ code: '4400', name: 'STRADA Working 1.4 Flex' }, { code: '4401', name: 'UNO Mille' }]);
+      if (p === 'cars/brands/21/models/4400/years') return send(200, [{ code: '2021-1', name: '2021 Gasolina' }]);
+      if (p === 'cars/brands/21/models/4400/years/2021-1') {
+        return send(200, { brand: 'Fiat', model: 'STRADA Working 1.4 Flex', modelYear: 2021, fuel: 'Gasolina', codeFipe: '001234-5', price: 'R$ 80.000,00', referenceMonth: 'outubro de 2026' });
+      }
+      return send(404, { error: 'not found' });
     }
     // API Placas
     let m = u.pathname.match(/^\/consulta\/([A-Z0-9]+)\/(.+)$/);
@@ -62,7 +75,7 @@ const fake = http.createServer((req, res) => {
 });
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
 const FAKE = `http://127.0.0.1:${fake.address().port}`;
-process.env.APIPLACAS_URL = FAKE; process.env.MERCADOPAGO_API_URL = FAKE; process.env.INFINITEPAY_API_URL = FAKE;
+process.env.APIPLACAS_URL = FAKE; process.env.FIPE_URL = `${FAKE}/fipe`; process.env.MERCADOPAGO_API_URL = FAKE; process.env.INFINITEPAY_API_URL = FAKE;
 process.env.WHATSAPP_GRAPH_URL = `${FAKE}/graph`; process.env.ANTHROPIC_URL = `${FAKE}/anthropic`;
 
 const { pool } = await import('../src/db.js');
@@ -117,6 +130,30 @@ await check('mesma placa de novo: reaproveita (não paga outra consulta)', async
   const before = calls.plate;
   const r = await api('GET', '/vehicles/plate/ABC1D23?consultar=1', null, T);
   assert.equal(r.data.source, 'cache'); assert.equal(calls.plate, before);
+});
+await check('Tabela FIPE grátis: marca → modelo → ano preenche o veículo', async () => {
+  const b = await api('GET', '/vehicles/fipe/cars/brands', null, T);
+  assert.equal(b.status, 200, JSON.stringify(b.data)); assert.deepEqual(b.data.map((x) => x.name), ['Fiat', 'VW - VolksWagen']);
+  const m = await api('GET', '/vehicles/fipe/cars/brands/21/models', null, T); assert.equal(m.data.length, 2);
+  const y = await api('GET', '/vehicles/fipe/cars/brands/21/models/4400/years', null, T); assert.equal(y.data[0].code, '2021-1');
+  const i = await api('GET', '/vehicles/fipe/cars/brands/21/models/4400/years/2021-1', null, T);
+  assert.equal(i.data.brand, 'Fiat'); assert.equal(i.data.model_year, '2021'); assert.equal(i.data.fipe_code, '001234-5'); assert.equal(i.data.source, 'fipe');
+});
+await check('Tabela FIPE: guardada (não repete a busca) e funciona com a fonte fora do ar', async () => {
+  const before = calls.fipe;
+  await api('GET', '/vehicles/fipe/cars/brands', null, T2);
+  assert.equal(calls.fipe, before);
+  await pool.query("update fipe_cache set fetched_at = now() - interval '90 days' where key = 'cars/brands'");
+  calls.fipeDown = true;
+  const r = await api('GET', '/vehicles/fipe/cars/brands', null, T);
+  calls.fipeDown = false;
+  assert.equal(r.status, 200); assert.equal(r.data.length, 2);
+});
+await check('Tabela FIPE: parâmetros inválidos são recusados', async () => {
+  assert.equal((await api('GET', '/vehicles/fipe/avioes/brands', null, T)).status, 400);
+  assert.equal((await api('GET', '/vehicles/fipe/cars/brands/..%2F..%2Fx/models', null, T)).status, 400);
+  assert.equal((await api('GET', '/vehicles/fipe/cars/brands/21/models/4400/years/2021;drop', null, T)).status, 400);
+  assert.equal((await api('GET', '/vehicles/fipe/cars/brands')).status, 401);
 });
 let quick;
 await check('cadastro simples: cliente + veículo numa etapa', async () => {

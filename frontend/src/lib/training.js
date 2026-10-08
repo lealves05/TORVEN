@@ -75,7 +75,7 @@ export const LESSONS = [
     "n": 3,
     "file": "03-abrir-os-pela-placa",
     "mod": "os",
-    "s": 127,
+    "s": 155,
     "title": "Abrir a OS pela placa do veículo",
     "routes": [
       "/os/nova"
@@ -84,9 +84,9 @@ export const LESSONS = [
     "learn": [
       "Digitar ou fotografar a placa",
       "Conferir o veículo e o proprietário",
-      "Cadastrar um veículo novo pela placa"
+      "Cadastrar um veículo novo com a Tabela FIPE (grátis)"
     ],
-    "text": "Para veículos, a forma mais rápida de abrir uma ordem de serviço é pela placa. Na tela Nova ordem de serviço, o quadro da placa fica logo no começo. Clique no campo Placa e digite a placa, com letras e números. Não precisa apertar nada: a busca é automática. O TORVEN achou o veículo. Confira a marca, o modelo, o ano e a cor. Embaixo aparece o proprietário. Ele já entrou como cliente desta ordem de serviço. Repare que o objeto de serviço também já foi escolhido: é o próprio veículo. No celular, você pode tocar em Foto da placa. A câmera abre, você fotografa a placa e o sistema lê os números sozinho. E se a placa ainda não estiver cadastrada? O sistema avisa e mostra o botão Cadastrar proprietário e veículo. Se o dono for o cliente que já está na OS, deixe marcado Cliente já escolhido. Se for outra pessoa, clique em Outro proprietário. Preencha o nome do dono, a marca e o modelo. O telefone é opcional, mas ajuda muito para avisar o cliente. Clique em Salvar e usar na OS. Pronto: o cliente e o veículo foram cadastrados e já estão nesta ordem de serviço. Agora é só continuar preenchendo a OS, como você vai ver na próxima aula."
+    "text": "Para veículos, a forma mais rápida de abrir uma ordem de serviço é pela placa. Na tela Nova ordem de serviço, o quadro da placa fica logo no começo. Clique no campo Placa e digite a placa, com letras e números. Não precisa apertar nada: a busca é automática. O TORVEN achou o veículo. Confira a marca, o modelo, o ano e a cor. Embaixo aparece o proprietário. Ele já entrou como cliente desta ordem de serviço. Repare que o objeto de serviço também já foi escolhido: é o próprio veículo. No celular, você pode tocar em Foto da placa. A câmera abre, você fotografa a placa e o sistema lê os números sozinho. E se a placa ainda não estiver cadastrada? O sistema avisa e mostra o botão Cadastrar proprietário e veículo. Se o dono for o cliente que já está na OS, deixe marcado Cliente já escolhido. Se for outra pessoa, clique em Outro proprietário. Preencha o nome do dono. O telefone é opcional, mas ajuda muito para avisar o cliente. Para o veículo, use a Tabela FIPE, que é grátis. Digite o começo da marca e clique nela. Digite parte do modelo, por exemplo kwid, e clique no modelo certo. Clique no ano. Pronto: marca, modelo e ano foram preenchidos, e ainda aparece o valor da tabela FIPE. Só falta a cor. Clique em Salvar e usar na OS. Pronto: o cliente e o veículo foram cadastrados e já estão nesta ordem de serviço. Agora é só continuar preenchendo a OS, como você vai ver na próxima aula."
   },
   {
     "n": 4,
@@ -598,7 +598,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 3048;
+export const TOTAL_SECONDS = 3076;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

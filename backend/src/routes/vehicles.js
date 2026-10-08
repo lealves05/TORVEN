@@ -7,6 +7,8 @@ import { parse, bad, HttpError, validDocument, onlyDigits } from '../util.js';
 import { listIntegrations, loadIntegration } from '../integrations/store.js';
 import { normalizePlate, formatPlate, lookupPlate, PLATE_PROVIDERS } from '../integrations/plates.js';
 import { checkVehiclePlate } from '../vehicleRules.js';
+import { FIPE_TYPES, fipeBrands, fipeModels, fipeYears, fipeInfo } from '../integrations/fipe.js';
+import { hit } from '../security.js';
 
 const r = Router();
 r.use(need('customers_edit', 'orders_create', 'customers_view'));
@@ -72,6 +74,29 @@ r.get('/plate/:plate', async (req, res) => {
   res.json({ ...base, vehicle: out.vehicle || null, message: out.message || null, source: active.provider });
 });
 
+// ---------- Tabela FIPE (gratuita): marca → modelo → ano, para preencher o veículo sem consulta paga ----------
+const fipeType = (t) => { if (!FIPE_TYPES[t]) throw bad('Tipo de veículo inválido.'); return t; };
+const fipeId = (v, label) => { if (!/^\d{1,8}$/.test(String(v))) throw bad(`${label} inválido.`); return String(v); };
+const fipeYear = (v) => { if (!/^\d{4,5}-\d{1,2}$/.test(String(v))) throw bad('Ano inválido.'); return String(v); };
+async function fipeGuard(req) {
+  const h = await hit(`fipe:${req.companyId}`, 400, 3600); // uso normal fica muito abaixo disso
+  if (h.blocked) throw new HttpError(429, 'Muitas buscas na Tabela FIPE nesta hora. Aguarde um pouco.');
+}
+r.get('/fipe/types', (req, res) => res.json(Object.entries(FIPE_TYPES).map(([code, name]) => ({ code, name }))));
+r.get('/fipe/:type/brands', async (req, res) => { await fipeGuard(req); res.json(await fipeBrands(fipeType(req.params.type))); });
+r.get('/fipe/:type/brands/:brand/models', async (req, res) => {
+  await fipeGuard(req);
+  res.json(await fipeModels(fipeType(req.params.type), fipeId(req.params.brand, 'Marca')));
+});
+r.get('/fipe/:type/brands/:brand/models/:model/years', async (req, res) => {
+  await fipeGuard(req);
+  res.json(await fipeYears(fipeType(req.params.type), fipeId(req.params.brand, 'Marca'), fipeId(req.params.model, 'Modelo')));
+});
+r.get('/fipe/:type/brands/:brand/models/:model/years/:year', async (req, res) => {
+  await fipeGuard(req);
+  res.json(await fipeInfo(fipeType(req.params.type), fipeId(req.params.brand, 'Marca'), fipeId(req.params.model, 'Modelo'), fipeYear(req.params.year)));
+});
+
 /** Cadastro simples: cliente (existente ou novo) + veículo, numa transação. */
 const quickSchema = z.object({
   customer_id: z.string().uuid().nullable().optional(),
@@ -86,6 +111,7 @@ const quickSchema = z.object({
 
 r.post('/quick', need('customers_edit', 'orders_create'), async (req, res) => {
   const d = parse(quickSchema, req.body);
+  if (d.vehicle.data && JSON.stringify(d.vehicle.data).length > 4000) throw bad('Dados do veículo grandes demais.');
   const plate = normalizePlate(d.vehicle.plate);
   if (!plate) throw bad('Placa inválida.');
   if (!d.customer_id && !d.customer) throw bad('Escolha o cliente ou preencha o cadastro simples.');

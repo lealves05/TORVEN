@@ -91,6 +91,7 @@ function PlateService() {
         <div>
           <h3 className="flex items-center gap-2 font-semibold"><Car className="h-4 w-4 text-primary" /> Consulta de placa</h3>
           <p className="text-xs text-ink-faint">Busca marca, modelo, ano e cor quando a placa não está cadastrada. Serviço pago, contratado pela empresa.</p>
+          <p className="mt-1 text-xs text-emerald-700">Sem serviço pago, o cadastro do veículo usa a <b>Tabela FIPE</b> grátis: escolha marca, modelo e ano numa lista (já vem ligada, não precisa configurar).</p>
         </div>
         <span className={cx('chip', data.active ? 'bg-emerald-500/10 text-emerald-700' : 'bg-muted text-ink-soft')}>{data.active ? `Ativo: ${data.active.name}` : 'Desligado'}</span>
       </div>

@@ -82,6 +82,12 @@ const vehicleSchema = z.object({
   id: z.string().uuid().optional(),
   plate: s.min(1, 'informe a placa').max(10), brand: s.max(60).nullable().optional(), model: s.max(80).nullable().optional(),
   year: s.max(20).nullable().optional(), color: s.max(40).nullable().optional(), remove: z.boolean().optional(),
+  // ficha da Tabela FIPE escolhida (só dados públicos do modelo)
+  vehicle_data: z.object({
+    source: z.literal('fipe'), brand: s.max(80).nullable().optional(), model: s.max(160).nullable().optional(), model_year: s.max(10).nullable().optional(),
+    year: s.max(10).nullable().optional(), fuel: s.max(30).nullable().optional(), fipe_code: s.max(20).nullable().optional(), fipe_price: s.max(30).nullable().optional(),
+    fipe_reference: s.max(40).nullable().optional(), fipe_type: s.max(20).nullable().optional(),
+  }).nullable().optional(),
 });
 const vehiclesSchema = z.array(vehicleSchema).max(30, 'no máximo 30 veículos por cadastro').optional();
 
@@ -96,17 +102,17 @@ async function saveVehicles(db, req, customerId, list = []) {
   for (const v of live) {
     const plate = await checkVehiclePlate(db, req, v.plate, v.id || null);
     const description = ([v.brand, v.model].filter(Boolean).join(' ') || `Veículo ${plate}`).slice(0, 160);
-    const vals = [description, v.brand || null, v.model || null, v.year || null, plate, v.color || null];
+    const vals = [description, v.brand || null, v.model || null, v.year || null, plate, v.color || null, v.vehicle_data ? JSON.stringify(v.vehicle_data) : null];
     if (v.id) {
       const { rows: [e] } = await db.query(
-        `update equipment set description = $4, brand = $5, model = $6, year = $7, plate = $8, color = $9
+        `update equipment set description = $4, brand = $5, model = $6, year = $7, plate = $8, color = $9, vehicle_data = coalesce($10::jsonb, vehicle_data)
           where id = $1 and customer_id = $2 and company_id = $3 and active returning id`, [v.id, customerId, req.companyId, ...vals]);
       if (!e) throw notFound('Veículo não encontrado neste cliente');
       out.push(e.id);
     } else {
       const { rows: [e] } = await db.query(
-        `insert into equipment (company_id, customer_id, category, description, brand, model, year, plate, color)
-         values ($1,$2,'Veículo',$3,$4,$5,$6,$7,$8) returning id`, [req.companyId, customerId, ...vals]);
+        `insert into equipment (company_id, customer_id, category, description, brand, model, year, plate, color, vehicle_data)
+         values ($1,$2,'Veículo',$3,$4,$5,$6,$7,$8,$9) returning id`, [req.companyId, customerId, ...vals]);
       out.push(e.id);
     }
   }

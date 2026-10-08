@@ -5,6 +5,7 @@ import { maskPhone, maskDoc, maskCep, lookupCep } from '../lib/format';
 import { normalizePlate, formatPlate } from '../lib/plate';
 import { useAuth } from '../context/AuthContext';
 import { Modal, Input, Select, Textarea, useAction, FAIL, cx } from './ui';
+import FipePicker from './FipePicker';
 
 /** Busca de cliente com cadastro rápido. value = objeto do cliente (ou null). */
 export default function CustomerPicker({ value, onChange, label = 'Cliente', optional, autoFocus, initialText }) {
@@ -112,18 +113,23 @@ function VehiclesEditor({ rows, setRows, customerId, unique }) {
       {live.length === 0 && <p className="rounded-app-sm border border-dashed border-line px-3 py-2 text-xs text-ink-faint">Nenhum veículo. Use “Adicionar veículo” para cadastrar carro, moto ou utilitário do cliente.</p>}
       {live.map((v) => (
         <div key={v.key} className="rounded-app-sm border border-line p-2">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[7.5rem_1fr_1fr_5.5rem_6.5rem_auto]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[7.5rem_1fr_1fr_5.5rem_6.5rem_auto_auto]">
             <Input label="Placa *" value={v.plate} maxLength={8} placeholder="ABC1D23" aria-label="Placa"
               onChange={(e) => upd(v.key, { plate: e.target.value.toUpperCase(), warn: null })} onBlur={() => check(v)} />
             <Input label="Marca" value={v.brand} placeholder="Ex.: Fiat" onChange={(e) => upd(v.key, { brand: e.target.value })} />
             <Input label="Modelo" value={v.model} placeholder="Ex.: Strada" onChange={(e) => upd(v.key, { model: e.target.value })} />
             <Input label="Ano" value={v.year} inputMode="numeric" maxLength={9} placeholder="2022" onChange={(e) => upd(v.key, { year: e.target.value })} />
             <Input label="Cor" value={v.color} onChange={(e) => upd(v.key, { color: e.target.value })} />
+            <button type="button" className={cx('btn-ghost h-[var(--row)] self-end border border-line px-2 text-xs', v.fipe && 'border-primary text-primary')} title="Escolher marca, modelo e ano na Tabela FIPE (grátis)"
+              onClick={() => upd(v.key, { fipe: !v.fipe })}>FIPE</button>
             <button type="button" className="btn-ghost btn-icon self-end text-red-600" title="Remover veículo"
               onClick={() => setRows((l) => (v.id ? l.map((x) => (x.key === v.key ? { ...x, remove: true } : x)) : l.filter((x) => x.key !== v.key)))}>
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
+          {v.fipe && (
+            <div className="mt-2"><FipePicker compact onPick={(x) => upd(v.key, { brand: x.brand || v.brand, model: x.model || v.model, year: x.model_year || v.year, vehicle_data: x, fipe: false })} /></div>
+          )}
           {(v.warn || repeated(v)) && (
             <p className="mt-1 flex items-center gap-1 text-xs text-red-600"><AlertTriangle className="h-3 w-3" />{v.warn || 'Placa repetida neste cadastro'}</p>
           )}
@@ -160,7 +166,7 @@ export function CustomerForm({ customer, onClose, onSaved }) {
   const save = async () => {
     const body = { ...f };
     for (const k of ['id', 'created_at', 'orders_count', 'total_spent', 'last_order_at', 'equipment_count', 'company_id', 'equipment', 'orders', 'quotes', 'finance']) delete body[k];
-    body.vehicles = vehicles.filter((v) => v.id || !v.remove).map(({ key, warn, ...v }) => ({
+    body.vehicles = vehicles.filter((v) => v.id || !v.remove).map(({ key, warn, fipe, ...v }) => ({
       ...v, plate: formatPlate(normalizePlate(v.plate) || v.plate), brand: v.brand || null, model: v.model || null, year: v.year || null, color: v.color || null,
     }));
     const r = await run(() => (f.id ? api.put(`/customers/${f.id}`, body) : api.post('/customers', body)), 'Cliente salvo');

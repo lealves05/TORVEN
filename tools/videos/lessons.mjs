@@ -92,7 +92,7 @@ export const LESSONS = [
   {
     n: 3, file: '03-abrir-os-pela-placa', mod: 'os', title: 'Abrir a OS pela placa do veículo', routes: ['/os/nova'], start: '/os/nova',
     desc: 'Digite a placa: o TORVEN mostra o veículo e já coloca o dono como cliente da OS.',
-    learn: ['Digitar ou fotografar a placa', 'Conferir o veículo e o proprietário', 'Cadastrar um veículo novo pela placa'],
+    learn: ['Digitar ou fotografar a placa', 'Conferir o veículo e o proprietário', 'Cadastrar um veículo novo com a Tabela FIPE (grátis)'],
     setup: async (api) => {
       await api('POST', '/customers', { kind: 'pf', name: 'Paulo Henrique Souza', phone: '(19) 99812-4455',
         vehicles: [{ plate: 'RIO2A18', brand: 'Fiat', model: 'Strada', year: '2021', color: 'Prata' }] });
@@ -106,7 +106,10 @@ export const LESSONS = [
       { tag: 'Foto da placa', act: async (h) => { await h.unspot(); await h.click('Outra placa'); await h.spot('Foto da placa'); }, say: ['No celular, você pode tocar em Foto da placa. A câmera abre, você fotografa a placa e o sistema lê os números sozinho.'] },
       { tag: 'Placa nova', act: async (h) => { await h.unspot(); await h.type(h.page.getByLabel('Placa do veículo', { exact: true }), 'NOV1C22', { delay: 150 }); await h.sleep(1600); await h.spot('Cadastrar proprietário e veículo'); }, say: ['E se a placa ainda não estiver cadastrada? O sistema avisa e mostra o botão Cadastrar proprietário e veículo.'] },
       { act: async (h) => { await h.click('Cadastrar proprietário e veículo', { wait: 900 }); await h.spot('Outro proprietário'); }, say: ['Se o dono for o cliente que já está na OS, deixe marcado Cliente já escolhido. Se for outra pessoa, clique em Outro proprietário.'] },
-      { act: async (h) => { await h.click('Outro proprietário', { wait: 500 }); await h.type('Nome do proprietário', 'Marta Nogueira', { delay: 70 }); await h.type(h.page.locator('.fixed.inset-0').getByLabel('Marca'), 'Renault', { delay: 70 }); await h.type(h.page.locator('.fixed.inset-0').getByLabel('Modelo'), 'Kwid', { delay: 70 }); }, say: ['Preencha o nome do dono, a marca e o modelo. O telefone é opcional, mas ajuda muito para avisar o cliente.'] },
+      { act: async (h) => { await h.click('Outro proprietário', { wait: 500 }); await h.type('Nome do proprietário', 'Marta Nogueira', { delay: 70 }); }, say: ['Preencha o nome do dono. O telefone é opcional, mas ajuda muito para avisar o cliente.'] },
+      { tag: 'Tabela FIPE', act: async (h) => { await h.type(h.page.getByRole('textbox', { name: '1. Marca' }), 'ren', { delay: 140 }); await h.click(h.page.getByRole('option', { name: 'Renault' }), { wait: 900 }); }, say: ['Para o veículo, use a Tabela FIPE, que é grátis. Digite o começo da marca e clique nela.'] },
+      { act: async (h) => { await h.type(h.page.getByRole('textbox', { name: '2. Modelo' }), 'kwid', { delay: 140 }); await h.click(h.page.getByRole('listbox', { name: 'Opções — 2. Modelo' }).getByRole('option').first(), { wait: 900 }); }, say: ['Digite parte do modelo, por exemplo kwid, e clique no modelo certo.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('button', { name: '2022 Gasolina' }), { wait: 1200 }); await h.spot(h.page.getByLabel('Tabela FIPE')); }, say: ['Clique no ano. Pronto: marca, modelo e ano foram preenchidos, e ainda aparece o valor da tabela FIPE. Só falta a cor.'] },
       { act: async (h) => { await h.click('Salvar e usar na OS', { wait: 1400 }); await h.spot(h.page.getByLabel('Veículo identificado')); }, say: ['Clique em Salvar e usar na OS. Pronto: o cliente e o veículo foram cadastrados e já estão nesta ordem de serviço.'] },
       { act: (h) => h.unspot(), say: ['Agora é só continuar preenchendo a OS, como você vai ver na próxima aula.'] },
     ],

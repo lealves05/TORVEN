@@ -8,6 +8,7 @@ import { normalizePlate, formatPlate } from '../lib/plate';
 import { maskPhone, maskDoc } from '../lib/format';
 import { useAuth } from '../context/AuthContext';
 import { Input, Modal, useAction, FAIL, cx } from './ui';
+import FipePicker from './FipePicker';
 
 const yearOf = (v) => [v?.year, v?.model_year].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join('/');
 
@@ -18,6 +19,8 @@ function VehicleFacts({ v, plate }) {
     ['Marca / modelo', [v?.brand, v?.model].filter(Boolean).join(' ') || v?.description],
     ['Ano', yearOf(v)],
     ['Cor', v?.color],
+    ['Combustível', v?.fuel],
+    ['Valor FIPE', v?.fipe_price ? `${v.fipe_price}${v.fipe_reference ? ` (${v.fipe_reference})` : ''}` : null],
     ['Cidade', v?.city ? `${v.city}${v.uf ? `/${v.uf}` : ''}` : null],
   ].filter(([, x]) => x);
   return (
@@ -88,8 +91,9 @@ export default function PlateCapture({ onSelect, onClear, customer, initialPlate
     owner: customer ? 'current' : 'new',
     name: '', phone: '', document: '',
     plate: r.plate, brand: r.vehicle?.brand || '', model: r.vehicle?.model || '', year: r.vehicle?.model_year || r.vehicle?.year || '',
-    color: r.vehicle?.color || '', data: r.vehicle || null,
+    color: r.vehicle?.color || '', data: r.vehicle || null, fipe: !r.vehicle,
   });
+  const fromFipe = (v) => setForm((f) => ({ ...f, brand: v.brand || f.brand, model: v.model || f.model, year: v.model_year || '', data: { ...(f.data || {}), ...v } }));
 
   const onPhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -196,7 +200,8 @@ export default function PlateCapture({ onSelect, onClear, customer, initialPlate
               <p className="mt-2 text-xs text-ink-faint">A consulta não traz o dono do veículo (LGPD): cadastre o proprietário para usar na OS.</p>
             </div>
           ) : (
-            <p className="text-sm text-ink-soft">Placa {result.plate} não está no cadastro.{result.message ? ` ${result.message}` : ''}</p>
+            <p className="text-sm text-ink-soft">Placa {result.plate} não está no cadastro.{result.message ? ` ${result.message}` : ''}
+              {canRegister && <span className="block text-xs">Cadastre o proprietário e escolha marca, modelo e ano na <b>Tabela FIPE</b> (grátis).</span>}</p>
           )}
           <div className="flex flex-wrap gap-2">
             {result.lookup_available && !result.vehicle && (
@@ -205,14 +210,14 @@ export default function PlateCapture({ onSelect, onClear, customer, initialPlate
               </button>
             )}
             {canRegister && (
-              <button type="button" className={result.vehicle ? 'btn-primary' : 'btn-ghost border border-line'} onClick={() => openForm(result)}>
+              <button type="button" className={result.vehicle || !result.lookup_available ? 'btn-primary' : 'btn-ghost border border-line'} onClick={() => openForm(result)}>
                 <UserPlus className="h-4 w-4" /> Cadastrar proprietário e veículo
               </button>
             )}
           </div>
         </div>
       )}
-      <Modal open={!!form} onClose={() => setForm(null)} title="Proprietário e veículo" subtitle={form?.data ? 'Dados do veículo trazidos pela consulta — confira antes de salvar.' : 'Preencha o proprietário e o veículo.'}
+      <Modal open={!!form} onClose={() => setForm(null)} title="Proprietário e veículo" subtitle={form?.data && form.data.source !== 'fipe' ? 'Dados do veículo trazidos pela consulta — confira antes de salvar.' : 'Preencha o proprietário e escolha o veículo na Tabela FIPE.'}
         footer={<>
           <button className="btn-ghost" onClick={() => setForm(null)}><RotateCcw className="h-4 w-4" /> Voltar</button>
           <button className="btn-primary" disabled={busy || !formValid} onClick={saveQuick}><Check className="h-4 w-4" /> Salvar e usar na OS</button>
@@ -233,6 +238,9 @@ export default function PlateCapture({ onSelect, onClear, customer, initialPlate
                 <Input label="Telefone / WhatsApp" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: maskPhone(e.target.value) })} />
                 <Input label="CPF/CNPJ (opcional)" inputMode="numeric" value={form.document} onChange={(e) => setForm({ ...form, document: maskDoc(e.target.value) })} />
               </div>
+            )}
+            {form.fipe ? <FipePicker onPick={fromFipe} /> : (
+              <button type="button" className="btn-ghost h-8 border border-line text-xs" onClick={() => setForm({ ...form, fipe: true })}>Escolher na Tabela FIPE (grátis)</button>
             )}
             <div className={cx('grid gap-3 rounded-app-sm border border-line p-3 sm:grid-cols-3', form.data && 'bg-primary/5')}>
               <Input label="Placa *" value={form.plate} onChange={(e) => setForm({ ...form, plate: e.target.value.toUpperCase() })} />
