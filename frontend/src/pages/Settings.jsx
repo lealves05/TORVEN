@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Upload, Trash2, Plus, Check, Sun, Moon, Monitor } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Upload, Trash2, Plus, Check, Sun, Moon, Monitor, Bot } from 'lucide-react';
 import { api, apiBase, getToken } from '../lib/api';
 import { ROLES, maskPhone, maskDoc, maskCep, lookupCep } from '../lib/format';
 import { applyTheme, PRESET_COLORS, RADIUS, FONTS } from '../lib/theme';
@@ -11,7 +11,7 @@ import IntegrationsSetup from '../components/IntegrationsSetup';
 import { ChecklistsSettings, OrderTypesTab } from '../components/OrderTypes';
 import { OrderDocument, SAMPLE_ORDER, docConfig } from '../components/DocumentTemplate';
 import { useUI } from '../context/UIContext';
-import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, useAction, FAIL, cx } from '../components/ui';
+import { PageHeader, Tabs, Input, Textarea, Select, Toggle, Modal, Avatar, Loading, useAction, FAIL, cx } from '../components/ui';
 
 export default function Settings() {
   const { company, setCompany, user, can, feature } = useAuth();
@@ -32,7 +32,7 @@ export default function Settings() {
     const clean = JSON.stringify(f) === JSON.stringify(prevCompany.current);
     prevCompany.current = company;
     if (clean) { setF(structuredClone(company)); return; }
-    const keys = ['segments', 'fipeDefaultType', 'equipmentCategories', 'serviceCategories', 'materialCategories'];
+    const keys = ['segments', 'fipeDefaultType', 'equipmentCategories', 'serviceCategories', 'materialCategories', 'financeAlerts'];
     setF((x) => ({ ...x, settings: { ...x.settings, ...Object.fromEntries(keys.filter((k) => k in (company.settings || {})).map((k) => [k, structuredClone(company.settings[k])])) } }));
   }, [company]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -370,6 +370,7 @@ function Team() {
   const [list, setList] = useState([]);
   const [edit, setEdit] = useState(null);
   const [units, setUnits] = useState([]);
+  const [agentFor, setAgentFor] = useState(null);
   const load = () => api.get('/users').then(setList);
   useEffect(() => { load(); api.get('/units').then((u) => setUnits(u.filter((x) => x.active))).catch(() => {}); }, []);
   const save = async () => {
@@ -383,8 +384,8 @@ function Team() {
   };
   return (
     <div className="max-w-4xl space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-faint">Cada usuário recebe um perfil (atendimento, orçamentista, técnico, financeiro…). O que cada perfil pode fazer é ajustável em Perfis de acesso.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 flex-1 basis-72 text-sm text-ink-faint">Cada usuário recebe um perfil (proprietário, atendimento, orçamentista, técnico, financeiro…). Pode haver mais de um proprietário. O que cada perfil pode fazer é ajustável em Perfis de acesso.</p>
         <button className="btn-primary" onClick={() => setEdit({ role: 'attendant', active: true })}><Plus className="h-4 w-4" /> Novo acesso</button>
       </div>
       <div className="card divide-y divide-line">
@@ -395,14 +396,21 @@ function Team() {
               <div className="truncate font-medium">{u.name} {u.id === user.id && <span className="text-xs text-ink-faint">(você)</span>}</div>
               <div className="truncate text-xs text-ink-faint">{u.email}</div>
             </div>
-            <span className="chip bg-muted text-ink-soft">{ROLES[u.role]}</span>
-            {u.role !== 'owner' && <>
-              <button className="btn-ghost h-8 text-xs" onClick={() => setEdit({ ...u, password: '' })}>Editar</button>
+            <span className="chip hidden bg-muted text-ink-soft sm:inline-flex">{ROLES[u.role]}</span>
+            {(u.role !== 'owner' || user.role === 'owner') && (
+              <button className={cx('btn-ghost h-8 text-xs', u.agent_enabled ? 'text-primary' : 'text-ink-faint')} onClick={() => setAgentFor(u)}
+                aria-label={`Assistente de ${u.name}`} title="O que esta pessoa pode pedir ao Assistente">
+                <Bot className="h-3.5 w-3.5" /> {u.agent_enabled ? 'Assistente' : 'Assistente bloqueado'}
+              </button>
+            )}
+            {(u.role !== 'owner' || user.role === 'owner') && <>
+              <button className="btn-ghost h-8 text-xs" onClick={() => setEdit({ ...u, password: '', original_role: u.role })} aria-label={`Editar ${u.name}`}>Editar</button>
               {u.id !== user.id && <button className="btn-ghost btn-icon h-8 text-red-600" onClick={() => remove(u)}><Trash2 className="h-4 w-4" /></button>}
             </>}
           </div>
         ))}
       </div>
+      {agentFor && <AgentAccess u={agentFor} onClose={() => { setAgentFor(null); load(); }} />}
       {edit && (
         <Modal open onClose={() => setEdit(null)} title={edit.id ? 'Editar acesso' : 'Novo acesso'}
           footer={<><button className="btn-ghost" onClick={() => setEdit(null)}>Cancelar</button><button className="btn-primary" disabled={busy} onClick={save}>Salvar</button></>}>
@@ -410,12 +418,22 @@ function Team() {
             <Input label="Nome" value={edit.name || ''} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
             <Input label="E-mail (login)" type="email" value={edit.email || ''} onChange={(e) => setEdit({ ...edit, email: e.target.value })} />
             <Select label="Perfil" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>
-              {Object.entries(ROLES).filter(([k]) => k !== 'owner').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {Object.entries(ROLES).filter(([k]) => k !== 'owner' || user.role === 'owner').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </Select>
+            {edit.role === 'owner' && edit.original_role !== 'owner' && (
+              <p className="rounded-app-sm bg-amber-500/10 p-2 text-xs text-amber-800 sm:col-span-2 dark:text-amber-200">
+                Proprietário tem acesso total, gerencia a assinatura e pode dar ou tirar o perfil de proprietário de outras pessoas.
+              </p>
+            )}
+            {edit.original_role === 'owner' && edit.role !== 'owner' && (
+              <p className="rounded-app-sm bg-amber-500/10 p-2 text-xs text-amber-800 sm:col-span-2 dark:text-amber-200">
+                Esta pessoa deixa de ser proprietária. A empresa precisa continuar com pelo menos um proprietário ativo.
+              </p>
+            )}
             <Select label="Unidade" value={edit.unit_id || ''} onChange={(e) => setEdit({ ...edit, unit_id: e.target.value })}>
               <option value="">Principal</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </Select>
-            {!['admin', 'manager', 'finance', 'fiscal', 'purchasing', 'viewer'].includes(edit.role) && (
+            {!['owner', 'admin', 'manager', 'finance', 'fiscal', 'purchasing', 'viewer'].includes(edit.role) && (
               <Select label="Vincular ao técnico" value={edit.technician_id || ''} onChange={(e) => setEdit({ ...edit, technician_id: e.target.value })}>
                 <option value="">{edit.role === 'technician' ? 'Selecione…' : 'Nenhum'}</option>{technicians.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
@@ -426,6 +444,42 @@ function Team() {
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Liberação do Assistente para um usuário: ligar/desligar e o que ele pode pedir. */
+function AgentAccess({ u, onClose }) {
+  const [run, busy] = useAction();
+  const { refresh, user } = useAuth();
+  const [d, setD] = useState(null);
+  useEffect(() => { api.get(`/users/${u.id}/agent`).then(setD).catch(onClose); }, [u.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const save = async (body) => {
+    const r = await run(() => api.put(`/users/${u.id}/agent`, body), 'Assistente atualizado');
+    if (r !== FAIL) { if (u.id === user.id) refresh?.(); onClose(); }
+  };
+  return (
+    <Modal open onClose={onClose} title={`Assistente de ${u.name}`} subtitle="O que esta pessoa pode pedir ao Assistente (texto ou voz)"
+      footer={d && <>
+        {d.custom && <button className="btn-ghost mr-auto text-xs" disabled={busy} onClick={() => save({ reset: true })}>Voltar ao padrão do perfil</button>}
+        <button className="btn-ghost" onClick={onClose}>Cancelar</button>
+        <button className="btn-primary" disabled={busy} onClick={() => save({ enabled: d.enabled, actions: d.actions })}>Salvar</button>
+      </>}>
+      {!d ? <Loading /> : (
+        <div className="space-y-3" aria-label="Liberação do assistente">
+          <Toggle checked={d.enabled} onChange={(v) => setD({ ...d, enabled: v })} label="Assistente liberado para este usuário" hint="Desligado, o botão Assistente some para ele." />
+          <div className={cx('space-y-1 rounded-app-sm border border-line p-3', !d.enabled && 'opacity-50')}>
+            {d.catalog.map((a) => (
+              <label key={a.key} className={cx('flex cursor-pointer items-start gap-2 py-1 text-sm', a.blocked && 'cursor-not-allowed')}>
+                <input type="checkbox" className="mt-0.5 h-4 w-4" disabled={!d.enabled || a.blocked} checked={!!d.actions[a.key] && !a.blocked}
+                  onChange={(e) => setD({ ...d, actions: { ...d.actions, [a.key]: e.target.checked } })} />
+                <span>{a.label}{a.blocked && <span className="block text-xs text-ink-faint">O perfil de acesso ({ROLES[d.user.role]}) não permite — ajuste em Perfis de acesso.</span>}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-ink-faint">O Assistente nunca faz mais do que a pessoa poderia fazer na tela, mostra um resumo e só grava depois do “Confirmar”. Tudo fica no histórico de alterações.</p>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -694,6 +748,10 @@ function DataExport() {
           <p className="text-sm text-ink-faint">Todas as tabelas da empresa em um arquivo. Não inclui senhas, tokens fiscais nem certificados. Fica registrado na auditoria.</p>
         </div>
         <button className="btn-primary" disabled={!!busy} onClick={() => download('/export/backup.json', `torven-backup-${new Date().toISOString().slice(0, 10)}.json`)}>Baixar cópia</button>
+      </div>
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-5">
+        <div className="min-w-0 flex-1 basis-72"><h3 className="font-semibold">Importar clientes e OS de planilha</h3><p className="text-sm text-ink-faint">Traga dados de outro sistema ou do Excel, com prévia e opção de desfazer.</p></div>
+        <Link className="btn-outline" to="/dados">Importar e exportar dados</Link>
       </div>
       <div className="card p-5">
         <h3 className="mb-3 font-semibold">Planilhas (CSV) por assunto</h3>

@@ -4,9 +4,11 @@ import {
   LayoutDashboard, LifeBuoy, ClipboardList, FileText, Users, Wallet, BarChart3, Wrench, UserRound, Package, Settings,
   LogOut, Menu, X, Sun, Moon, BadgePercent, ChevronDown, Plus, ShoppingCart, Truck, PackagePlus, Receipt, HardHat,
   Inbox, HeartHandshake, Headset, MessageCircle, Boxes, CircleHelp, CalendarDays, Timer, ShieldAlert, ShoppingBag, PackageOpen, Landmark, FileSpreadsheet, ShieldCheck, Building2, CreditCard, ChevronsLeft, ChevronsRight, ChevronRight, Home,
+  ArrowDownToLine, ArrowUpFromLine, FilePlus2, ArrowLeftRight, Calculator, Archive, BellRing, DatabaseZap,
 } from 'lucide-react';
 import { GlobalSearch, SearchButton, Notifications, useShortcuts } from './Workspace';
 import VoiceCommand from './VoiceCommand';
+import AgentPanel from './AgentPanel';
 import { helpFor } from '../lib/training-help';
 import { useAuth } from '../context/AuthContext';
 import { ROLES, isTechnician } from '../lib/format';
@@ -83,10 +85,17 @@ export function useNav() {
       can('purchases') && mods.purchases && feature('compras') && { to: '/estoque/entradas', label: 'Entrada de materiais', icon: PackagePlus },
       can('suppliers', 'purchases') && { to: '/fornecedores', label: 'Fornecedores', icon: Truck },
     ] },
-    { label: 'Financeiro e fiscal', icon: Landmark, children: [
-      can('cash') && { to: '/financeiro', label: 'Caixa e lançamentos', icon: Wallet, end: true },
-      can('cash', 'reports') && feature('financeiro') && { to: '/financeiro/gestao', label: 'Contas, conciliação e DRE', icon: Landmark },
+    { label: 'Financeiro', icon: Landmark, children: [
+      can('cash') && { to: '/financeiro/receber', label: 'Contas a receber', icon: ArrowDownToLine },
+      can('cash') && { to: '/financeiro/pagar', label: 'Contas a pagar', icon: ArrowUpFromLine },
+      can('cash') && { to: '/financeiro/incluir', label: 'Incluir conta', icon: FilePlus2 },
+      can('cash') && feature('financeiro') && { to: '/financeiro/transferencia', label: 'Transferência', icon: ArrowLeftRight },
+      can('purchases') && mods.purchases && feature('compras') && { to: '/estoque/entradas', label: 'Notas de compra', icon: FileText, end: true },
       mods.commissions && feature('comissoes') && scope('commissions') !== 'none' && { to: '/comissoes', label: 'Comissões', icon: BadgePercent },
+      can('cash') && { to: '/financeiro/caixa', label: 'Caixa', icon: Calculator },
+      can('cash') && { to: '/financeiro/fechados', label: 'Caixas fechados', icon: Archive },
+      can('cash') && { to: '/financeiro/alertas', label: 'Alertas e lembretes', icon: BellRing },
+      can('cash', 'reports') && feature('financeiro') && { to: '/financeiro/gestao', label: 'Contas, conciliação e DRE', icon: Landmark },
       can('invoices_issue', 'invoices_cancel') && mods.invoices && feature('fiscal') && { to: '/notas', label: 'Notas fiscais', icon: Receipt },
     ] },
     { label: 'Relatórios', icon: BarChart3, children: [
@@ -98,6 +107,7 @@ export function useNav() {
       can('services_manage') && { to: '/servicos', label: 'Serviços e preços', icon: Wrench },
       can('technicians_manage') && { to: '/tecnicos', label: 'Técnicos', icon: HardHat },
       can('audit_view') && { to: '/auditoria', label: 'Histórico de alterações', icon: ShieldCheck },
+      can('data_import', 'data_export') && { to: '/dados', label: 'Importar e exportar dados', icon: DatabaseZap },
       access && ['owner', 'admin'].includes(user?.role) && { to: '/assinatura', label: 'Assinatura e plano', icon: CreditCard },
     ] },
     { label: 'Minha conta e ajuda', icon: UserRound, children: [
@@ -328,7 +338,7 @@ function TopLayout() {
               </NavLink>
             )))}
           </nav>
-          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><HelpLink light /><VoiceCommand light /><Notifications light /><QuickActions light /><UserMenu light /></div>
+          <div className="ml-auto flex items-center gap-1.5"><SearchButton light /><HelpLink light /><VoiceCommand light /><AgentPanel light /><Notifications light /><QuickActions light /><UserMenu light /></div>
         </div>
       </header>
       {open && <MobileDrawer nav={nav} onClose={() => setOpen(false)} />}
@@ -434,6 +444,7 @@ function SideLayout() {
             <SearchButton />
             <HelpLink />
             <VoiceCommand />
+            <AgentPanel />
             <Notifications />
             <QuickActions />
             <div className="hidden sm:block"><UserMenu /></div>

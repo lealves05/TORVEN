@@ -26,6 +26,7 @@ const Services = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.
 const Technicians = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Technicians })));
 const Suppliers = lazy(() => import('./pages/Catalog').then((m) => ({ default: m.Suppliers })));
 const Cash = lazy(() => import('./pages/Cash'));
+const DataIO = lazy(() => import('./pages/DataIO'));
 const Invoices = lazy(() => import('./pages/Invoices'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Commissions = lazy(() => import('./pages/Reports').then((m) => ({ default: m.Commissions })));
@@ -126,6 +127,8 @@ export default function App() {
             <Route path="servicos" element={<Guard perms={['services_manage']}><Services /></Guard>} />
             <Route path="tecnicos" element={<Guard perms={['technicians_manage']}><Technicians /></Guard>} />
             <Route path="financeiro" element={<Guard perms={['cash']}><Cash /></Guard>} />
+            <Route path="financeiro/:aba" element={<Guard perms={['cash']}><Cash /></Guard>} />
+            <Route path="dados" element={<Guard perms={['data_import', 'data_export']}><DataIO /></Guard>} />
             <Route path="notas" element={<Guard perms={['invoices_issue', 'invoices_cancel']}><Invoices /></Guard>} />
             <Route path="relatorios" element={<Guard perms={['reports']}><Reports /></Guard>} />
             <Route path="comissoes" element={<Guard perms={['commissions']}><Commissions /></Guard>} />

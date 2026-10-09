@@ -42,6 +42,9 @@ import integrationRoutes from './routes/integrations.js';
 import vehicleRoutes from './routes/vehicles.js';
 import terminalChargeRoutes from './routes/terminalCharges.js';
 import whatsappRoutes, { webhook as whatsappWebhook } from './routes/whatsapp.js';
+import agentRoutes from './routes/agent.js';
+import reminderRoutes from './routes/reminders.js';
+import dataRoutes from './routes/dataio.js';
 
 export function createApp() {
   const app = express();
@@ -115,6 +118,9 @@ export function createApp() {
   api.use('/vehicles', vehicleRoutes);           // placa → cadastro / consulta / cadastro simples
   api.use('/terminal-charges', terminalChargeRoutes); // cobrança da OS na maquininha
   api.use('/whatsapp', whatsappRoutes);          // atendimento e agente do WhatsApp
+  api.use('/agent', agentRoutes);                // assistente interno (texto/voz), com liberação por usuário
+  api.use('/reminders', reminderRoutes);         // lembretes e alertas do financeiro
+  api.use('/data', dataRoutes);                  // importar clientes e OS de planilha
   api.use('/', workspaceRoutes);
   app.use('/api', api);
 

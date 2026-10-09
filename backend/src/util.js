@@ -169,6 +169,8 @@ export const DEFAULT_SETTINGS = {
     status: 'Olá {cliente}! Atualização da OS nº {numero} na {empresa}: {status}. Acompanhe: {link}',
   },
   modules: { purchases: true, invoices: true, commissions: true, publicLinks: true },
+  // alertas do sino e da tela Financeiro › Alertas e lembretes
+  financeAlerts: { payDaysBefore: 3, receiveDaysBefore: 3, cashOpenHours: 16, remindersDaysBefore: 0 },
   dateFormat: 'dd/MM/yyyy',
   numbering: { request: 'SOL', quote: 'ORC', order: 'OS', purchase: 'ENT', purchase_order: 'PC', quotation: 'COT', warranty: 'GAR', digits: 5 },
   relationship: { postSaleDays: 7, quoteFollowupDays: 3, warrantyNoticeDays: 15, maintenanceDays: 0, collectionDays: 3 },
@@ -283,6 +285,7 @@ export const PERMISSIONS = [
   { group: 'Administração', key: 'users', label: 'Usuários e perfis de acesso' },
   { group: 'Administração', key: 'audit_view', label: 'Logs e auditoria' },
   { group: 'Administração', key: 'data_export', label: 'Exportar dados' },
+  { group: 'Administração', key: 'data_import', label: 'Importar clientes e OS de planilha' },
 ];
 
 export const ROLES = {
@@ -316,6 +319,37 @@ export const DEFAULT_PERMISSIONS = {
   viewer: { ...NONE, requests_view: true, quotes_view: true, customers_view: true, orders_view: 'all', reports: true, schedule_view: true },
 };
 
+// ---------- Assistente: o que cada usuário pode pedir a ele ----------
+// Cada ação também exige a permissão normal do perfil (o assistente nunca faz mais do que a pessoa faria na tela).
+export const AGENT_ACTIONS = [
+  { key: 'consultar_financeiro', label: 'Consultar contas a pagar/receber, caixa e saldos', needs: ['cash'] },
+  { key: 'lancar_conta', label: 'Incluir contas a pagar e a receber', needs: ['cash'] },
+  { key: 'baixar_conta', label: 'Dar baixa (pagar ou receber) em contas', needs: ['cash'] },
+  { key: 'lembretes', label: 'Criar e ver lembretes', needs: ['cash'] },
+  { key: 'consultar_os', label: 'Consultar ordens de serviço', needs: ['orders_view'] },
+];
+const AGENT_ROLE_DEFAULT = {
+  owner: AGENT_ACTIONS.map((a) => a.key), admin: AGENT_ACTIONS.map((a) => a.key), manager: AGENT_ACTIONS.map((a) => a.key),
+  finance: ['consultar_financeiro', 'lancar_conta', 'baixar_conta', 'lembretes', 'consultar_os'],
+  attendant: ['consultar_os'], supervisor: ['consultar_os'],
+};
+/** Liberação do assistente para o usuário: o que foi gravado nele ou, se nada, o padrão do perfil. */
+export function agentProfile(user) {
+  const saved = user?.agent_permissions;
+  const def = AGENT_ROLE_DEFAULT[user?.role] || [];
+  const enabled = saved && typeof saved.enabled === 'boolean' ? saved.enabled : def.length > 0;
+  const actions = Object.fromEntries(AGENT_ACTIONS.map((a) => [a.key, saved?.actions && a.key in saved.actions ? !!saved.actions[a.key] : def.includes(a.key)]));
+  return { enabled, actions, custom: !!saved };
+}
+/** A ação está liberada: assistente ligado para o usuário, ação marcada e permissão normal do perfil. */
+export function agentAllowed(user, perms, key) {
+  const a = AGENT_ACTIONS.find((x) => x.key === key);
+  if (!a) return false;
+  const p = agentProfile(user);
+  const has = (k) => perms?.[k] === true || perms?.[k] === 'all' || perms?.[k] === 'own';
+  return p.enabled && p.actions[key] && a.needs.every(has);
+}
+
 export function permissionsFor(role, settings) {
   if (role === 'owner') return { ...ALL };
   const base = DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.viewer;
@@ -324,7 +358,7 @@ export function permissionsFor(role, settings) {
 
 export function withDefaults(settings = {}) {
   const out = { ...DEFAULT_SETTINGS, ...settings };
-  for (const k of ['orders', 'whatsapp', 'modules', 'numbering', 'quotes', 'relationship', 'brand', 'documents']) {
+  for (const k of ['orders', 'whatsapp', 'modules', 'numbering', 'quotes', 'relationship', 'brand', 'documents', 'financeAlerts']) {
     out[k] = { ...DEFAULT_SETTINGS[k], ...(settings?.[k] || {}) };
   }
   out.documents.titles = { ...DEFAULT_SETTINGS.documents.titles, ...(settings?.documents?.titles || {}) };

@@ -461,7 +461,7 @@ export const LESSONS = [
     "n": 19,
     "file": "19-caixa-do-dia",
     "mod": "financeiro",
-    "s": 63,
+    "s": 65,
     "title": "Caixa do dia: abrir e fechar",
     "routes": [
       "/financeiro"
@@ -472,13 +472,13 @@ export const LESSONS = [
       "Acompanhar entradas e saídas",
       "Fechar e conferir o caixa"
     ],
-    "text": "O caixa do dia guarda tudo o que entrou e saiu da oficina hoje. Para receber, ele precisa estar aberto. De manhã, informe o troco inicial: o dinheiro que já está na gaveta. Clique em Abrir caixa. Pronto, já dá para receber. Cada pagamento recebido nas OS e nas vendas aparece aqui. Retirou dinheiro para pagar algo? Lance como saída, com o motivo. No fim do dia, clique em Fechar caixa e conte o dinheiro da gaveta. O sistema mostra se sobrou ou faltou. Os caixas anteriores ficam guardados em Fechamentos anteriores, para conferência."
+    "text": "O caixa do dia guarda tudo o que entrou e saiu da oficina hoje. Para receber, ele precisa estar aberto. De manhã, informe o troco inicial: o dinheiro que já está na gaveta. Clique em Abrir caixa. Pronto, já dá para receber. Cada pagamento recebido nas OS e nas vendas aparece aqui. Retirou dinheiro para pagar algo? Lance como saída, com o motivo. No fim do dia, clique em Fechar caixa e conte o dinheiro da gaveta. O sistema mostra se sobrou ou faltou. Os caixas anteriores ficam guardados no menu Financeiro, em Caixas fechados, para conferência."
   },
   {
     "n": 20,
     "file": "20-contas-e-gestao-financeira",
     "mod": "financeiro",
-    "s": 68,
+    "s": 77,
     "title": "Contas a pagar e a receber",
     "routes": [
       "/financeiro/gestao"
@@ -489,7 +489,40 @@ export const LESSONS = [
       "Contas bancárias e conciliação",
       "O resultado do mês (DRE)"
     ],
-    "text": "Em Contas a pagar e receber estão os vencimentos: o que os clientes devem e o que a oficina deve pagar. Pagou ou recebeu? Clique na conta e dê a baixa. O Fluxo de caixa mostra, dia a dia, quanto entrou e quanto saiu. Em Gestão financeira ficam o caixa e as contas bancárias, com o saldo de cada uma. Na Conciliação bancária você importa o extrato do banco e confere, linha por linha, com os lançamentos do sistema. O DRE mostra o resultado do mês: o que entrou, os custos, as despesas e quanto sobrou."
+    "text": "No menu Financeiro, Contas a receber mostra o que os clientes devem à oficina, com o vencimento de cada conta. Recebeu? Clique no sinal de certo, ao lado da conta, para dar a baixa. Contas a pagar mostra o que a oficina deve pagar. As vencidas aparecem em vermelho. Em Lançamentos você vê, mês a mês, tudo o que entrou e saiu. Em Contas, conciliação e DRE ficam o caixa e as contas bancárias, com o saldo de cada uma. Na Conciliação bancária você importa o extrato do banco e confere, linha por linha, com os lançamentos do sistema. O DRE mostra o resultado do mês: o que entrou, os custos, as despesas e quanto sobrou."
+  },
+  {
+    "n": 38,
+    "file": "38-financeiro-alertas-e-lembretes",
+    "mod": "financeiro",
+    "s": 148,
+    "title": "Financeiro: incluir conta, caixas fechados, alertas e lembretes",
+    "routes": [
+      "/financeiro/"
+    ],
+    "desc": "As opções do menu Financeiro, como incluir uma conta, ver os caixas fechados e receber alertas e lembretes de vencimento.",
+    "learn": [
+      "As opções do menu Financeiro",
+      "Incluir uma conta a pagar",
+      "Caixas fechados e transferências",
+      "Alertas e lembretes"
+    ],
+    "text": "O menu Financeiro reúne tudo do dinheiro da oficina: contas a receber e a pagar, incluir conta, transferência, notas de compra, comissões, caixa, caixas fechados, alertas e lembretes. Para lançar uma conta que vai vencer, como a conta de energia, clique em Incluir conta a pagar. Escreva a descrição e o valor. Confira o vencimento e a categoria. Clique em Salvar. A conta aparece na lista, em aberto, até você dar a baixa. Se a conta se repete todo mês, como o aluguel, use Repetir mensalmente. Em Transferência você registra, por exemplo, o dinheiro do caixa levado para o banco. Não conta como receita nem despesa. Em Caixas fechados ficam todos os fechamentos, com o que era esperado, o que foi contado e a diferença. Marque Só com diferença para achar os caixas que sobraram ou faltaram. O botão Ver mostra cada movimento. Em Alertas e lembretes você vê as contas vencidas, as que vão vencer e o caixa aberto há muito tempo. Clique num alerta para ver as contas. Para não esquecer de nada, crie um lembrete: escreva o que é, a data e se repete todo mês. Clique em Salvar. No dia, o aviso aparece no sino. Quando fizer, clique em Feito: se repete, o próximo é criado sozinho. O sino, no alto da tela, junta todos os avisos: contas vencendo, contas vencidas, caixa aberto e lembretes do dia. Inclua as contas assim que chegarem, dê a baixa quando pagar ou receber e olhe os alertas todo dia."
+  },
+  {
+    "n": 39,
+    "file": "39-assistente",
+    "mod": "financeiro",
+    "s": 121,
+    "title": "Assistente: pergunte e peça por texto ou voz",
+    "routes": [],
+    "desc": "O Assistente responde sobre contas e caixa, inclui contas, dá baixa e cria lembretes — sempre pedindo confirmação.",
+    "learn": [
+      "Perguntar ao Assistente",
+      "Incluir conta e lembrete pelo Assistente",
+      "Liberar o Assistente por usuário"
+    ],
+    "text": "O Assistente entende pedidos escritos ou falados, como contas a pagar desta semana, ou lançar conta a pagar de 350 reais da energia. Clique em Assistente, no alto da tela. Escreva a pergunta e clique em enviar. Ele responde na hora, com a lista e o total. Para gravar alguma coisa, ele mostra um resumo do que entendeu, com os campos para conferir. Nada é gravado ainda. Está certo? Clique em Confirmar. Se não, clique em Cancelar. Também dá para falar: toque no microfone e diga, por exemplo, me lembre de pagar o IPTU dia 20. Confirme, e o lembrete aparece no sino no dia certo. Quem pode usar? Em Configurações, Usuários, clique em Assistente ao lado de cada pessoa. Ligue ou desligue o Assistente e marque o que ela pode pedir: consultar, incluir contas, dar baixa, lembretes e consultar OS. O Assistente nunca faz mais do que a pessoa poderia fazer na tela, sempre mostra o resumo antes de gravar, e tudo fica registrado."
   },
   {
     "n": 21,
@@ -527,7 +560,7 @@ export const LESSONS = [
     "n": 33,
     "file": "33-emitir-nota-fiscal",
     "mod": "financeiro",
-    "s": 125,
+    "s": 124,
     "title": "Emitir a nota fiscal da OS",
     "routes": [
       "/notas"
@@ -538,7 +571,7 @@ export const LESSONS = [
       "Escolher o CNPJ que emite",
       "Emitir ou informar o número da nota"
     ],
-    "text": "No menu Financeiro e fiscal, abra Notas fiscais. Clique em Emitir nota. Também dá para emitir a nota de dentro da própria OS. Digite o número da OS e clique nela na lista. Se a sua empresa tem mais de um CNPJ, escolha aqui qual vai emitir. O emitente padrão já vem marcado. Neste exemplo, vamos emitir pelo MEI do João. Confira o cliente, os serviços e o valor da nota. Se aparecer um aviso amarelo, corrija antes de emitir, por exemplo o CPF do cliente. Este CNPJ emite no site da prefeitura. O TORVEN separa os dados para você copiar: a descrição, os códigos e o valor. Clique em Preparar para emitir no site. Depois, emita a nota no site da prefeitura, como você já faz. Com a nota emitida, volte aqui e clique em Informar número. Digite o número da nota que saiu no site. Clique em Registrar nota. Ela fica marcada como registrada manualmente, ligada à OS. Nos CNPJs ligados a um emissor, como Focus ou NFE.io, é só clicar em Emitir nota. A nota fica Processando e logo vira Autorizada. O sistema nunca mostra uma nota como autorizada sem a confirmação da prefeitura ou da SEFAZ."
+    "text": "No menu Financeiro, abra Notas fiscais. Clique em Emitir nota. Também dá para emitir a nota de dentro da própria OS. Digite o número da OS e clique nela na lista. Se a sua empresa tem mais de um CNPJ, escolha aqui qual vai emitir. O emitente padrão já vem marcado. Neste exemplo, vamos emitir pelo MEI do João. Confira o cliente, os serviços e o valor da nota. Se aparecer um aviso amarelo, corrija antes de emitir, por exemplo o CPF do cliente. Este CNPJ emite no site da prefeitura. O TORVEN separa os dados para você copiar: a descrição, os códigos e o valor. Clique em Preparar para emitir no site. Depois, emita a nota no site da prefeitura, como você já faz. Com a nota emitida, volte aqui e clique em Informar número. Digite o número da nota que saiu no site. Clique em Registrar nota. Ela fica marcada como registrada manualmente, ligada à OS. Nos CNPJs ligados a um emissor, como Focus ou NFE.io, é só clicar em Emitir nota. A nota fica Processando e logo vira Autorizada. O sistema nunca mostra uma nota como autorizada sem a confirmação da prefeitura ou da SEFAZ."
   },
   {
     "n": 22,
@@ -596,7 +629,7 @@ export const LESSONS = [
     "n": 25,
     "file": "25-configuracoes-e-equipe",
     "mod": "config",
-    "s": 82,
+    "s": 94,
     "title": "Configurações, equipe e permissões",
     "routes": [
       "/configuracoes",
@@ -609,7 +642,7 @@ export const LESSONS = [
       "Serviços e técnicos",
       "Usuários e o que cada um pode ver"
     ],
-    "text": "Em Configurações, a aba Empresa guarda os dados que saem nas impressões: nome, CNPJ, telefone e endereço. Em OS e orçamentos ficam as regras: garantia e prazo padrão, pesquisa por placa, ditado por voz e a regra de uma placa por cadastro. A Tabela de serviços tem os serviços com o preço e o custo. É dela que vem o valor que aparece na OS. Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão. Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela. Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro."
+    "text": "Em Configurações, a aba Empresa guarda os dados que saem nas impressões: nome, CNPJ, telefone e endereço. Em OS e orçamentos ficam as regras: garantia e prazo padrão, pesquisa por placa, ditado por voz e a regra de uma placa por cadastro. A Tabela de serviços tem os serviços com o preço e o custo. É dela que vem o valor que aparece na OS. Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão. Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela. Tem sócio? Pode haver mais de um Proprietário. Só um proprietário dá ou tira esse perfil, e a empresa sempre fica com pelo menos um. Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro."
   },
   {
     "n": 32,
@@ -644,6 +677,23 @@ export const LESSONS = [
     "text": "Em Configurações, na aba Integrações, fica o quadro WhatsApp e agente de atendimento. O agente responde o cliente sozinho: diz como está o serviço pela placa e anota pedidos de serviço e de horário. Ligar o WhatsApp oficial é feito uma vez só, normalmente por quem cuida do computador da empresa. O passo a passo está nesta tela. Em Agente automático, marque os dias e o horário em que a oficina atende. O agente só oferece horários livres dentro deles. Antes de ligar, teste o agente aqui embaixo. Nada é enviado de verdade. Escreva como se fosse o cliente, por exemplo oi. O agente mostra as opções numeradas. Responda 2 para agendar. O agente pede a placa e o serviço, e mostra os horários livres. O cliente escolhe o horário, diz o nome e confirma. O pedido vai para a equipe aprovar. Por segurança, os detalhes da OS só são informados para o telefone cadastrado do cliente."
   },
   {
+    "n": 40,
+    "file": "40-importar-e-exportar-dados",
+    "mod": "config",
+    "s": 111,
+    "title": "Importar e exportar clientes e OS",
+    "routes": [
+      "/dados"
+    ],
+    "desc": "Trazer clientes e OS de outro sistema ou de uma planilha do Excel, conferir a prévia, importar, desfazer e exportar.",
+    "learn": [
+      "Baixar o modelo da planilha",
+      "Conferir a prévia e importar",
+      "Desfazer e exportar"
+    ],
+    "text": "Mudando de sistema? Dá para trazer os clientes e as ordens de serviço antigas de uma planilha do Excel. Em Configurações, Importar e exportar dados, clique em Baixar modelo. Ele já vem com as colunas certas e um exemplo. Preencha no Excel, uma linha por cliente. Se já tiver uma planilha, basta que a primeira linha tenha os nomes das colunas. Clique em Escolher planilha e selecione o arquivo. Antes de gravar, o sistema mostra a prévia, linha por linha. Novo é cliente que vai ser criado. Erro mostra o que está errado, como um CPF incompleto. Está tudo certo? Clique em Importar. As linhas com erro ficam de fora, e você pode corrigir e importar só elas depois. Cada importação fica guardada. Importou o arquivo errado? Clique em Desfazer, e o que foi criado é apagado. As OS antigas entram do mesmo jeito: número antigo, datas, cliente, veículo, serviço, valor e situação. Elas não mexem no seu financeiro. Para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais. Comece pelo modelo, confira a prévia e, se precisar, desfaça. Só quem tem a permissão de importar vê essa opção."
+  },
+  {
     "n": 26,
     "file": "26-suporte-e-treinamento",
     "mod": "config",
@@ -662,7 +712,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 3653;
+export const TOTAL_SECONDS = 4055;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

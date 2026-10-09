@@ -1,33 +1,37 @@
 WEBVTT
 
 1
-00:00:00.000 --> 00:00:11.051
+00:00:00.155 --> 00:00:11.456
 Aula 25: Configurações, equipe e permissões. Nesta aula você vai aprender: Dados da empresa e regras das OS; Serviços e técnicos; Usuários e o que cada um pode ver.
 
 2
-00:00:13.333 --> 00:00:20.879
+00:00:14.124 --> 00:00:21.670
 Em Configurações, a aba Empresa guarda os dados que saem nas impressões: nome, CNPJ, telefone e endereço.
 
 3
-00:00:24.750 --> 00:00:33.619
+00:00:25.266 --> 00:00:34.135
 Em OS e orçamentos ficam as regras: garantia e prazo padrão, pesquisa por placa, ditado por voz e a regra de uma placa por cadastro.
 
 4
-00:00:36.550 --> 00:00:43.221
+00:00:37.570 --> 00:00:44.241
 A Tabela de serviços tem os serviços com o preço e o custo. É dela que vem o valor que aparece na OS.
 
 5
-00:00:45.950 --> 00:00:50.957
+00:00:47.898 --> 00:00:52.905
 Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão.
 
 6
-00:00:53.650 --> 00:00:59.809
+00:00:55.834 --> 00:01:01.987
 Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela.
 
 7
-00:01:03.150 --> 00:01:10.483
-Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro.
+00:01:02.007 --> 00:01:10.257
+Tem sócio? Pode haver mais de um Proprietário. Só um proprietário dá ou tira esse perfil, e a empresa sempre fica com pelo menos um.
 
 8
-00:01:10.550 --> 00:01:21.189
+00:01:13.870 --> 00:01:21.203
+Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro.
+
+9
+00:01:21.928 --> 00:01:32.567
 Recapitulando: Dados da empresa e regras das OS; Serviços e técnicos; Usuários e o que cada um pode ver. Se precisar, assista de novo quando quiser. Até a próxima aula!

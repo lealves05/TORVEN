@@ -46,6 +46,40 @@ r.get('/sessions', async (req, res) => {
   res.json(rows);
 });
 
+/** Caixas fechados: período (abertura entre from e to) e só os com diferença, se pedido. */
+r.get('/sessions/closed', async (req, res) => {
+  const d = parse(z.object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    diff: z.enum(['1']).optional(),
+  }), req.query);
+  const p = [req.companyId];
+  let w = '';
+  if (d.from) { p.push(d.from); w += ` and cs.opened_at >= $${p.length}::date`; }
+  if (d.to) { p.push(d.to); w += ` and cs.opened_at < $${p.length}::date + 1`; }
+  if (d.diff) w += ' and abs(coalesce(cs.closing_amount,0) - coalesce(cs.expected_amount,0)) >= 0.01';
+  const { rows } = await q(
+    `select cs.*, uo.name as opened_by_name, uc.name as closed_by_name, round((cs.closing_amount - cs.expected_amount)::numeric, 2)::float8 as difference,
+            (select coalesce(sum(amount) filter (where type='entrada'),0)::float8 from transactions t where t.cash_session_id = cs.id and t.paid_at is not null) as entries,
+            (select coalesce(sum(amount) filter (where type='saida'),0)::float8 from transactions t where t.cash_session_id = cs.id and t.paid_at is not null) as exits
+       from cash_sessions cs left join users uo on uo.id = cs.opened_by left join users uc on uc.id = cs.closed_by
+      where cs.company_id=$1 and cs.closed_at is not null${w} order by cs.opened_at desc limit 500`, p);
+  res.json(rows);
+});
+
+/** Detalhe de um caixa (aberto ou fechado): resumo por forma e todas as movimentações. */
+r.get('/sessions/:id', async (req, res) => {
+  const s = await one(
+    `select cs.*, uo.name as opened_by_name, uc.name as closed_by_name from cash_sessions cs
+       left join users uo on uo.id = cs.opened_by left join users uc on uc.id = cs.closed_by
+      where cs.id = $1 and cs.company_id = $2`, [req.params.id, req.companyId]);
+  if (!s) throw notFound('Caixa não encontrado');
+  const { rows: movs } = await q(
+    `select t.id, t.type, t.category, t.description, t.amount, t.method, t.paid_at, t.order_id, o.number as order_number
+       from transactions t left join orders o on o.id = t.order_id
+      where t.cash_session_id = $1 and t.company_id = $2 and t.paid_at is not null order by t.paid_at`, [s.id, req.companyId]);
+  res.json({ ...(await sessionSummary(s)), movements: movs });
+});
+
 r.post('/session/open', async (req, res) => {
   const d = parse(z.object({ opening_amount: z.coerce.number().min(0).default(0) }), req.body);
   // trava por empresa: dois "abrir caixa" simultâneos não criam dois caixas abertos

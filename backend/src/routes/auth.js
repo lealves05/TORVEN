@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { q, one, tx } from '../db.js';
 import { signToken, requireAuth } from '../auth.js';
 import { ensureCompanyDefaults } from '../domain.js';
-import { parse, slugify, withDefaults, HttpError, DEFAULT_SETTINGS, DEFAULT_FISCAL, permissionsFor, PERMISSIONS, ROLES } from '../util.js';
+import { parse, slugify, withDefaults, HttpError, DEFAULT_SETTINGS, DEFAULT_FISCAL, permissionsFor, PERMISSIONS, ROLES, AGENT_ACTIONS, agentAllowed } from '../util.js';
 import { seedDemo } from '../seed.js';
 import { accessFor, registerCompany, hubCall } from '../platform.js';
 import { audit } from '../audit.js';
@@ -28,15 +28,18 @@ export const COMPANY_COLS = `select id, name, trade_name, slug, document, state_
 
 export async function loadSession(userId) {
   const user = await one(
-    `select u.id, u.name, u.email, u.role, u.technician_id, u.preferences, u.company_id, u.auth_version
+    `select u.id, u.name, u.email, u.role, u.technician_id, u.preferences, u.company_id, u.auth_version, u.agent_permissions
        from users u where u.id = $1`, [userId]);
   const company = await one(COMPANY_COLS, [user.company_id]);
   company.settings = withDefaults(company.settings);
   // situação da assinatura definida pela central da plataforma (null = sem central ou demonstração)
   const access = await accessFor(company.id).catch(() => null);
   const notice = await systemNotice().catch(() => null);
-  const { auth_version: _av, ...pub } = user;
-  return { user: pub, company, access, notice, permissions: permissionsFor(user.role, company.settings), permissionCatalog: PERMISSIONS, roles: ROLES, _av };
+  const { auth_version: _av, agent_permissions: _ap, ...pub } = user;
+  const permissions = permissionsFor(user.role, company.settings);
+  // assistente: ações liberadas para esta pessoa (perfil do assistente + permissão normal)
+  const agent = AGENT_ACTIONS.filter((a) => agentAllowed(user, permissions, a.key)).map((a) => a.key);
+  return { user: pub, company, access, notice, permissions, agent, permissionCatalog: PERMISSIONS, roles: ROLES, _av };
 }
 // sessão + token (o token leva a versão de autenticação atual; ela não vai para o navegador)
 async function sessionWithToken(userId) {

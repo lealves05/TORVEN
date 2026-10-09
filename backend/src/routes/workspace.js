@@ -144,9 +144,27 @@ r.get('/notifications', async (req, res) => {
       .then((x) => push({ id: 'stock_low', level: 'warning', title: 'Materiais no estoque mínimo', detail: 'Programe a reposição', count: x.n, link: '/estoque' })));
   }
   if (can(req, 'cash')) {
+    const a = req.settings.financeAlerts;
+    const days = (n) => (n === 0 ? 'hoje' : `hoje ou nos próximos ${n} dia(s)`);
     jobs.push(one(
-      `select count(*)::int as n from transactions where company_id = $1 and type = 'entrada' and paid_at is null and due_date < current_date`, [cid])
-      .then((x) => push({ id: 'receivables_overdue', level: 'danger', title: 'Recebimentos em atraso', detail: 'Contas a receber vencidas', count: x.n, link: '/financeiro' })));
+      `select count(*) filter (where type = 'entrada' and due_date < current_date)::int as rec_late,
+              count(*) filter (where type = 'entrada' and due_date between current_date and current_date + $2::int)::int as rec_due,
+              count(*) filter (where type = 'saida' and due_date < current_date)::int as pay_late,
+              count(*) filter (where type = 'saida' and due_date between current_date and current_date + $3::int)::int as pay_due
+         from transactions where company_id = $1 and paid_at is null and category <> 'Transferência entre contas'`, [cid, a.receiveDaysBefore, a.payDaysBefore])
+      .then((x) => {
+        push({ id: 'payables_overdue', level: 'danger', title: 'Contas a pagar vencidas', detail: 'Pague ou renegocie para evitar juros', count: x.pay_late, link: '/financeiro/pagar?situacao=vencido' });
+        push({ id: 'payables_due', level: 'warning', title: 'Contas a pagar vencendo', detail: `Vencem ${days(a.payDaysBefore)}`, count: x.pay_due, link: '/financeiro/pagar' });
+        push({ id: 'receivables_overdue', level: 'danger', title: 'Recebimentos em atraso', detail: 'Contas a receber vencidas — cobre o cliente', count: x.rec_late, link: '/financeiro/receber?situacao=vencido' });
+        push({ id: 'receivables_due', level: 'info', title: 'Contas a receber vencendo', detail: `Vencem ${days(a.receiveDaysBefore)}`, count: x.rec_due, link: '/financeiro/receber' });
+      }));
+    jobs.push(one(
+      `select round(extract(epoch from now() - opened_at) / 3600)::int as hours from cash_sessions where company_id = $1 and closed_at is null limit 1`, [cid])
+      .then((x) => { if (x && x.hours >= a.cashOpenHours) push({ id: 'cash_open_long', level: 'warning', title: 'Caixa aberto há muito tempo', detail: `Aberto há ${x.hours} horas — confira e feche o caixa`, count: 1, link: '/financeiro/caixa' }); }));
+    jobs.push(one(
+      `select count(*)::int as n from finance_reminders where company_id = $1 and done_at is null and due_date <= current_date + $2::int
+          and (assigned_to is null or assigned_to = $3)`, [cid, a.remindersDaysBefore, req.user.id])
+      .then((x) => push({ id: 'reminders_due', level: 'info', title: 'Lembretes', detail: 'Lembretes do financeiro para hoje', count: x.n, link: '/financeiro/alertas' })));
   }
   if (can(req, 'invoices_issue')) {
     jobs.push(one("select count(*)::int as n from invoices where company_id = $1 and status = 'erro'", [cid])

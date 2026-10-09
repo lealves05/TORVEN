@@ -728,6 +728,180 @@ await check('administrador não altera senha nem e-mail do proprietário', async
   assert.equal((await api('POST', '/users', { name: 'Admin2', email: 'admin2@int.dev', password: 'Oficina2026xy', role: 'admin' }, TA)).status, 403);
 });
 
+// ---------- financeiro: caixas fechados, alertas, lembretes ----------
+await check('financeiro: caixas fechados com detalhe, alertas de contas a pagar/receber e lembrete repetido', async () => {
+  const d = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const open = await api('GET', '/cash/session', null, T);
+  if (!open.data) await api('POST', '/cash/session/open', { opening_amount: 50 }, T);
+  await api('POST', '/cash/transactions', { type: 'entrada', category: 'Suprimento', description: 'Reforço', amount: 20, method: 'dinheiro', paid: true }, T);
+  const cl = await api('POST', '/cash/session/close', { closing_amount: 1 }, T);
+  assert.equal(cl.status, 200, JSON.stringify(cl.data));
+  const closed = (await api('GET', '/cash/sessions/closed', null, T)).data;
+  assert.ok(closed.length >= 1 && closed[0].closed_at);
+  assert.ok((await api('GET', '/cash/sessions/closed?diff=1', null, T)).data.some((x) => x.id === closed[0].id));
+  const det = (await api('GET', `/cash/sessions/${closed[0].id}`, null, T)).data;
+  assert.ok(det.movements.some((m) => m.description === 'Reforço'));
+  assert.equal((await api('GET', `/cash/sessions/${closed[0].id}`, null, T2)).status, 404);
+  // alertas: conta a pagar vencida e vencendo
+  await api('POST', '/cash/transactions', { type: 'saida', category: 'Aluguel', description: 'Aluguel atrasado', amount: 900, due_date: d(-2), paid: false }, T);
+  await api('POST', '/cash/transactions', { type: 'saida', category: 'Energia elétrica', description: 'Energia', amount: 350, due_date: d(1), paid: false }, T);
+  const n = (await api('GET', '/notifications', null, T)).data.items;
+  assert.ok(n.some((x) => x.id === 'payables_overdue'), JSON.stringify(n.map((x) => x.id)));
+  assert.ok(n.some((x) => x.id === 'payables_due'));
+  const al = (await api('GET', '/reminders/alerts', null, T)).data;
+  assert.ok(al.pagar_vencidas >= 1 && al.pagar_vencendo >= 1);
+  // lembrete mensal: concluir cria o próximo
+  const rm = await api('POST', '/reminders', { title: 'Pagar contador', due_date: d(0), repeat: 'mensal', amount: 200 }, T);
+  assert.equal(rm.status, 201, JSON.stringify(rm.data));
+  assert.ok((await api('GET', '/notifications', null, T)).data.items.some((x) => x.id === 'reminders_due'));
+  const done = await api('POST', `/reminders/${rm.data.id}/done`, {}, T);
+  assert.ok(done.data.next?.due_date > d(0));
+  assert.equal((await api('POST', `/reminders/${rm.data.id}/done`, {}, T2)).status, 404);
+  assert.equal((await api('GET', '/reminders', null, T2)).data.length, 0, 'outra empresa não vê');
+});
+
+// ---------- assistente ----------
+await check('assistente: consulta na hora, grava só depois de confirmar, respeita a liberação por usuário', async () => {
+  const prof = (await api('GET', '/agent/profile', null, T)).data;
+  assert.ok(prof.enabled && prof.actions.some((a) => a.key === 'lancar_conta'));
+  const sum = (await api('POST', '/agent/ask', { text: 'resumo financeiro' }, T)).data;
+  assert.equal(sum.kind, 'answer'); assert.match(sum.text, /A pagar/);
+  const pay = (await api('POST', '/agent/ask', { text: 'contas a pagar vencidas' }, T)).data;
+  assert.ok(pay.items?.some((x) => x.title === 'Aluguel atrasado'), JSON.stringify(pay));
+  const before = (await api('GET', '/cash/transactions?status=pendente&search=Internet%20fibra', null, T)).data.items.length;
+  const ask = (await api('POST', '/agent/ask', { text: 'lançar conta a pagar de 129,90 da internet fibra para dia 28' }, T)).data;
+  assert.equal(ask.kind, 'confirm', JSON.stringify(ask));
+  assert.equal(ask.params.amount, 129.9);
+  assert.equal(ask.params.category, 'Água/Internet/Telefone');
+  assert.equal((await api('GET', '/cash/transactions?status=pendente&search=Internet%20fibra', null, T)).data.items.length, before, 'nada gravado antes de confirmar');
+  const ok = await api('POST', '/agent/confirm', { intent: ask.intent, params: ask.params }, T);
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  assert.equal((await api('GET', '/cash/transactions?status=pendente&search=Internet%20fibra', null, T)).data.items.length, before + 1);
+  // dar baixa
+  const b = (await api('POST', '/agent/ask', { text: 'paguei a conta da internet fibra' }, T)).data;
+  assert.equal(b.kind, 'confirm', JSON.stringify(b));
+  assert.equal((await api('POST', '/agent/confirm', { intent: 'baixar_conta', params: b.params }, T)).status, 200);
+  assert.equal((await api('POST', '/agent/confirm', { intent: 'baixar_conta', params: b.params }, T)).status, 400, 'não baixa duas vezes');
+  // lembrete
+  const l = (await api('POST', '/agent/ask', { text: 'me lembre de pagar o IPTU dia 20' }, T)).data;
+  assert.equal(l.kind, 'confirm');
+  assert.equal((await api('POST', '/agent/confirm', { intent: 'lembrete', params: l.params }, T)).status, 200);
+  assert.ok((await api('GET', '/reminders', null, T)).data.some((x) => /IPTU/.test(x.title) && x.source === 'assistente'));
+  // confirmação com dados forjados é validada de novo
+  assert.equal((await api('POST', '/agent/confirm', { intent: 'lancar_conta', params: { type: 'saida', amount: -5, due_date: '2026-10-10', description: 'x', category: 'Aluguel' } }, T)).status, 400);
+  // outra empresa não dá baixa em conta alheia
+  const other = (await api('GET', '/cash/transactions?status=pendente', null, T)).data.items[0];
+  assert.equal((await api('POST', '/agent/confirm', { intent: 'baixar_conta', params: { transaction_id: other.id } }, T2)).status, 400);
+  // perfil por usuário: atendente só consulta OS; liberar e bloquear pelo administrador
+  const at = await api('POST', '/users', { name: 'Atendente', email: 'atend@int.dev', password: 'Oficina2026xy', role: 'attendant' }, T);
+  assert.equal(at.status, 201, JSON.stringify(at.data));
+  const TA = (await api('POST', '/auth/login', { email: 'atend@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('POST', '/agent/ask', { text: 'resumo financeiro' }, TA)).data.kind, 'denied');
+  const ag = (await api('GET', `/users/${at.data.id}/agent`, null, T)).data;
+  assert.equal(ag.enabled, true); assert.equal(ag.actions.consultar_financeiro, false);
+  assert.equal(ag.catalog.find((c) => c.key === 'lancar_conta').blocked, false, 'atendente tem a permissão "cash" no perfil padrão');
+  await api('PUT', `/users/${at.data.id}/agent`, { actions: { consultar_financeiro: true } }, T);
+  assert.equal((await api('POST', '/agent/ask', { text: 'resumo financeiro' }, TA)).data.kind, 'answer');
+  assert.equal((await api('POST', '/agent/confirm', { intent: 'lancar_conta', params: ask.params }, TA)).status, 403, 'lançar continua bloqueado');
+  await api('PUT', `/users/${at.data.id}/agent`, { enabled: false }, T);
+  assert.equal((await api('POST', '/agent/ask', { text: 'resumo financeiro' }, TA)).status, 403);
+  assert.equal((await api('PUT', `/users/${at.data.id}/agent`, { enabled: true }, TA)).status, 403, 'atendente não muda o próprio perfil');
+  assert.equal((await api('GET', `/users/${at.data.id}/agent`, null, T2)).status, 404);
+  const logs = (await api('GET', '/agent/log?all=1', null, T)).data;
+  assert.ok(logs.some((x) => x.outcome === 'confirmado') && logs.some((x) => x.outcome === 'negado'));
+  const audits = await pool.query("select summary from audit_log where summary like 'Assistente de Atendente%'");
+  assert.ok(audits.rows.length >= 2);
+});
+
+// ---------- importação de planilha ----------
+await check('importar clientes: prévia não grava, linha com erro não derruba as outras, atualiza e desfaz', async () => {
+  const rows = [
+    { Nome: 'Importado Um', 'CPF/CNPJ': '529.982.247-25', Telefone: '(19) 98888-1111', Placa: 'IMP1A23', Marca: 'Fiat', Modelo: 'Uno' },
+    { Nome: 'Importado Dois', Telefone: '(19) 97777-2222', Cidade: 'Campinas', UF: 'sp' },
+    { Nome: 'Erro CPF', 'CPF/CNPJ': '123' },
+    { Nome: '' },
+  ];
+  const before = (await pool.query("select count(*)::int n from customers where name like 'Importado%'")).rows[0].n;
+  const pv = await api('POST', '/data/clientes/preview', { rows, filename: 'clientes.xlsx' }, T);
+  assert.equal(pv.status, 200, JSON.stringify(pv.data));
+  assert.equal(pv.data.created, 2); assert.equal(pv.data.errors, 2);
+  assert.equal((await pool.query("select count(*)::int n from customers where name like 'Importado%'")).rows[0].n, before, 'prévia não grava');
+  const im = await api('POST', '/data/clientes/import', { rows, filename: 'clientes.xlsx' }, T);
+  assert.equal(im.status, 201, JSON.stringify(im.data));
+  assert.equal(im.data.created, 2);
+  assert.ok(im.data.rows.every((x) => x.status === 'erro'));
+  const { rows: [c1] } = await pool.query("select c.*, e.plate from customers c join equipment e on e.customer_id = c.id where c.name = 'Importado Um'");
+  assert.equal(c1.document, '52998224725'); assert.equal(c1.plate, 'IMP1A23');
+  // de novo: acha pelo CPF e atualiza o que mudou
+  const again = await api('POST', '/data/clientes/import', { rows: [{ Nome: 'Importado Um', CPF: '52998224725', Email: 'um@x.dev' }] }, T);
+  assert.equal(again.data.updated, 1); assert.equal(again.data.created, 0);
+  // sem permissão
+  const TA = (await api('POST', '/auth/login', { email: 'atend@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('POST', '/data/clientes/import', { rows }, TA)).status, 403);
+  // desfazer: remove o que foi criado
+  const un = await api('POST', `/data/imports/${im.data.batch_id}/undo`, {}, T);
+  assert.equal(un.data.customers, 2, JSON.stringify(un.data));
+  assert.equal((await api('POST', `/data/imports/${im.data.batch_id}/undo`, {}, T)).status, 400);
+  assert.equal((await api('POST', `/data/imports/${im.data.batch_id}/undo`, {}, T2)).status, 404);
+});
+await check('importar OS antigas: cria cliente, veículo e OS com nº antigo, não duplica e não mexe no financeiro', async () => {
+  const rows = [
+    { 'Número antigo': '1001', Data: '15/03/2025', Cliente: 'Cliente OS Antiga', Telefone: '(19) 96666-3333', Placa: 'OLD2B34', Problema: 'Barulho no freio', 'Serviço executado': 'Troca de pastilhas', Valor: '1.250,50', Situação: 'Entregue', 'Data entrega': '20/03/2025' },
+    { 'Número antigo': '1002', Data: '2025-04-01', Cliente: 'Cliente OS Antiga', Telefone: '19966663333', Problema: 'Revisão', Valor: '300', Situação: 'aberta' },
+    { 'Número antigo': '1003', Data: '31/02/2025', Cliente: 'Data ruim' },
+  ];
+  const txBefore = (await pool.query('select count(*)::int n from transactions')).rows[0].n;
+  const im = await api('POST', '/data/os/import', { rows, filename: 'os.csv' }, T);
+  assert.equal(im.status, 201, JSON.stringify(im.data));
+  assert.equal(im.data.created, 2); assert.equal(im.data.errors, 1);
+  const { rows: os } = await pool.query("select o.*, c.name from orders o join customers c on c.id = o.customer_id where o.legacy_number in ('1001','1002') order by legacy_number");
+  assert.equal(os.length, 2);
+  assert.equal(os[0].customer_id, os[1].customer_id, 'mesmo cliente pelo telefone');
+  assert.equal(os[0].status, 'entregue'); assert.equal(Number(os[0].total), 1250.5);
+  assert.equal(os[1].status, 'aberta');
+  assert.equal((await pool.query('select count(*)::int n from transactions')).rows[0].n, txBefore, 'sem lançamentos');
+  const again = await api('POST', '/data/os/import', { rows: rows.slice(0, 1) }, T);
+  assert.equal(again.data.skipped, 1, 'não duplica a OS antiga');
+  const un = await api('POST', `/data/imports/${im.data.batch_id}/undo`, {}, T);
+  assert.equal(un.data.orders, 2); assert.equal(un.data.customers, 1);
+});
+
+await check('vários proprietários: só proprietário promove, a empresa nunca fica sem proprietário ativo', async () => {
+  const users = (await api('GET', '/users', null, T)).data;
+  const me = users.find((u) => u.email === 'dono@int.dev');
+  const adm = users.find((u) => u.email === 'admin@int.dev');
+  const TADM = (await api('POST', '/auth/login', { email: 'admin@int.dev', password: 'Oficina2026xy' })).data.token;
+  const body = (u, role, extra = {}) => ({ name: u.name, email: u.email, role, active: true, ...extra });
+  // administrador não cria nem promove proprietário
+  assert.equal((await api('POST', '/users', { name: 'Sócio X', email: 'socio-x@int.dev', password: 'Oficina2026xy', role: 'owner' }, TADM)).status, 403);
+  // o único proprietário não pode deixar de ser proprietário
+  assert.equal((await api('PUT', `/users/${me.id}`, body(me, 'admin'), T)).status, 400);
+  // proprietário cria um sócio proprietário
+  const s1 = await api('POST', '/users', { name: 'Sócia', email: 'socia@int.dev', password: 'Oficina2026xy', role: 'owner' }, T);
+  assert.equal(s1.status, 201, JSON.stringify(s1.data));
+  const TS = (await api('POST', '/auth/login', { email: 'socia@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('GET', '/users', null, TS)).status, 200, 'sócia tem acesso total');
+  // e promove o administrador a proprietário
+  assert.equal((await api('PUT', `/users/${adm.id}`, body(adm, 'owner'), T)).status, 200);
+  assert.equal((await api('PUT', `/users/${adm.id}`, body(adm, 'admin'), TS)).status, 200, 'outro proprietário rebaixa');
+  // administrador não mexe em proprietário
+  assert.equal((await api('PUT', `/users/${s1.data.id}`, body(s1.data, 'manager'), TADM)).status, 401, 'token antigo do admin caiu ao mudar o perfil');
+  const TADM2 = (await api('POST', '/auth/login', { email: 'admin@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('PUT', `/users/${s1.data.id}`, body(s1.data, 'manager'), TADM2)).status, 403);
+  assert.equal((await api('DELETE', `/users/${s1.data.id}`, null, TADM2)).status, 403);
+  // com dois proprietários, o primeiro pode deixar de ser — e então a sócia vira a única e não pode sair
+  assert.equal((await api('PUT', `/users/${me.id}`, body(me, 'admin'), T)).status, 200);
+  assert.equal((await api('PUT', `/users/${s1.data.id}`, body(s1.data, 'owner', { active: false }), TS)).status, 400);
+  const TME = (await api('POST', '/auth/login', { email: 'dono@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('DELETE', `/users/${s1.data.id}`, null, TME)).status, 403, 'admin não remove proprietário');
+  // devolve: a sócia promove o dono de novo e remove a si? não — remove pelo dono
+  assert.equal((await api('PUT', `/users/${me.id}`, body(me, 'owner'), TS)).status, 200);
+  const T3 = (await api('POST', '/auth/login', { email: 'dono@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('DELETE', `/users/${s1.data.id}`, null, T3)).status, 204);
+  const audits = await pool.query("select summary from audit_log where summary like '%Proprietário%'");
+  assert.ok(audits.rows.length >= 3);
+});
+
 console.log(`\n${passed} verificações OK, ${fails.length} falhas`);
 server.close(); fake.close(); await pool.end();
 if (fails.length) { fails.forEach((f) => console.log(' -', f)); process.exit(1); }

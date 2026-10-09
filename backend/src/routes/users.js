@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { q, one } from '../db.js';
+import { q, one, tx } from '../db.js';
 import { need } from '../auth.js';
-import { parse, notFound, HttpError, ROLES } from '../util.js';
+import { parse, notFound, HttpError, ROLES, AGENT_ACTIONS, agentProfile, permissionsFor } from '../util.js';
 import { audit } from '../audit.js';
 import { passwordSchema, setPassword } from '../security.js';
 
@@ -11,11 +11,53 @@ const r = Router();
 r.use(need('users'));
 
 const cols = 'id, name, email, role, technician_id, unit_id, active, created_at';
-const ROLE_KEYS = Object.keys(ROLES).filter((k) => k !== 'owner');
+const ROLE_KEYS = Object.keys(ROLES);
+
+// Vários proprietários: só um proprietário dá ou tira o perfil de proprietário, e a empresa nunca fica sem nenhum ativo.
+const isOwner = (req) => req.user.role === 'owner';
+async function otherActiveOwners(db, companyId, exceptId) {
+  await db.query('select id from companies where id = $1 for no key update', [companyId]); // serializa mudanças de proprietário
+  const { rows: [x] } = await db.query("select count(*)::int as n from users where company_id = $1 and role = 'owner' and active and id <> $2", [companyId, exceptId]);
+  return x.n;
+}
 
 r.get('/', async (req, res) => {
-  const { rows } = await q(`select ${cols} from users where company_id = $1 order by created_at`, [req.companyId]);
-  res.json(rows);
+  const { rows } = await q(`select ${cols}, agent_permissions from users where company_id = $1 order by created_at`, [req.companyId]);
+  res.json(rows.map(({ agent_permissions, ...u }) => ({ ...u, agent_enabled: agentProfile({ ...u, agent_permissions }).enabled })));
+});
+
+// ---------- Assistente: liberação por usuário ----------
+/** O que o assistente pode fazer para este usuário; "blocked" = o perfil de acesso dele não tem a permissão normal. */
+r.get('/:id/agent', async (req, res) => {
+  const u = await one('select id, name, role, agent_permissions from users where id = $1 and company_id = $2', [req.params.id, req.companyId]);
+  if (!u) throw notFound();
+  const perms = permissionsFor(u.role, req.settings);
+  const has = (k) => perms[k] === true || perms[k] === 'all' || perms[k] === 'own';
+  res.json({ user: { id: u.id, name: u.name, role: u.role }, ...agentProfile(u),
+    catalog: AGENT_ACTIONS.map((a) => ({ key: a.key, label: a.label, blocked: !a.needs.every(has) })) });
+});
+
+r.put('/:id/agent', async (req, res) => {
+  const d = parse(z.object({
+    reset: z.boolean().optional(),
+    enabled: z.boolean().optional(),
+    actions: z.record(z.enum(AGENT_ACTIONS.map((a) => a.key)), z.boolean()).optional(),
+  }), req.body);
+  const cur = await one('select id, name, role, agent_permissions from users where id = $1 and company_id = $2', [req.params.id, req.companyId]);
+  if (!cur) throw notFound();
+  if (cur.role === 'owner' && req.user.role !== 'owner') throw new HttpError(403, 'Só um proprietário altera o assistente de um proprietário.');
+  if (cur.role === 'admin' && cur.id !== req.user.id && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode alterar outro administrador.');
+  const before = agentProfile(cur);
+  const next = d.reset ? null : { enabled: d.enabled ?? before.enabled, actions: { ...before.actions, ...(d.actions || {}) } };
+  await q('update users set agent_permissions = $3 where id = $1 and company_id = $2', [cur.id, req.companyId, next]);
+  const after = agentProfile({ ...cur, agent_permissions: next });
+  const label = (k) => AGENT_ACTIONS.find((a) => a.key === k)?.label || k;
+  const changes = [];
+  if (before.enabled !== after.enabled) changes.push(after.enabled ? 'assistente liberado' : 'assistente bloqueado');
+  for (const a of AGENT_ACTIONS) if (before.actions[a.key] !== after.actions[a.key]) changes.push(`${after.actions[a.key] ? '+' : '−'} ${label(a.key)}`);
+  await audit(null, req, { entity: 'user', entityId: cur.id, action: 'agent',
+    summary: `Assistente de ${cur.name}: ${d.reset ? 'voltou ao padrão do perfil' : changes.join('; ') || 'sem mudança'}` });
+  res.json(after);
 });
 
 const base = {
@@ -41,7 +83,8 @@ async function assertRefs(companyId, d) {
 
 r.post('/', async (req, res) => {
   const d = parse(z.object({ ...base, password: passwordSchema }), req.body);
-  if (d.role === 'admin' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode criar um administrador.');
+  if (d.role === 'admin' && !isOwner(req)) throw new HttpError(403, 'Só o proprietário pode criar um administrador.');
+  if (d.role === 'owner' && !isOwner(req)) throw new HttpError(403, 'Só um proprietário pode criar outro proprietário.');
   await assertRefs(req.companyId, d);
   const u = await one(
     `insert into users (company_id, name, email, password_hash, role, technician_id, unit_id)
@@ -60,18 +103,24 @@ r.put('/:id', async (req, res) => {
   const cur = await one('select * from users where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
   await assertRefs(req.companyId, d);
-  // só o próprio proprietário altera o cadastro dele; administrador só é alterado pelo proprietário ou por ele mesmo
-  if (cur.role === 'owner' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode alterar o próprio cadastro.');
-  if (cur.role === 'admin' && cur.id !== req.user.id && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode alterar outro administrador.');
-  if (d.role === 'admin' && cur.role !== 'admin' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode tornar alguém administrador.');
-  if (cur.role === 'owner' && d.role !== 'owner') throw new HttpError(400, 'O proprietário não pode ter o papel alterado.');
-  if (cur.role !== 'owner' && d.role === 'owner') throw new HttpError(400, 'Só pode haver um proprietário.');
+  // cadastro de proprietário: só proprietário altera; administrador só é alterado pelo proprietário ou por ele mesmo
+  if (cur.role === 'owner' && !isOwner(req)) throw new HttpError(403, 'Só um proprietário pode alterar o cadastro de um proprietário.');
+  if (cur.role === 'admin' && cur.id !== req.user.id && !isOwner(req)) throw new HttpError(403, 'Só o proprietário pode alterar outro administrador.');
+  if (d.role === 'admin' && cur.role !== 'admin' && !isOwner(req)) throw new HttpError(403, 'Só o proprietário pode tornar alguém administrador.');
+  if (cur.role !== 'owner' && d.role === 'owner' && !isOwner(req)) throw new HttpError(403, 'Só um proprietário pode tornar alguém proprietário.');
   if (cur.id === req.user.id && d.active === false) throw new HttpError(400, 'Você não pode desativar a si mesmo.');
-  const u = await one(
-    `update users set name=$1, email=$2, role=$3, technician_id=$4, active=$5, unit_id=$6,
-       auth_version = auth_version + case when $8::boolean then 1 else 0 end where id=$7 and company_id=$9 returning ${cols}`,
-    [d.name, d.email, d.role, d.technician_id || null, d.active ?? cur.active, d.unit_id ?? cur.unit_id ?? null, cur.id,
-      (d.active === false && cur.active) || cur.role !== d.role || String(cur.email).toLowerCase() !== String(d.email).toLowerCase(), req.companyId]);
+  const losesOwner = cur.role === 'owner' && (d.role !== 'owner' || d.active === false);
+  const u = await tx(async (db) => {
+    if (losesOwner && (await otherActiveOwners(db, req.companyId, cur.id)) === 0) {
+      throw new HttpError(400, 'A empresa precisa ter pelo menos um proprietário ativo. Torne outra pessoa proprietária antes.');
+    }
+    const { rows: [x] } = await db.query(
+      `update users set name=$1, email=$2, role=$3, technician_id=$4, active=$5, unit_id=$6,
+         auth_version = auth_version + case when $8::boolean then 1 else 0 end where id=$7 and company_id=$9 returning ${cols}`,
+      [d.name, d.email, d.role, d.technician_id || null, d.active ?? cur.active, d.unit_id ?? cur.unit_id ?? null, cur.id,
+        (d.active === false && cur.active) || cur.role !== d.role || String(cur.email).toLowerCase() !== String(d.email).toLowerCase(), req.companyId]);
+    return x;
+  });
   // senha redefinida pelo administrador: derruba as sessões do usuário (nenhuma sessão é criada em nome dele)
   if (d.password) await setPassword(null, cur.id, req.companyId, d.password);
   const changes = [];
@@ -86,9 +135,13 @@ r.put('/:id', async (req, res) => {
 r.delete('/:id', async (req, res) => {
   const cur = await one('select * from users where id = $1 and company_id = $2', [req.params.id, req.companyId]);
   if (!cur) throw notFound();
-  if (cur.role === 'owner' || cur.id === req.user.id) throw new HttpError(400, 'Este usuário não pode ser removido.');
-  if (cur.role === 'admin' && req.user.role !== 'owner') throw new HttpError(403, 'Só o proprietário pode remover um administrador.');
-  await q('delete from users where id = $1', [cur.id]);
+  if (cur.id === req.user.id) throw new HttpError(400, 'Você não pode remover o seu próprio acesso.');
+  if (cur.role === 'owner' && !isOwner(req)) throw new HttpError(403, 'Só um proprietário pode remover outro proprietário.');
+  if (cur.role === 'admin' && !isOwner(req)) throw new HttpError(403, 'Só o proprietário pode remover um administrador.');
+  await tx(async (db) => {
+    if (cur.role === 'owner' && (await otherActiveOwners(db, req.companyId, cur.id)) === 0) throw new HttpError(400, 'A empresa precisa ter pelo menos um proprietário ativo.');
+    await db.query('delete from users where id = $1 and company_id = $2', [cur.id, req.companyId]);
+  });
   await audit(null, req, { entity: 'user', entityId: cur.id, action: 'delete', summary: `Usuário ${cur.name} removido` });
   res.status(204).end();
 });

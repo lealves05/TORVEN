@@ -100,7 +100,7 @@ function AccountModal({ acc, onClose, onSaved }) {
   );
 }
 
-function TransferModal({ accounts, onClose, onDone }) {
+export function TransferModal({ accounts, onClose, onDone }) {
   const [run, busy] = useAction();
   const [f, setF] = useState({ from_id: accounts[0]?.id || '', to_id: accounts[1]?.id || '', amount: 0, date: new Date().toISOString().slice(0, 10), description: '' });
   const go = async () => { const r = await run(() => api.post('/finance/transfers', { ...f, description: f.description || null }), 'Transferência registrada'); if (r !== FAIL) onDone(); };

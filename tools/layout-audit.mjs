@@ -26,7 +26,7 @@ const ids = {
 const tabs = ['empresa', 'aparencia', 'os', 'tipos-os', 'checklists', 'documentos', 'financeiro', 'categorias', 'fiscal', 'integracoes', 'modulos', 'perfis', 'equipe', 'dados'];
 let routes = ['/', '/os', '/os/nova', `/os/${ids.os}`, '/venda', '/whatsapp', '/solicitacoes', '/solicitacoes/nova', `/solicitacoes/${ids.sol}`, '/orcamentos', '/orcamentos/novo',
   `/orcamentos/${ids.orc}`, '/clientes', `/clientes/${ids.cli}`, '/estoque', '/estoque/entradas', '/estoque/entradas/nova', ids.ent && `/estoque/entradas/${ids.ent}`, '/fornecedores', '/servicos',
-  '/tecnicos', '/financeiro', '/financeiro/gestao', '/notas', '/relatorios', '/comissoes', '/configuracoes/unidades', '/agenda', '/meu-trabalho', '/producao', '/garantias',
+  '/tecnicos', '/financeiro', '/financeiro/receber', '/financeiro/pagar', '/financeiro/lancamentos', '/financeiro/transferencia', '/financeiro/fechados', '/financeiro/alertas', '/dados', '/financeiro/gestao', '/notas', '/relatorios', '/comissoes', '/configuracoes/unidades', '/agenda', '/meu-trabalho', '/producao', '/garantias',
   '/compras', '/separacao', '/relacionamento', '/auditoria', '/conta', '/suporte', '/assinatura', `/imprimir/os/${ids.os}`, `/imprimir/orcamento/${ids.orc}`,
   ...tabs.map((t) => `/configuracoes?tab=${t}`)].filter(Boolean);
 if (ONLY) routes = routes.filter((r) => ONLY.some((o) => r.includes(o)));

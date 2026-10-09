@@ -1,29 +1,45 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import {
-  Lock, Unlock, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Plus, Check, Trash2, Pencil, Download, Wallet, Search, Undo2,
+  Lock, Unlock, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Plus, Check, Trash2, Pencil, Download, Wallet, Search, Undo2, ArrowLeftRight, Eye,
 } from 'lucide-react';
 import { api, qs } from '../lib/api';
 import { money, fmt, fmtDateTime, fmtTime, ymd, downloadCSV, methodName } from '../lib/format';
-import { useSettings } from '../context/AuthContext';
+import { useAuth, useSettings } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Tabs, Modal, Input, Select, MoneyInput, Toggle, Stat, Empty, Loading, useAction, FAIL, cx } from '../components/ui';
+import { TransferModal } from './Finance';
+import FinanceAlerts from '../components/FinanceAlerts';
+
+// Financeiro: cada opção do menu é uma aba com endereço próprio (/financeiro/receber, /financeiro/pagar...)
+const TABS = [
+  ['caixa', 'Caixa'], ['receber', 'Contas a receber'], ['pagar', 'Contas a pagar'], ['lancamentos', 'Lançamentos'],
+  ['transferencia', 'Transferência'], ['fechados', 'Caixas fechados'], ['alertas', 'Alertas e lembretes'],
+];
+const ALIAS = { fluxo: 'lancamentos', incluir: 'pagar' };
 
 export default function Cash() {
-  const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') || 'caixa';
+  const { aba } = useParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { feature } = useAuth();
+  const raw = aba || params.get('tab') || 'caixa';
+  const tab = ALIAS[raw] || raw;
+  const tabs = TABS.filter(([k]) => k !== 'transferencia' || feature('financeiro'));
   return (
     <div>
-      <PageHeader title="Caixa e financeiro" subtitle="Abertura e fechamento de caixa, fluxo de caixa, contas a pagar e a receber" />
-      <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[
-        { value: 'caixa', label: 'Caixa do dia' }, { value: 'fluxo', label: 'Fluxo de caixa' },
-        { value: 'contas', label: 'Contas a pagar/receber' },
-      ]} />
+      <PageHeader title="Financeiro" subtitle="Caixa, contas a pagar e a receber, transferências, fechamentos, alertas e lembretes" />
+      <Tabs value={tab} onChange={(t) => navigate(`/financeiro/${t}`)} tabs={tabs.map(([value, label]) => ({ value, label }))} />
       {tab === 'caixa' && <Session />}
-      {tab === 'fluxo' && <Transactions />}
-      {tab === 'contas' && <Transactions pendingOnly />}
+      {tab === 'receber' && <Transactions key="receber" pendingOnly fixedType="entrada" />}
+      {tab === 'pagar' && <Transactions key={`pagar-${raw}`} pendingOnly fixedType="saida" openNew={raw === 'incluir'} />}
+      {tab === 'contas' && <Transactions key="contas" pendingOnly />}
+      {tab === 'lancamentos' && <Transactions key="lanc" />}
+      {tab === 'transferencia' && <Transfers />}
+      {tab === 'fechados' && <ClosedSessions />}
+      {tab === 'alertas' && <FinanceAlerts />}
     </div>
   );
 }
@@ -124,7 +140,10 @@ function SessionHistory({ history }) {
   const closed = history.filter((h) => h.closed_at);
   return (
     <div className="card lg:col-span-2">
-      <h3 className="border-b border-line px-5 py-3.5 font-semibold">Fechamentos anteriores</h3>
+      <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+        <h3 className="font-semibold">Fechamentos anteriores</h3>
+        <Link className="text-sm text-primary hover:underline" to="/financeiro/fechados">Ver todos</Link>
+      </div>
       {closed.length === 0 ? <Empty title="Nenhum fechamento ainda" /> : (
         <div className="overflow-x-auto">
           <table className="table-clean">
@@ -196,16 +215,17 @@ function CloseSession({ session, onClose, onSaved }) {
   );
 }
 
-function Transactions({ pendingOnly }) {
+function Transactions({ pendingOnly, fixedType, openNew }) {
   const settings = useSettings();
   const { confirm } = useUI();
   const [run] = useAction();
+  const [params] = useSearchParams();
   const [f, setF] = useState({
     from: pendingOnly ? '' : ymd(startOfMonth(new Date())), to: pendingOnly ? '' : ymd(endOfMonth(new Date())),
-    type: '', status: pendingOnly ? 'pendente' : '', category: '', search: '',
+    type: fixedType || '', status: pendingOnly ? (params.get('situacao') === 'vencido' ? 'vencido' : 'pendente') : '', category: '', search: '',
   });
   const [data, setData] = useState(null);
-  const [edit, setEdit] = useState(null);
+  const [edit, setEdit] = useState(openNew ? { type: fixedType || 'saida', paid: false } : null);
   const load = useCallback(() => api.get(`/cash/transactions${qs(f)}`).then(setData), [f]);
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
 
@@ -222,7 +242,8 @@ function Transactions({ pendingOnly }) {
     if ((await run(() => api.del(`/cash/transactions/${t.id}`), 'Lançamento excluído')) !== FAIL) load();
   };
   const today = ymd();
-  const cats = [...(settings.incomeCategories || []), ...(settings.expenseCategories || []), 'Sangria', 'Suprimento'];
+  const cats = fixedType === 'entrada' ? settings.incomeCategories || [] : fixedType === 'saida' ? settings.expenseCategories || []
+    : [...(settings.incomeCategories || []), ...(settings.expenseCategories || []), 'Sangria', 'Suprimento'];
 
   return (
     <div className="space-y-4">
@@ -231,17 +252,20 @@ function Transactions({ pendingOnly }) {
           {!pendingOnly && <Stat label="Entradas" value={money(data.totals.entradas)} tone="text-emerald-500" icon={ArrowDownCircle} />}
           {!pendingOnly && <Stat label="Saídas" value={money(data.totals.saidas)} tone="text-red-500" icon={ArrowUpCircle} />}
           {!pendingOnly && <Stat label="Saldo realizado" value={money(data.totals.entradas - data.totals.saidas)} />}
-          <Stat label="A receber" value={money(data.totals.a_receber)} hint="pendente" />
-          <Stat label="A pagar" value={money(data.totals.a_pagar)} hint="pendente" />
-          {pendingOnly && <Stat label="Saldo previsto" value={money(data.totals.a_receber - data.totals.a_pagar)} />}
+          {fixedType !== 'saida' && <Stat label="A receber" value={money(data.totals.a_receber)} hint="pendente" tone={fixedType ? 'text-emerald-600' : undefined} />}
+          {fixedType !== 'entrada' && <Stat label="A pagar" value={money(data.totals.a_pagar)} hint="pendente" tone={fixedType ? 'text-red-600' : undefined} />}
+          {fixedType && <Stat label="Vencidas" value={String(data.items.filter((t) => !t.paid_at && t.due_date && t.due_date < ymd()).length)} hint="no filtro" />}
+          {pendingOnly && !fixedType && <Stat label="Saldo previsto" value={money(data.totals.a_receber - data.totals.a_pagar)} />}
         </div>
       )}
       <div className="card flex flex-wrap items-end gap-3 p-3">
         {!pendingOnly && <Input label="De" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className="w-40" />}
         {!pendingOnly && <Input label="Até" type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className="w-40" />}
-        <Select label="Tipo" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="w-36">
-          <option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option>
-        </Select>
+        {!fixedType && (
+          <Select label="Tipo" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className="w-36">
+            <option value="">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option>
+          </Select>
+        )}
         {pendingOnly ? (
           <Select label="Situação" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className="w-36">
             <option value="pendente">Em aberto</option><option value="vencido">Vencidas</option>
@@ -262,10 +286,12 @@ function Transactions({ pendingOnly }) {
           Data: fmt(t.ref_date), Tipo: t.type, Categoria: t.category, Descricao: t.description, Valor: t.amount, Forma: methodName(settings, t.method),
           Situacao: t.paid_at ? 'Pago' : 'Pendente', Vencimento: t.due_date ? fmt(t.due_date) : '',
         })))}><Download className="h-4 w-4" /></button>
-        <button className="btn-primary" onClick={() => setEdit({ type: 'saida', paid: !pendingOnly })}><Plus className="h-4 w-4" /> Lançamento</button>
+        <button className="btn-primary" data-tour="incluir-conta" onClick={() => setEdit({ type: fixedType || 'saida', paid: !pendingOnly })}>
+          <Plus className="h-4 w-4" /> {fixedType === 'entrada' ? 'Incluir conta a receber' : fixedType === 'saida' ? 'Incluir conta a pagar' : 'Lançamento'}
+        </button>
       </div>
       <div className="card overflow-hidden">
-        {!data ? <Loading /> : !data.items.length ? <Empty icon={Wallet} title="Nenhum lançamento no filtro" /> : (
+        {!data ? <Loading /> : !data.items.length ? <Empty icon={Wallet} title={fixedType === 'entrada' ? 'Nenhuma conta a receber neste filtro' : fixedType === 'saida' ? 'Nenhuma conta a pagar neste filtro' : 'Nenhum lançamento no filtro'} /> : (
           <div className="overflow-x-auto">
             <table className="table-clean">
               <thead><tr><th>Data</th><th>Descrição</th><th className="hidden md:table-cell">Categoria</th><th className="hidden lg:table-cell">Forma</th><th className="text-right">Valor</th><th /></tr></thead>
@@ -331,7 +357,7 @@ function TxForm({ tx, onClose, onSaved }) {
     if (r !== FAIL) { onSaved(); onClose(); }
   };
   return (
-    <Modal open onClose={onClose} title={tx.id ? 'Editar lançamento' : 'Novo lançamento'}
+    <Modal open onClose={onClose} title={tx.id ? 'Editar lançamento' : f.paid ? 'Novo lançamento' : f.type === 'entrada' ? 'Incluir conta a receber' : 'Incluir conta a pagar'}
       footer={<><button className="btn-ghost" onClick={onClose}>Cancelar</button><button className="btn-primary" disabled={busy || !(+f.amount > 0) || !f.category} onClick={save}>Salvar</button></>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid grid-cols-2 gap-2 sm:col-span-2">
@@ -374,5 +400,134 @@ function TxForm({ tx, onClose, onSaved }) {
         )}
       </div>
     </Modal>
+  );
+}
+
+/** Caixas fechados: período, só com diferença, e o detalhe de cada fechamento. */
+function ClosedSessions() {
+  const settings = useSettings();
+  const [f, setF] = useState({ from: ymd(new Date(Date.now() - 60 * 86400000)), to: ymd(), diff: '' });
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(null);
+  useEffect(() => { setRows(null); api.get(`/cash/sessions/closed${qs(f)}`).then(setRows).catch(() => setRows([])); }, [f]);
+  const show = async (id) => setOpen(await api.get(`/cash/sessions/${id}`));
+  const totalDiff = (rows || []).reduce((a, x) => a + Number(x.difference || 0), 0);
+  return (
+    <div className="space-y-4">
+      <div className="card flex flex-wrap items-end gap-3 p-3">
+        <Input label="De" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className="w-40" />
+        <Input label="Até" type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className="w-40" />
+        <label className="flex h-[var(--row)] items-center gap-2 text-sm"><input type="checkbox" checked={f.diff === '1'} onChange={(e) => setF({ ...f, diff: e.target.checked ? '1' : '' })} /> Só com diferença</label>
+        <button className="btn-outline ml-auto" disabled={!rows?.length} onClick={() => downloadCSV('caixas-fechados.csv', rows.map((h) => ({
+          Abertura: fmtDateTime(h.opened_at), Fechamento: fmtDateTime(h.closed_at), 'Aberto por': h.opened_by_name, 'Fechado por': h.closed_by_name,
+          'Troco inicial': h.opening_amount, Entradas: h.entries, Saidas: h.exits, Esperado: h.expected_amount, Contado: h.closing_amount, Diferenca: h.difference,
+        })))}><Download className="h-4 w-4" /> Exportar</button>
+      </div>
+      {rows && rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Fechamentos" value={String(rows.length)} />
+          <Stat label="Com diferença" value={String(rows.filter((x) => Math.abs(x.difference) >= 0.01).length)} />
+          <Stat label="Diferença somada" value={money(totalDiff)} tone={Math.abs(totalDiff) < 0.01 ? 'text-emerald-600' : 'text-red-600'} />
+          <Stat label="Entradas no período" value={money(rows.reduce((a, x) => a + x.entries, 0))} tone="text-emerald-500" />
+        </div>
+      )}
+      <div className="card overflow-hidden">
+        {!rows ? <Loading /> : !rows.length ? <Empty icon={Lock} title="Nenhum caixa fechado neste período" /> : (
+          <div className="overflow-x-auto">
+            <table className="table-clean">
+              <thead><tr><th>Período</th><th className="hidden md:table-cell text-right">Entradas</th><th className="hidden md:table-cell text-right">Saídas</th><th className="text-right">Esperado</th><th className="text-right">Contado</th><th className="text-right">Diferença</th><th /></tr></thead>
+              <tbody>
+                {rows.map((h) => (
+                  <tr key={h.id}>
+                    <td><div className="whitespace-nowrap">{fmt(h.opened_at, 'dd/MM HH:mm')} → {fmt(h.closed_at, 'dd/MM HH:mm')}</div><div className="text-xs text-ink-faint">{h.closed_by_name || h.opened_by_name}</div></td>
+                    <td className="hidden text-right tabular-nums text-emerald-600 md:table-cell">{money(h.entries)}</td>
+                    <td className="hidden text-right tabular-nums text-red-600 md:table-cell">{money(h.exits)}</td>
+                    <td className="text-right tabular-nums">{money(h.expected_amount)}</td>
+                    <td className="text-right tabular-nums">{money(h.closing_amount)}</td>
+                    <td className={cx('text-right font-medium tabular-nums', Math.abs(h.difference) < 0.01 ? 'text-emerald-600' : 'text-red-600')}>{money(h.difference)}</td>
+                    <td className="text-right"><button className="btn-ghost h-8 text-xs" onClick={() => show(h.id)} aria-label={`Ver caixa de ${fmt(h.opened_at, 'dd/MM')}`}><Eye className="h-4 w-4" /> Ver</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {open && (
+        <Modal open onClose={() => setOpen(null)} size="lg" title="Caixa fechado" subtitle={`${fmtDateTime(open.opened_at)} → ${fmtDateTime(open.closed_at)}`}
+          footer={<button className="btn-ghost" onClick={() => setOpen(null)}>Fechar</button>}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              {[['Troco inicial', open.opening_amount], ['Entradas', open.entries], ['Saídas', open.exits], ['Esperado na gaveta', open.expected_amount],
+                ['Contado', open.closing_amount], ['Diferença', open.closing_amount - open.expected_amount]].map(([k, v]) => (
+                <div key={k} className="rounded-app-sm bg-muted/60 p-2"><div className="text-xs text-ink-faint">{k}</div><b className="tabular-nums">{money(v)}</b></div>
+              ))}
+            </div>
+            <p className="text-xs text-ink-faint">Aberto por {open.opened_by_name || '—'} · fechado por {open.closed_by_name || '—'}{open.notes ? ` · Obs.: ${open.notes}` : ''}</p>
+            {Object.keys(open.by_method).length > 0 && (
+              <div className="flex flex-wrap gap-2 text-xs">{Object.entries(open.by_method).map(([m, v]) => <span key={m} className="chip bg-muted">{methodName(settings, m)}: {money(v)}</span>)}</div>
+            )}
+            <div className="max-h-80 divide-y divide-line overflow-y-auto rounded-app-sm border border-line">
+              {!open.movements.length ? <p className="p-4 text-sm text-ink-faint">Sem movimentações.</p> : open.movements.map((t) => (
+                <div key={t.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="w-12 text-xs tabular-nums text-ink-faint">{fmtTime(t.paid_at)}</span>
+                  <span className="min-w-0 flex-1 truncate">{t.description || t.category}{t.order_number && <span className="ml-1 text-xs text-ink-faint">OS {t.order_number}</span>}<span className="ml-2 text-xs text-ink-faint">{methodName(settings, t.method)}</span></span>
+                  <span className={cx('tabular-nums font-medium', t.type === 'entrada' ? 'text-emerald-600' : 'text-red-600')}>{t.type === 'entrada' ? '+' : '−'}{money(t.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/** Transferência entre contas (caixa, banco...): não conta como receita nem despesa. */
+function Transfers() {
+  const [accounts, setAccounts] = useState(null);
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(() => {
+    api.get('/finance/accounts').then((a) => setAccounts(a.filter((x) => x.active))).catch(() => setAccounts([]));
+    api.get(`/cash/transactions${qs({ category: 'Transferência entre contas' })}`).then((d) => setRows(d.items)).catch(() => setRows([]));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const pairs = Object.values((rows || []).reduce((acc, t) => {
+    const k = t.transfer_id || t.id;
+    acc[k] = acc[k] || { id: k, date: t.ref_date, amount: t.amount, description: t.description };
+    if (t.type === 'saida') acc[k].from = t.account_name; else acc[k].to = t.account_name;
+    return acc;
+  }, {}));
+  if (!accounts) return <Loading />;
+  return (
+    <div className="space-y-4">
+      <div className="card flex flex-wrap items-center gap-3 p-4">
+        <div className="min-w-0 flex-1 basis-72">
+          <h3 className="font-semibold">Transferência entre contas</h3>
+          <p className="text-sm text-ink-faint">Ex.: levar o dinheiro do caixa para o banco. Não entra como receita nem como despesa.</p>
+        </div>
+        <button className="btn-primary" disabled={accounts.length < 2} onClick={() => setOpen(true)}><ArrowLeftRight className="h-4 w-4" /> Nova transferência</button>
+      </div>
+      {accounts.length < 2 && <p className="text-sm text-amber-700">Cadastre pelo menos duas contas em <Link className="underline" to="/financeiro/gestao">Contas, conciliação e DRE</Link>.</p>}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {accounts.map((a) => <Stat key={a.id} label={a.name} value={money(a.balance)} />)}
+      </div>
+      <div className="card overflow-hidden">
+        <h3 className="border-b border-line px-5 py-3.5 font-semibold">Transferências feitas</h3>
+        {!rows ? <Loading /> : !pairs.length ? <Empty icon={ArrowLeftRight} title="Nenhuma transferência ainda" /> : (
+          <div className="divide-y divide-line">
+            {pairs.map((p) => (
+              <div key={p.id} className="flex flex-wrap items-center gap-3 px-5 py-2.5 text-sm">
+                <span className="w-20 tabular-nums text-ink-faint">{fmt(p.date)}</span>
+                <span className="min-w-0 flex-1">{p.from || '—'} → {p.to || '—'}{p.description && <span className="ml-2 text-xs text-ink-faint">{p.description}</span>}</span>
+                <b className="tabular-nums">{money(p.amount)}</b>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {open && <TransferModal accounts={accounts} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); }} />}
+    </div>
   );
 }

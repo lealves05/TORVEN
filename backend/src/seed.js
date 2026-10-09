@@ -330,4 +330,19 @@ export async function seedDemo(db, companyId, userId) {
        values ($1,'saida',$2,$3,$4,'pix',current_date - $5::int, case when $6 then now() - ($5::text || ' days')::interval end, $7)`,
       [companyId, cat, desc, amount, d, paid, userId]);
   }
+  // caixas dos últimos dias (fechados), com as vendas em dinheiro de cada dia — um deles com diferença
+  for (const [days, opening, counted] of [[3, 150, null], [2, 150, -12.5], [1, 200, null]]) {
+    const { rows: [cs] } = await db.query(
+      `insert into cash_sessions (company_id, opened_by, opened_at, opening_amount, closed_by, closed_at)
+       values ($1,$2, ((now() at time zone 'America/Sao_Paulo')::date - $3::int + time '08:00') at time zone 'America/Sao_Paulo', $4, $2,
+               ((now() at time zone 'America/Sao_Paulo')::date - $3::int + time '18:10') at time zone 'America/Sao_Paulo') returning id, opened_at, closed_at`,
+      [companyId, userId, days, opening]);
+    await db.query(
+      `insert into transactions (company_id, type, category, description, amount, method, due_date, paid_at, cash_session_id, created_by)
+       values ($1,'entrada','Venda de materiais','Venda de balcão — eletrodos',$2,'dinheiro',($3::timestamptz)::date,$3::timestamptz + interval '3 hours',$4,$5),
+              ($1,'saida','Sangria','Sangria — troco para o banco',100,'dinheiro',($3::timestamptz)::date,$3::timestamptz + interval '8 hours',$4,$5)`,
+      [companyId, 85 + days * 40, cs.opened_at, cs.id, userId]);
+    const expected = opening + 85 + days * 40 - 100;
+    await db.query('update cash_sessions set expected_amount = $2, closing_amount = $3 where id = $1', [cs.id, expected, expected + (counted || 0)]);
+  }
 }

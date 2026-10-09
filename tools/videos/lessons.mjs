@@ -484,19 +484,55 @@ export const LESSONS = [
       { act: async (h) => { await h.click(btn(h, 'Abrir caixa'), { wait: 1400 }); }, say: ['Clique em Abrir caixa. Pronto, já dá para receber.'] },
       { tag: 'Durante o dia', act: (h) => h.spot(h.page.locator('main').first()), say: ['Cada pagamento recebido nas OS e nas vendas aparece aqui. Retirou dinheiro para pagar algo? Lance como saída, com o motivo.'] },
       { tag: 'Fechar', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('button', { name: /Fechar caixa/ }).first()); }, say: ['No fim do dia, clique em Fechar caixa e conte o dinheiro da gaveta. O sistema mostra se sobrou ou faltou.'] },
-      { act: (h) => h.unspot(), say: ['Os caixas anteriores ficam guardados em Fechamentos anteriores, para conferência.'] },
+      { act: (h) => h.unspot(), say: ['Os caixas anteriores ficam guardados no menu Financeiro, em Caixas fechados, para conferência.'] },
     ],
   },
   {
-    n: 20, file: '20-contas-e-gestao-financeira', mod: 'financeiro', title: 'Contas a pagar e a receber', routes: ['/financeiro/gestao'], start: '/financeiro',
+    n: 20, file: '20-contas-e-gestao-financeira', mod: 'financeiro', title: 'Contas a pagar e a receber', routes: ['/financeiro/gestao'], start: '/financeiro/receber',
     desc: 'Contas, vencimentos, contas bancárias, conciliação do extrato e resultado do mês.',
     learn: ['Ver contas a pagar e a receber', 'Contas bancárias e conciliação', 'O resultado do mês (DRE)'],
     steps: [
-      { tag: 'Contas', act: async (h) => { await h.click(btn(h, 'Contas a pagar/receber'), { wait: 1000 }); }, say: ['Em Contas a pagar e receber estão os vencimentos: o que os clientes devem e o que a oficina deve pagar.', 'Pagou ou recebeu? Clique na conta e dê a baixa.'] },
-      { tag: 'Fluxo de caixa', act: async (h) => { await h.click(btn(h, 'Fluxo de caixa'), { wait: 1000 }); }, say: ['O Fluxo de caixa mostra, dia a dia, quanto entrou e quanto saiu.'] },
-      { tag: 'Bancos', act: async (h) => { await h.go('/financeiro/gestao'); await h.spot(h.page.locator('main h1').first()); }, say: ['Em Gestão financeira ficam o caixa e as contas bancárias, com o saldo de cada uma.'] },
+      { tag: 'Contas', act: (h) => h.spot(h.page.locator('main table').first()), say: ['No menu Financeiro, Contas a receber mostra o que os clientes devem à oficina, com o vencimento de cada conta.', 'Recebeu? Clique no sinal de certo, ao lado da conta, para dar a baixa.'] },
+      { act: async (h) => { await h.unspot(); await h.click(btn(h, 'Contas a pagar'), { wait: 1000 }); }, say: ['Contas a pagar mostra o que a oficina deve pagar. As vencidas aparecem em vermelho.'] },
+      { tag: 'Lançamentos', act: async (h) => { await h.click(btn(h, 'Lançamentos'), { wait: 1000 }); }, say: ['Em Lançamentos você vê, mês a mês, tudo o que entrou e saiu.'] },
+      { tag: 'Bancos', act: async (h) => { await h.go('/financeiro/gestao'); await h.spot(h.page.locator('main h1').first()); }, say: ['Em Contas, conciliação e DRE ficam o caixa e as contas bancárias, com o saldo de cada uma.'] },
       { tag: 'Conciliação', act: async (h) => { await h.unspot(); await h.click(btn(h, 'Conciliação bancária'), { wait: 1000 }); }, say: ['Na Conciliação bancária você importa o extrato do banco e confere, linha por linha, com os lançamentos do sistema.'] },
       { tag: 'Resultado', act: async (h) => { await h.click(btn(h, 'DRE gerencial'), { wait: 1200 }); }, say: ['O DRE mostra o resultado do mês: o que entrou, os custos, as despesas e quanto sobrou.'] },
+    ],
+  },
+  {
+    n: 38, file: '38-financeiro-alertas-e-lembretes', mod: 'financeiro', title: 'Financeiro: incluir conta, caixas fechados, alertas e lembretes', routes: ['/financeiro/'], start: '/financeiro/pagar',
+    desc: 'As opções do menu Financeiro, como incluir uma conta, ver os caixas fechados e receber alertas e lembretes de vencimento.',
+    learn: ['As opções do menu Financeiro', 'Incluir uma conta a pagar', 'Caixas fechados e transferências', 'Alertas e lembretes'],
+    steps: [
+      { act: (h) => h.card(slide('Menu Financeiro', 'Tudo do dinheiro num lugar só', list(['Contas a receber e Contas a pagar', 'Incluir conta e Transferência', 'Notas de compra e Comissões', 'Caixa e Caixas fechados', 'Alertas e lembretes']))), say: ['O menu Financeiro reúne tudo do dinheiro da oficina: contas a receber e a pagar, incluir conta, transferência, notas de compra, comissões, caixa, caixas fechados, alertas e lembretes.'] },
+      { tag: 'Incluir conta', act: async (h) => { await h.card(null); await h.click(h.page.getByRole('button', { name: /Incluir conta a pagar/ }), { wait: 900 }); }, say: ['Para lançar uma conta que vai vencer, como a conta de energia, clique em Incluir conta a pagar.'] },
+      { act: async (h) => { await h.type('Descrição', 'Conta de energia', { delay: 60 }); await h.type(h.page.getByRole('dialog').last().getByLabel('Valor'), '350', { delay: 120 }); }, say: ['Escreva a descrição e o valor. Confira o vencimento e a categoria.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Salvar' }), { wait: 1200 }); }, say: ['Clique em Salvar. A conta aparece na lista, em aberto, até você dar a baixa.', 'Se a conta se repete todo mês, como o aluguel, use Repetir mensalmente.'] },
+      { tag: 'Transferência', act: async (h) => { await h.go('/financeiro/transferencia'); await h.spot(h.page.getByRole('button', { name: /Nova transferência/ })); }, say: ['Em Transferência você registra, por exemplo, o dinheiro do caixa levado para o banco. Não conta como receita nem despesa.'] },
+      { tag: 'Caixas fechados', act: async (h) => { await h.unspot(); await h.go('/financeiro/fechados'); await h.spot(h.page.locator('main').locator('.card').first()); }, say: ['Em Caixas fechados ficam todos os fechamentos, com o que era esperado, o que foi contado e a diferença.', 'Marque Só com diferença para achar os caixas que sobraram ou faltaram. O botão Ver mostra cada movimento.'] },
+      { tag: 'Alertas', act: async (h) => { await h.unspot(); await h.go('/financeiro/alertas'); await h.spot(h.page.getByRole('region', { name: 'Alertas' })); }, say: ['Em Alertas e lembretes você vê as contas vencidas, as que vão vencer e o caixa aberto há muito tempo. Clique num alerta para ver as contas.'] },
+      { tag: 'Lembrete', act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: 'Novo lembrete' }), { wait: 800 }); await h.type('O que lembrar', 'Pagar o contador', { delay: 60 }); await h.select('Repetir', 'Todo mês'); }, say: ['Para não esquecer de nada, crie um lembrete: escreva o que é, a data e se repete todo mês.'] },
+      { act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Salvar' }), { wait: 1200 }); await h.spot(h.page.getByLabel('Lembrete Pagar o contador')); }, say: ['Clique em Salvar. No dia, o aviso aparece no sino. Quando fizer, clique em Feito: se repete, o próximo é criado sozinho.'] },
+      { tag: 'O sino', act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: /^Notificações/ }).first(), { wait: 900 }); }, say: ['O sino, no alto da tela, junta todos os avisos: contas vencendo, contas vencidas, caixa aberto e lembretes do dia.'] },
+      { act: async (h) => { await h.esc(); await h.card(slide('Lembre', 'O financeiro em dia', list(['Inclua as contas assim que chegarem.', 'Dê a baixa quando pagar ou receber.', 'Confira os alertas todo dia.', 'Em Quando avisar, escolha quantos dias antes.']))); }, say: ['Inclua as contas assim que chegarem, dê a baixa quando pagar ou receber e olhe os alertas todo dia.'] },
+    ],
+  },
+  {
+    n: 39, file: '39-assistente', mod: 'financeiro', title: 'Assistente: pergunte e peça por texto ou voz', routes: [], start: '/',
+    desc: 'O Assistente responde sobre contas e caixa, inclui contas, dá baixa e cria lembretes — sempre pedindo confirmação.',
+    learn: ['Perguntar ao Assistente', 'Incluir conta e lembrete pelo Assistente', 'Liberar o Assistente por usuário'],
+    speech: ['me lembre de pagar o IPTU dia 20'],
+    steps: [
+      { act: (h) => h.card(slide('Assistente', 'Peça como se falasse com alguém', list(['“Contas a pagar desta semana”', '“Lançar conta a pagar de 350 reais da energia para dia 10”', '“Paguei a conta de energia”', '“Me lembre de pagar o IPTU dia 20”']))), say: ['O Assistente entende pedidos escritos ou falados, como contas a pagar desta semana, ou lançar conta a pagar de 350 reais da energia.'] },
+      { tag: 'Abrir', act: async (h) => { await h.card(null); await h.click(h.page.getByRole('button', { name: 'Assistente', exact: true }), { wait: 900 }); }, say: ['Clique em Assistente, no alto da tela.'] },
+      { tag: 'Perguntar', act: async (h) => { await h.type('Mensagem para o assistente', 'contas a pagar desta semana', { delay: 50 }); await h.click(h.page.getByRole('button', { name: 'Enviar' }), { wait: 1200 }); }, say: ['Escreva a pergunta e clique em enviar. Ele responde na hora, com a lista e o total.'] },
+      { tag: 'Incluir conta', act: async (h) => { await h.type('Mensagem para o assistente', 'lançar conta a pagar de 350 reais da energia para dia 10', { delay: 40 }); await h.click(h.page.getByRole('button', { name: 'Enviar' }), { wait: 1200 }); await h.spot(h.page.getByLabel('Confirmar pedido ao assistente').last()); }, say: ['Para gravar alguma coisa, ele mostra um resumo do que entendeu, com os campos para conferir. Nada é gravado ainda.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByLabel('Confirmar pedido ao assistente').last().getByRole('button', { name: 'Confirmar' }), { wait: 1200 }); }, say: ['Está certo? Clique em Confirmar. Se não, clique em Cancelar.'] },
+      { tag: 'Por voz', act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Falar com o assistente' }), { wait: 1800 }); await h.spot(h.page.getByLabel('Confirmar pedido ao assistente').last()); }, say: ['Também dá para falar: toque no microfone e diga, por exemplo, me lembre de pagar o IPTU dia 20.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByLabel('Confirmar pedido ao assistente').last().getByRole('button', { name: 'Confirmar' }), { wait: 1200 }); }, say: ['Confirme, e o lembrete aparece no sino no dia certo.'] },
+      { tag: 'Quem pode', act: async (h) => { await h.esc(); await h.go('/configuracoes?tab=equipe'); await h.click(h.page.getByRole('button', { name: /^Assistente de / }).first(), { wait: 1000 }); await h.spot(h.page.getByLabel('Liberação do assistente')); }, say: ['Quem pode usar? Em Configurações, Usuários, clique em Assistente ao lado de cada pessoa.', 'Ligue ou desligue o Assistente e marque o que ela pode pedir: consultar, incluir contas, dar baixa, lembretes e consultar OS.'] },
+      { act: async (h) => { await h.unspot(); await h.esc(); await h.card(slide('Seguro', 'O Assistente nunca passa do limite', list(['Só faz o que a pessoa poderia fazer na tela.', 'Mostra um resumo antes de gravar.', 'Tudo fica no histórico de alterações.']))); }, say: ['O Assistente nunca faz mais do que a pessoa poderia fazer na tela, sempre mostra o resumo antes de gravar, e tudo fica registrado.'] },
     ],
   },
   {
@@ -563,7 +599,7 @@ export const LESSONS = [
       return {};
     },
     steps: [
-      { tag: 'Onde fica', act: (h) => h.spot(h.page.getByRole('button', { name: /Emitir nota/ }).first()), say: ['No menu Financeiro e fiscal, abra Notas fiscais. Clique em Emitir nota.', 'Também dá para emitir a nota de dentro da própria OS.'] },
+      { tag: 'Onde fica', act: (h) => h.spot(h.page.getByRole('button', { name: /Emitir nota/ }).first()), say: ['No menu Financeiro, abra Notas fiscais. Clique em Emitir nota.', 'Também dá para emitir a nota de dentro da própria OS.'] },
       { act: async (h, st) => { await h.click(h.page.getByRole('button', { name: /Emitir nota/ }).first(), { wait: 900 }); await h.type(h.page.getByPlaceholder('Nº da OS ou cliente…'), String(st.number), { delay: 120 }); await h.sleep(900); await h.click(h.page.getByRole('dialog').locator('button').filter({ hasText: `#${st.number}` }).first(), { wait: 1500 }); }, say: ['Digite o número da OS e clique nela na lista.'] },
       { tag: 'Qual CNPJ', act: (h) => h.spot(h.page.locator('[data-tour="escolher-emitente"]')), say: ['Se a sua empresa tem mais de um CNPJ, escolha aqui qual vai emitir. O emitente padrão já vem marcado.'] },
       { act: async (h) => { await h.unspot(); await h.select('Emitir pelo CNPJ', { index: 1 }); await h.sleep(1200); }, say: ['Neste exemplo, vamos emitir pelo MEI do João.'] },
@@ -623,7 +659,7 @@ export const LESSONS = [
       { tag: 'Regras das OS', act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('tab', { name: 'OS e orçamentos' }).or(btn(h, 'OS e orçamentos')).first(), { wait: 1000 }); await h.spot('Padrões das ordens de serviço'); }, say: ['Em OS e orçamentos ficam as regras: garantia e prazo padrão, pesquisa por placa, ditado por voz e a regra de uma placa por cadastro.'] },
       { tag: 'Serviços', act: async (h) => { await h.unspot(); await h.go('/servicos'); await h.spot(h.page.locator('main h1').first()); }, say: ['A Tabela de serviços tem os serviços com o preço e o custo. É dela que vem o valor que aparece na OS.'] },
       { tag: 'Técnicos', act: async (h) => { await h.unspot(); await h.go('/tecnicos'); await h.spot(h.page.locator('main h1').first()); }, say: ['Em Técnicos você cadastra a equipe, com a cor de cada um na agenda e a comissão.'] },
-      { tag: 'Usuários', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=equipe'); await h.spot(btn(h, 'Novo acesso')); }, say: ['Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela.'] },
+      { tag: 'Usuários', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=equipe'); await h.spot(btn(h, 'Novo acesso')); }, say: ['Cada pessoa deve ter o próprio login. Em Usuários, clique em Novo acesso e escolha o perfil dela.', 'Tem sócio? Pode haver mais de um Proprietário. Só um proprietário dá ou tira esse perfil, e a empresa sempre fica com pelo menos um.'] },
       { tag: 'Perfis', act: async (h) => { await h.unspot(); await h.go('/configuracoes?tab=perfis'); await h.spot(h.page.getByRole('button', { name: /^Técnico/ }).first()); }, say: ['Em Perfis de acesso você decide o que cada perfil pode ver e fazer. Por exemplo, o técnico não vê o financeiro.'] },
     ],
   },
@@ -660,6 +696,32 @@ export const LESSONS = [
       { act: async (h) => { for (const t of ['BRA2E19', 'troca de óleo']) { await h.type(h.page.getByLabel('Mensagem de teste'), t, { delay: 70 }); await h.page.keyboard.press('Enter'); await h.sleep(1300); } }, say: ['O agente pede a placa e o serviço, e mostra os horários livres.'] },
       { act: async (h) => { for (const t of ['1', 'Maria Souza', '1']) { await h.type(h.page.getByLabel('Mensagem de teste'), t, { delay: 80 }); await h.page.keyboard.press('Enter'); await h.sleep(1300); } }, say: ['O cliente escolhe o horário, diz o nome e confirma. O pedido vai para a equipe aprovar.'] },
       { act: async (h) => { await h.card(slide('Resumo', 'O agente anota, a equipe aprova', list(['Status da OS pela placa.', 'Pedidos de serviço e de horário.', 'Detalhes da OS só para o telefone do cliente.']))); }, say: ['Por segurança, os detalhes da OS só são informados para o telefone cadastrado do cliente.'] },
+    ],
+  },
+  {
+    n: 40, file: '40-importar-e-exportar-dados', mod: 'config', title: 'Importar e exportar clientes e OS', routes: ['/dados'], start: '/dados',
+    desc: 'Trazer clientes e OS de outro sistema ou de uma planilha do Excel, conferir a prévia, importar, desfazer e exportar.',
+    learn: ['Baixar o modelo da planilha', 'Conferir a prévia e importar', 'Desfazer e exportar'],
+    setup: async () => {
+      const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+      const csv = ['Nome;CPF/CNPJ;Telefone;Cidade;UF;Placa;Marca;Modelo',
+        'Roberto Almeida;529.982.247-25;(19) 98111-2233;Campinas;SP;RBA2C34;Volkswagen;Gol',
+        'Serralheria Boa Vista;;(19) 3222-4455;Valinhos;SP;;;',
+        'Carla Mendes;123;(19) 97777-6655;Campinas;SP;;;',
+        'Paulo Henrique;;(19) 96666-1122;Sumaré;SP;PHX9A87;Honda;CG 160'].join('\n');
+      const file = path.join(os.tmpdir(), 'clientes-antigos.csv');
+      fs.writeFileSync(file, csv);
+      return { file };
+    },
+    steps: [
+      { act: (h) => h.card(slide('Importar e exportar', 'Traga seus dados de outro sistema', list(['Clientes com veículo ou objeto', 'Ordens de serviço antigas', 'Planilha do Excel (.xlsx) ou CSV', 'Prévia antes de gravar e botão Desfazer']))), say: ['Mudando de sistema? Dá para trazer os clientes e as ordens de serviço antigas de uma planilha do Excel.'] },
+      { tag: 'Modelo', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('region', { name: 'Importar clientes e veículos' }).getByRole('button', { name: /Baixar modelo/ })); }, say: ['Em Configurações, Importar e exportar dados, clique em Baixar modelo. Ele já vem com as colunas certas e um exemplo.', 'Preencha no Excel, uma linha por cliente. Se já tiver uma planilha, basta que a primeira linha tenha os nomes das colunas.'] },
+      { tag: 'Escolher', act: async (h, st) => { await h.unspot(); await h.page.locator('[data-testid=arquivo-clientes]').setInputFiles(st.file); await h.sleep(1500); await h.spot(h.page.getByLabel('Prévia da importação')); }, say: ['Clique em Escolher planilha e selecione o arquivo. Antes de gravar, o sistema mostra a prévia, linha por linha.', 'Novo é cliente que vai ser criado. Erro mostra o que está errado, como um CPF incompleto.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: /^Importar \d+ linha/ }), { wait: 1500 }); }, say: ['Está tudo certo? Clique em Importar. As linhas com erro ficam de fora, e você pode corrigir e importar só elas depois.'] },
+      { tag: 'Desfazer', act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Ok' }), { wait: 600 }); await h.spot(h.page.getByRole('region', { name: 'Importações feitas' })); }, say: ['Cada importação fica guardada. Importou o arquivo errado? Clique em Desfazer, e o que foi criado é apagado.'] },
+      { tag: 'OS antigas', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('region', { name: 'Importar ordens de serviço antigas' })); }, say: ['As OS antigas entram do mesmo jeito: número antigo, datas, cliente, veículo, serviço, valor e situação. Elas não mexem no seu financeiro.'] },
+      { tag: 'Exportar', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('region', { name: 'Exportar dados' })); }, say: ['Para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Lembre', 'Com calma e conferindo', list(['Comece pelo modelo.', 'Leia a prévia antes de importar.', 'Errou? Desfazer.', 'Quem pode importar: perfil com “Importar clientes e OS”.']))); }, say: ['Comece pelo modelo, confira a prévia e, se precisar, desfaça. Só quem tem a permissão de importar vê essa opção.'] },
     ],
   },
   {
