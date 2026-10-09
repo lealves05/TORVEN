@@ -1,0 +1,57 @@
+WEBVTT
+
+1
+00:00:00.153 --> 00:00:15.443
+Aula 43: Lançar a nota do fornecedor pelo XML, PDF ou foto. Nesta aula você vai aprender: Importar o arquivo XML da nota; Cadastrar o fornecedor e conferir itens, valores e parcelas; PDF e foto com a IA.
+
+2
+00:00:17.116 --> 00:00:25.729
+Chegou a nota do fornecedor? Em vez de digitar item por item, importe a nota: pelo arquivo XML, pelo PDF ou por uma foto.
+
+3
+00:00:27.406 --> 00:00:33.565
+Em Materiais, Entrada de materiais, Nova entrada, fica o quadro Importar a nota do fornecedor.
+
+4
+00:00:33.586 --> 00:00:39.937
+O XML vem anexado no e-mail do fornecedor, junto com o PDF. É o jeito mais preciso.
+
+5
+00:00:44.471 --> 00:00:54.705
+Clique em Arquivo XML e escolha o arquivo. Em um segundo a tela fica preenchida: fornecedor, número, chave de acesso, itens, frete, desconto e parcelas.
+
+6
+00:00:58.250 --> 00:01:07.161
+O fornecedor ainda não estava cadastrado. Um clique em Cadastrar fornecedor e ele entra com CNPJ, telefone e endereço da nota.
+
+7
+00:01:09.655 --> 00:01:20.913
+Confira os itens. Material que já existe no estoque é reconhecido pelo código de barras ou pelo nome. Os novos aparecem com a etiqueta novo e são cadastrados ao dar entrada.
+
+8
+00:01:20.934 --> 00:01:26.155
+Se um item novo for um material que você já tem, escolha no campo logo abaixo dele.
+
+9
+00:01:27.161 --> 00:01:33.512
+Os totais batem com o total da nota, e as parcelas vêm das duplicatas, com os vencimentos certos.
+
+10
+00:01:37.228 --> 00:01:44.132
+Tudo certo? Clique em Dar entrada no estoque. O estoque, o custo médio e as contas a pagar são atualizados.
+
+11
+00:01:44.152 --> 00:01:50.183
+Na próxima nota desse fornecedor, o sistema já reconhece os materiais pelo código dele.
+
+12
+00:01:50.713 --> 00:02:00.153
+Sem o XML, use o PDF ou a foto. Eles são lidos pela inteligência artificial, que precisa estar ligada em Configurações, Integrações.
+
+13
+00:02:00.173 --> 00:02:05.052
+Sempre confira os itens e os valores com a nota em mãos antes de dar entrada.
+
+14
+00:02:05.584 --> 00:02:18.591
+Recapitulando: Importar o arquivo XML da nota; Cadastrar o fornecedor e conferir itens, valores e parcelas; PDF e foto com a IA. Se precisar, assista de novo quando quiser. Até a próxima aula!

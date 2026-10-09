@@ -230,8 +230,8 @@ export function PurchaseEditor() {
                           {i._nf && i._nf !== i.description && <div className="text-xs text-ink-faint">Na nota: {i._nf}{i._by ? ` · reconhecido pelo ${i._by}` : ''}</div>}
                           {i._nf && i._nf === i.description && i._by && <div className="text-xs text-ink-faint">Reconhecido pelo {i._by}</div>}
                           {!i.product_id && !readOnly && products.length > 0 && (
-                            <label className="mt-1 flex items-center gap-1 text-xs text-ink-faint"><Link2 className="h-3 w-3" />
-                              <input className="input h-7 flex-1 text-xs" list="materiais-cadastrados" placeholder="É um material já cadastrado? Escolha aqui"
+                            <label className="mt-1 flex min-w-0 items-center gap-1 text-xs text-ink-faint"><Link2 className="h-3 w-3 shrink-0" />
+                              <input className="input h-7 w-full min-w-0 text-xs" size={1} list="materiais-cadastrados" placeholder="É um material já cadastrado? Escolha aqui"
                                 onChange={(e) => { const m = products.find((x) => x.name === e.target.value); if (m) setI(k, { product_id: m.id, description: m.name, unit: m.unit, _price: m.price, _nf: i._nf || i.description, _by: undefined }); }} />
                             </label>
                           )}
@@ -243,8 +243,8 @@ export function PurchaseEditor() {
                           )}
                         </td>
                         <td className="px-2 py-2 text-right">{readOnly ? `${qty(i.qty)} ${i.unit || ''}` : <input className="input h-8 w-20 text-right" inputMode="decimal" value={String(i.qty).replace('.', ',')} onChange={(e) => setI(k, { qty: e.target.value.replace(/[^\d,.]/g, '').replace(',', '.') })} />}</td>
-                        <td className="px-2 py-2 text-right">{readOnly ? money(i.unit_cost) : <MoneyInput value={i.unit_cost} onChange={(v) => setI(k, { unit_cost: v })} className="[&_input]:h-8 [&_input]:text-right" />}</td>
-                        <td className="hidden px-2 py-2 text-right md:table-cell">{readOnly ? '—' : <MoneyInput value={i.sale_price ?? ''} placeholder={i._price ? String(i._price).replace('.', ',') : ''} onChange={(v) => setI(k, { sale_price: v || undefined })} className="[&_input]:h-8 [&_input]:text-right" />}</td>
+                        <td className="min-w-[8rem] px-2 py-2 text-right">{readOnly ? money(i.unit_cost) : <MoneyInput value={i.unit_cost} onChange={(v) => setI(k, { unit_cost: v })} className="[&_input]:h-8 [&_input]:text-right" />}</td>
+                        <td className="hidden min-w-[8rem] px-2 py-2 text-right md:table-cell">{readOnly ? '—' : <MoneyInput value={i.sale_price ?? ''} placeholder={i._price ? String(i._price).replace('.', ',') : ''} onChange={(v) => setI(k, { sale_price: v || undefined })} className="[&_input]:h-8 [&_input]:text-right" />}</td>
                         <td className="px-3 py-2 text-right font-medium tabular-nums">{money((Number(i.qty) || 0) * (Number(i.unit_cost) || 0))}</td>
                         {!readOnly && <td className="pr-2"><button className="btn-ghost btn-icon h-8 text-red-600" onClick={() => setF({ ...f, items: f.items.filter((_, j) => j !== k) })}><Trash2 className="h-4 w-4" /></button></td>}
                       </tr>

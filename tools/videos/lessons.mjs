@@ -745,6 +745,75 @@ export const LESSONS = [
     ],
   },
   {
+    n: 42, file: '42-tabela-de-servicos-e-materiais', mod: 'config', title: 'Tabela de serviços e de materiais pelo Excel', routes: ['/servicos'], start: '/servicos',
+    desc: 'Trazer a tabela de serviços e de peças do sistema antigo e atualizar preços e estoque pelo Excel: exportar, ajustar e importar de novo.',
+    learn: ['Importar a tabela de serviços', 'Importar a tabela de materiais com estoque', 'Exportar, ajustar no Excel e importar de novo'],
+    setup: async () => {
+      const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+      const w = (n, lines) => { const f = path.join(os.tmpdir(), n); fs.writeFileSync(f, `﻿${lines.join('\r\n')}`); return f; };
+      return {
+        svc: w('EXPORTAR_CSV-Servicos.csv', ['id_servico;servico;preco_venda;preco_custo;horas_trabalhadas',
+          '67;ALINHAMENTO;150;0;0,5', '68;BALANCEAMENTO POR RODA;12,5;0;0', '40;TROCA DA EMBREAGEM;450;0;3', '62;LIMPEZA DE BICOS E TESTE;180;0;1']),
+        mat: w('EXPORTAR_CSV-Produtos.csv', ['codigo;descricao;referencia;unidade;preco_custo;preco_venda;estoque;estoque_minimo',
+          '1201;PASTILHA DE FREIO DIANTEIRA;PD-1234;JG;95,00;180,00;4;2', '1202;OLEO 5W30 SINTETICO;OL-530;L;32,00;55,00;20;8', '1203;FILTRO DE OLEO;FO-77;UN;18,00;35,00;6;3']),
+      };
+    },
+    steps: [
+      { act: (h) => h.card(slide('Tabelas', 'Serviços e peças com os preços certos', list(['Traga a tabela do sistema antigo.', 'Ou ajuste os preços no Excel.', 'Prévia antes de gravar e botão Desfazer.']))), say: ['A tabela de serviços e a tabela de peças podem vir do sistema antigo, ou ser atualizadas pelo Excel, sem digitar uma por uma.'] },
+      { tag: 'Serviços', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('link', { name: 'Importar', exact: true })); }, say: ['Na tela Serviços e preços tem os botões Exportar e Importar.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('link', { name: 'Importar', exact: true }), { wait: 1500 }); }, say: ['Clique em Importar. O sistema abre o quadro da tabela de serviços.'] },
+      { act: async (h, st) => { await h.page.locator('[data-testid=arquivo-servicos]').setInputFiles(st.svc); await h.sleep(1500); await h.spot(h.page.getByRole('region', { name: 'Importar Tabela de serviços' }).getByLabel('Prévia da importação')); }, say: ['Escolha o arquivo exportado do sistema antigo. A prévia mostra cada serviço com o preço.', 'Se o serviço já existe, o sistema mostra o preço antigo e o novo. Com a opção Atualizar preços desligada, os que já existem ficam como estão.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('region', { name: 'Importar Tabela de serviços' }).getByRole('button', { name: /^Importar \d+ linha/ }), { wait: 1500 }); await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Ok' }), { wait: 500 }); }, say: ['Clique em Importar.'] },
+      { tag: 'Materiais', act: async (h, st) => { await h.page.locator('[data-testid=arquivo-produtos]').scrollIntoViewIfNeeded().catch(() => {}); await h.page.locator('[data-testid=arquivo-produtos]').setInputFiles(st.mat); await h.sleep(1500); await h.spot(h.page.getByRole('region', { name: 'Importar Tabela de materiais (peças e produtos)' }).getByLabel('Prévia da importação')); }, say: ['As peças funcionam do mesmo jeito, no quadro Tabela de materiais: nome, referência, custo, preço e estoque.', 'O estoque da planilha entra como estoque inicial e fica no histórico do material.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('region', { name: 'Importar Tabela de materiais (peças e produtos)' }).getByRole('button', { name: /^Importar \d+ linha/ }), { wait: 1500 }); await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Ok' }), { wait: 500 }); }, say: ['Clique em Importar.'] },
+      { tag: 'Pelo Excel', act: async (h) => { await h.go('/estoque'); await h.spot(h.page.getByRole('button', { name: 'Exportar', exact: true })); }, say: ['Para mudar preços de muitos itens: em Materiais, clique em Exportar. A planilha abre no Excel.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Atualizar preços', 'Exporte, ajuste e importe de novo', list(['Exportar: a planilha já vem no formato certo.', 'Mude preço, custo ou estoque no Excel.', 'Importe com "Atualizar" ligado.', 'Estoque diferente vira acerto de inventário.']))); }, say: ['Mude no Excel o preço, o custo ou o estoque, salve e importe de novo com a opção Atualizar ligada. O sistema acha cada item pelo código e mostra o que vai mudar antes de gravar.'] },
+    ],
+  },
+  {
+    n: 43, file: '43-nota-do-fornecedor', mod: 'materiais', title: 'Lançar a nota do fornecedor pelo XML, PDF ou foto', routes: ['/estoque/entradas/nova'], start: '/estoque/entradas/nova',
+    desc: 'Importar a nota fiscal do fornecedor na entrada de materiais: XML (sem custo) ou PDF e foto (com a IA), conferir e dar entrada no estoque.',
+    learn: ['Importar o arquivo XML da nota', 'Cadastrar o fornecedor e conferir itens, valores e parcelas', 'PDF e foto com a IA'],
+    setup: async () => {
+      const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+      const base = '3526101122233300018155001000004521100045218';
+      let sum = 0; let wgt = 2; for (let i = base.length - 1; i >= 0; i -= 1) { sum += Number(base[i]) * wgt; wgt = wgt === 9 ? 2 : wgt + 1; }
+      const key = base + (sum % 11 < 2 ? 0 : 11 - (sum % 11));
+      const item = (n, c, ean, d, ncm, u, q, v) => `<det nItem="${n}"><prod><cProd>${c}</cProd><cEAN>${ean}</cEAN><xProd>${d}</xProd><NCM>${ncm}</NCM><CFOP>5405</CFOP><uCom>${u}</uCom><qCom>${q}</qCom><vUnCom>${v}</vUnCom><vProd>${(q * v).toFixed(2)}</vProd></prod><imposto></imposto></det>`;
+      const xml = `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe><infNFe Id="NFe${key}" versao="4.00"><ide><mod>55</mod><serie>1</serie><nNF>4521</nNF><dhEmi>2026-10-08T09:30:00-03:00</dhEmi><tpNF>1</tpNF></ide>`
+        + '<emit><CNPJ>11222333000181</CNPJ><xNome>DISTRIBUIDORA DE PECAS CAMPINAS LTDA</xNome><xFant>DPC PECAS</xFant><enderEmit><xLgr>AV JOHN BOYD DUNLOP</xLgr><nro>3900</nro><xBairro>JD IPAUSSURAMA</xBairro><xMun>CAMPINAS</xMun><UF>SP</UF><CEP>13045000</CEP><fone>1932345678</fone></enderEmit><IE>244123456119</IE></emit>'
+        + item(1, 'PD-1234', '7891234567895', 'PASTILHA DE FREIO DIANTEIRA', '68138190', 'JG', 2, 95) + item(2, 'OL-530', 'SEM GTIN', 'OLEO 5W30 SINTETICO 1L', '27101932', 'LT', 8, 32) + item(3, 'FA-300', 'SEM GTIN', 'FILTRO DE AR MOTOR', '84213100', 'PC', 3, 41.5)
+        + '<total><ICMSTot><vProd>570.50</vProd><vFrete>25.00</vFrete><vSeg>0</vSeg><vDesc>10.50</vDesc><vIPI>0</vIPI><vST>0</vST><vOutro>0</vOutro><vNF>585.00</vNF></ICMSTot></total>'
+        + `<cobr><dup><nDup>001</nDup><dVenc>2026-11-07</dVenc><vDup>292.50</vDup></dup><dup><nDup>002</nDup><dVenc>2026-12-07</dVenc><vDup>292.50</vDup></dup></cobr></infNFe></NFe><protNFe><infProt><chNFe>${key}</chNFe><cStat>100</cStat></infProt></protNFe></nfeProc>`;
+      const f = path.join(os.tmpdir(), `NFe${key}.xml`); fs.writeFileSync(f, xml);
+      return { xml: f };
+    },
+    steps: [
+      { act: (h) => h.card(slide('Entrada de materiais', 'A nota do fornecedor sem digitar', list(['Arquivo XML: o mais preciso e sem custo.', 'PDF ou foto: lidos pela inteligência artificial.', 'Você confere tudo antes de dar entrada.']))), say: ['Chegou a nota do fornecedor? Em vez de digitar item por item, importe a nota: pelo arquivo XML, pelo PDF ou por uma foto.'] },
+      { tag: 'Onde fica', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('region', { name: 'Importar nota do fornecedor' })); }, say: ['Em Materiais, Entrada de materiais, Nova entrada, fica o quadro Importar a nota do fornecedor.', 'O XML vem anexado no e-mail do fornecedor, junto com o PDF. É o jeito mais preciso.'] },
+      { tag: 'Arquivo XML', act: async (h, st) => { await h.unspot(); await h.spot(h.page.getByRole('button', { name: /Arquivo XML/ })); await h.sleep(400); await h.unspot(); await h.page.locator('[data-testid=nota-xml]').setInputFiles(st.xml); await h.sleep(2000); await h.spot(h.page.getByRole('region', { name: 'Conferência da nota' })); }, say: ['Clique em Arquivo XML e escolha o arquivo. Em um segundo a tela fica preenchida: fornecedor, número, chave de acesso, itens, frete, desconto e parcelas.'] },
+      { tag: 'Fornecedor', act: async (h) => { await h.click(h.page.getByRole('button', { name: 'Cadastrar fornecedor' }), { wait: 1500 }); await h.unspot(); await h.spot(h.page.locator('main select').first()); }, say: ['O fornecedor ainda não estava cadastrado. Um clique em Cadastrar fornecedor e ele entra com CNPJ, telefone e endereço da nota.'] },
+      { tag: 'Itens', act: async (h) => { await h.unspot(); await h.scroll(450); await h.spot(h.page.locator('table').first()); }, say: ['Confira os itens. Material que já existe no estoque é reconhecido pelo código de barras ou pelo nome. Os novos aparecem com a etiqueta novo e são cadastrados ao dar entrada.', 'Se um item novo for um material que você já tem, escolha no campo logo abaixo dele.'] },
+      { tag: 'Valores', act: async (h) => { await h.unspot(); await h.spot(h.page.getByText('Pagamento ao fornecedor')); }, say: ['Os totais batem com o total da nota, e as parcelas vêm das duplicatas, com os vencimentos certos.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: 'Dar entrada no estoque' }), { wait: 2000 }); }, say: ['Tudo certo? Clique em Dar entrada no estoque. O estoque, o custo médio e as contas a pagar são atualizados.', 'Na próxima nota desse fornecedor, o sistema já reconhece os materiais pelo código dele.'] },
+      { tag: 'PDF e foto', act: (h) => h.card(slide('Sem o XML?', 'PDF ou foto da nota', list(['Precisa da IA ligada: Configurações › Integrações.', 'Foto de frente, com boa luz e a nota inteira.', 'Confira cada item: a IA pode errar.', 'Nota repetida? O sistema avisa e não deixa lançar duas vezes.']))), say: ['Sem o XML, use o PDF ou a foto. Eles são lidos pela inteligência artificial, que precisa estar ligada em Configurações, Integrações.', 'Sempre confira os itens e os valores com a nota em mãos antes de dar entrada.'] },
+    ],
+  },
+  {
+    n: 44, file: '44-modulos-e-extensoes', mod: 'config', title: 'Módulos e extensões: ligar só o que você usa', routes: ['/configuracoes'], start: '/configuracoes?tab=modulos',
+    desc: 'Ligar e desligar módulos e extensões da oficina, ver o que falta configurar e usar a consulta de CNPJ no cadastro.',
+    learn: ['Ligar e desligar um módulo', 'Ver o que falta configurar', 'Consulta de CNPJ no cadastro'],
+    steps: [
+      { act: (h) => h.card(slide('Configurações', 'Módulos e extensões', list(['Ligue só o que a oficina usa.', 'Desligado some do menu para todos.', 'Nenhum dado é apagado.']))), say: ['Em Configurações, Módulos e extensões, você escolhe o que a oficina usa. O que fica desligado some do menu, e nenhum dado é apagado.'] },
+      { tag: 'Os cartões', act: async (h) => { await h.card(null); await h.spot(h.page.locator('[data-testid=modulo-whatsapp]')); }, say: ['Cada cartão explica o módulo. O aviso em amarelo mostra o que ainda falta configurar, e o botão leva direto para a configuração.'] },
+      { tag: 'Desligar', act: async (h) => { await h.unspot(); await h.page.locator('[data-testid=modulo-producao]').scrollIntoViewIfNeeded(); await h.spot(h.page.locator('[data-testid=modulo-producao]')); await h.click(h.page.locator('[data-testid=modulo-producao]').getByRole('switch'), { wait: 1500 }); }, say: ['Por exemplo: a oficina não usa o Painel de produção? Clique na chave. Ele sai do menu de todos os usuários.'] },
+      { act: async (h) => { await h.click(h.page.locator('[data-testid=modulo-producao]').getByRole('switch'), { wait: 1500 }); }, say: ['Mudou de ideia? Clique de novo e ele volta, com tudo como estava.'] },
+      { tag: 'Buscar', act: async (h) => { await h.unspot(); await h.top(); await h.type(h.page.getByPlaceholder('Buscar módulo…'), 'CNPJ'); await h.sleep(500); await h.spot(h.page.locator('[data-testid=modulo-consulta_cnpj]')); }, say: ['Use a busca para achar um módulo. Aqui está a Consulta de CNPJ, gratuita, com os dados abertos da Receita Federal.'] },
+      { tag: 'Consulta de CNPJ', act: async (h) => { await h.unspot(); await h.go('/fornecedores'); await h.click(h.page.locator('main').getByRole('button', { name: 'Novo', exact: true }), { wait: 800 }); await h.type('CNPJ / CPF', '11222333000181', { delay: 70 }); await h.sleep(1500); await h.spot(h.page.getByRole('dialog').last()); }, say: ['No cadastro de fornecedor ou de cliente pessoa jurídica, digite o CNPJ. A razão social, o telefone, o e-mail e o endereço são preenchidos sozinhos, e o sistema mostra a situação na Receita.'] },
+      { act: async (h) => { await h.unspot(); await h.esc(); await h.card(slide('Lembre', 'Quem pode mexer', list(['Só quem configura a empresa liga ou desliga.', 'Fora do plano? Fale com o suporte.', 'Cada mudança fica no histórico de alterações.']))); }, say: ['Só quem configura a empresa liga ou desliga módulos, e cada mudança fica registrada no histórico. Módulo fora do seu plano aparece com cadeado: fale com o suporte para incluir.'] },
+    ],
+  },
+  {
     n: 26, file: '26-suporte-e-treinamento', mod: 'config', title: 'Como usar as aulas e pedir ajuda', routes: ['/suporte'], start: '/suporte',
     desc: 'Assistir com legenda e mais devagar, buscar uma aula e falar com o suporte.',
     learn: ['Escolher e assistir uma aula', 'Legenda, velocidade e transcrição', 'Falar com o suporte'],

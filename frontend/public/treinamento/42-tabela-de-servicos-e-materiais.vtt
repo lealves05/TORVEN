@@ -1,0 +1,53 @@
+WEBVTT
+
+1
+00:00:00.153 --> 00:00:13.566
+Aula 42: Tabela de serviços e de materiais pelo Excel. Nesta aula você vai aprender: Importar a tabela de serviços; Importar a tabela de materiais com estoque; Exportar, ajustar no Excel e importar de novo.
+
+2
+00:00:15.192 --> 00:00:23.293
+A tabela de serviços e a tabela de peças podem vir do sistema antigo, ou ser atualizadas pelo Excel, sem digitar uma por uma.
+
+3
+00:00:24.990 --> 00:00:29.080
+Na tela Serviços e preços tem os botões Exportar e Importar.
+
+4
+00:00:32.004 --> 00:00:36.222
+Clique em Importar. O sistema abre o quadro da tabela de serviços.
+
+5
+00:00:39.347 --> 00:00:45.034
+Escolha o arquivo exportado do sistema antigo. A prévia mostra cada serviço com o preço.
+
+6
+00:00:45.054 --> 00:00:53.944
+Se o serviço já existe, o sistema mostra o preço antigo e o novo. Com a opção Atualizar preços desligada, os que já existem ficam como estão.
+
+7
+00:00:58.825 --> 00:01:00.440
+Clique em Importar.
+
+8
+00:01:03.584 --> 00:01:10.444
+As peças funcionam do mesmo jeito, no quadro Tabela de materiais: nome, referência, custo, preço e estoque.
+
+9
+00:01:10.464 --> 00:01:15.365
+O estoque da planilha entra como estoque inicial e fica no histórico do material.
+
+10
+00:01:20.144 --> 00:01:21.759
+Clique em Importar.
+
+11
+00:01:24.642 --> 00:01:30.460
+Para mudar preços de muitos itens: em Materiais, clique em Exportar. A planilha abre no Excel.
+
+12
+00:01:30.957 --> 00:01:42.620
+Mude no Excel o preço, o custo ou o estoque, salve e importe de novo com a opção Atualizar ligada. O sistema acha cada item pelo código e mostra o que vai mudar antes de gravar.
+
+13
+00:01:43.162 --> 00:01:55.615
+Recapitulando: Importar a tabela de serviços; Importar a tabela de materiais com estoque; Exportar, ajustar no Excel e importar de novo. Se precisar, assista de novo quando quiser. Até a próxima aula!

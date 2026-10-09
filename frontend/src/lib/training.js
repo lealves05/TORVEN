@@ -709,10 +709,61 @@ export const LESSONS = [
     "text": "A oficina tem sócios? Cada um pode ter o próprio login com o perfil de Proprietário, com acesso total ao sistema. Em Configurações, Usuários, clique em Novo acesso. Escreva o nome e o e-mail do sócio, e no Perfil escolha Proprietário. O sistema avisa o que isso significa. Crie uma senha inicial e clique em Salvar. Peça para o sócio trocar a senha no primeiro acesso. Pronto: agora a oficina tem dois proprietários. Só um proprietário pode dar ou tirar esse perfil, e o sistema nunca deixa a oficina sem nenhum proprietário. Tudo fica registrado no histórico."
   },
   {
+    "n": 42,
+    "file": "42-tabela-de-servicos-e-materiais",
+    "mod": "config",
+    "s": 117,
+    "title": "Tabela de serviços e de materiais pelo Excel",
+    "routes": [
+      "/servicos"
+    ],
+    "desc": "Trazer a tabela de serviços e de peças do sistema antigo e atualizar preços e estoque pelo Excel: exportar, ajustar e importar de novo.",
+    "learn": [
+      "Importar a tabela de serviços",
+      "Importar a tabela de materiais com estoque",
+      "Exportar, ajustar no Excel e importar de novo"
+    ],
+    "text": "A tabela de serviços e a tabela de peças podem vir do sistema antigo, ou ser atualizadas pelo Excel, sem digitar uma por uma. Na tela Serviços e preços tem os botões Exportar e Importar. Clique em Importar. O sistema abre o quadro da tabela de serviços. Escolha o arquivo exportado do sistema antigo. A prévia mostra cada serviço com o preço. Se o serviço já existe, o sistema mostra o preço antigo e o novo. Com a opção Atualizar preços desligada, os que já existem ficam como estão. Clique em Importar. As peças funcionam do mesmo jeito, no quadro Tabela de materiais: nome, referência, custo, preço e estoque. O estoque da planilha entra como estoque inicial e fica no histórico do material. Clique em Importar. Para mudar preços de muitos itens: em Materiais, clique em Exportar. A planilha abre no Excel. Mude no Excel o preço, o custo ou o estoque, salve e importe de novo com a opção Atualizar ligada. O sistema acha cada item pelo código e mostra o que vai mudar antes de gravar."
+  },
+  {
+    "n": 43,
+    "file": "43-nota-do-fornecedor",
+    "mod": "materiais",
+    "s": 140,
+    "title": "Lançar a nota do fornecedor pelo XML, PDF ou foto",
+    "routes": [
+      "/estoque/entradas/nova"
+    ],
+    "desc": "Importar a nota fiscal do fornecedor na entrada de materiais: XML (sem custo) ou PDF e foto (com a IA), conferir e dar entrada no estoque.",
+    "learn": [
+      "Importar o arquivo XML da nota",
+      "Cadastrar o fornecedor e conferir itens, valores e parcelas",
+      "PDF e foto com a IA"
+    ],
+    "text": "Chegou a nota do fornecedor? Em vez de digitar item por item, importe a nota: pelo arquivo XML, pelo PDF ou por uma foto. Em Materiais, Entrada de materiais, Nova entrada, fica o quadro Importar a nota do fornecedor. O XML vem anexado no e-mail do fornecedor, junto com o PDF. É o jeito mais preciso. Clique em Arquivo XML e escolha o arquivo. Em um segundo a tela fica preenchida: fornecedor, número, chave de acesso, itens, frete, desconto e parcelas. O fornecedor ainda não estava cadastrado. Um clique em Cadastrar fornecedor e ele entra com CNPJ, telefone e endereço da nota. Confira os itens. Material que já existe no estoque é reconhecido pelo código de barras ou pelo nome. Os novos aparecem com a etiqueta novo e são cadastrados ao dar entrada. Se um item novo for um material que você já tem, escolha no campo logo abaixo dele. Os totais batem com o total da nota, e as parcelas vêm das duplicatas, com os vencimentos certos. Tudo certo? Clique em Dar entrada no estoque. O estoque, o custo médio e as contas a pagar são atualizados. Na próxima nota desse fornecedor, o sistema já reconhece os materiais pelo código dele. Sem o XML, use o PDF ou a foto. Eles são lidos pela inteligência artificial, que precisa estar ligada em Configurações, Integrações. Sempre confira os itens e os valores com a nota em mãos antes de dar entrada."
+  },
+  {
+    "n": 44,
+    "file": "44-modulos-e-extensoes",
+    "mod": "config",
+    "s": 109,
+    "title": "Módulos e extensões: ligar só o que você usa",
+    "routes": [
+      "/configuracoes"
+    ],
+    "desc": "Ligar e desligar módulos e extensões da oficina, ver o que falta configurar e usar a consulta de CNPJ no cadastro.",
+    "learn": [
+      "Ligar e desligar um módulo",
+      "Ver o que falta configurar",
+      "Consulta de CNPJ no cadastro"
+    ],
+    "text": "Em Configurações, Módulos e extensões, você escolhe o que a oficina usa. O que fica desligado some do menu, e nenhum dado é apagado. Cada cartão explica o módulo. O aviso em amarelo mostra o que ainda falta configurar, e o botão leva direto para a configuração. Por exemplo: a oficina não usa o Painel de produção? Clique na chave. Ele sai do menu de todos os usuários. Mudou de ideia? Clique de novo e ele volta, com tudo como estava. Use a busca para achar um módulo. Aqui está a Consulta de CNPJ, gratuita, com os dados abertos da Receita Federal. No cadastro de fornecedor ou de cliente pessoa jurídica, digite o CNPJ. A razão social, o telefone, o e-mail e o endereço são preenchidos sozinhos, e o sistema mostra a situação na Receita. Só quem configura a empresa liga ou desliga módulos, e cada mudança fica registrada no histórico. Módulo fora do seu plano aparece com cadeado: fale com o suporte para incluir."
+  },
+  {
     "n": 26,
     "file": "26-suporte-e-treinamento",
     "mod": "config",
-    "s": 72,
+    "s": 73,
     "title": "Como usar as aulas e pedir ajuda",
     "routes": [
       "/suporte"
@@ -727,7 +778,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 4159;
+export const TOTAL_SECONDS = 4526;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;
