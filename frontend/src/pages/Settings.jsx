@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import FiscalEmitters from '../components/FiscalEmitters';
 import IntegrationsSetup from '../components/IntegrationsSetup';
+import ModulesSetup from '../components/ModulesSetup';
 import { ChecklistsSettings, OrderTypesTab } from '../components/OrderTypes';
 import { OrderDocument, SAMPLE_ORDER, docConfig } from '../components/DocumentTemplate';
 import { useUI } from '../context/UIContext';
@@ -32,7 +33,7 @@ export default function Settings() {
     const clean = JSON.stringify(f) === JSON.stringify(prevCompany.current);
     prevCompany.current = company;
     if (clean) { setF(structuredClone(company)); return; }
-    const keys = ['segments', 'fipeDefaultType', 'equipmentCategories', 'serviceCategories', 'materialCategories', 'financeAlerts'];
+    const keys = ['segments', 'fipeDefaultType', 'equipmentCategories', 'serviceCategories', 'materialCategories', 'financeAlerts', 'modules'];
     setF((x) => ({ ...x, settings: { ...x.settings, ...Object.fromEntries(keys.filter((k) => k in (company.settings || {})).map((k) => [k, structuredClone(company.settings[k])])) } }));
   }, [company]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,7 +66,7 @@ export default function Settings() {
           { value: 'financeiro', label: 'Financeiro' }, { value: 'categorias', label: 'Categorias' }] : []),
         ...(can('fiscal_settings') && feature('fiscal') ? [{ value: 'fiscal', label: 'Fiscal (NF-e / NFS-e)' }] : []),
         ...(can('integrations') ? [{ value: 'integracoes', label: 'Integrações' }] : []),
-        ...(full ? [{ value: 'modulos', label: 'Módulos' }] : []),
+        ...(full ? [{ value: 'modulos', label: 'Módulos e extensões' }] : []),
         ...(can('users') ? [{ value: 'perfis', label: 'Perfis de acesso' }, { value: 'equipe', label: 'Usuários' }] : []),
         ...(can('data_export') ? [{ value: 'dados', label: 'Dados e exportação' }] : []),
       ]} />
@@ -316,20 +317,12 @@ export default function Settings() {
       {tab === 'integracoes' && <IntegrationsSetup />}
       {tab === 'perfis' && <PermissionsTab s={s} setS={setS} />}
 
-      {tab === 'modulos' && (
-        <div className="card max-w-2xl space-y-3 p-6">
-          <p className="text-sm text-ink-faint">Ative apenas o que faz sentido para a sua oficina. Os itens desativados somem do menu.</p>
-          <Toggle checked={s.modules.purchases} onChange={(v) => setS({ modules: { ...s.modules, purchases: v } })} label="Entrada de materiais" hint="Registro de notas de fornecedor com contas a pagar." />
-          <Toggle checked={s.modules.invoices} onChange={(v) => setS({ modules: { ...s.modules, invoices: v } })} label="Notas fiscais" hint="Emissão de NFS-e e NF-e a partir das OS." />
-          <Toggle checked={s.modules.commissions} onChange={(v) => setS({ modules: { ...s.modules, commissions: v } })} label="Comissões" hint="Técnicos podem ver as próprias comissões." />
-          <Toggle checked={s.modules.publicLinks} onChange={(v) => setS({ modules: { ...s.modules, publicLinks: v } })} label="Links para o cliente" hint="Aprovação de orçamento e acompanhamento da OS pela internet." />
-        </div>
-      )}
+      {tab === 'modulos' && <ModulesSetup />}
 
       {tab === 'equipe' && <Team />}
       {tab === 'dados' && <DataExport />}
 
-      {dirty && !['equipe', 'fiscal', 'dados', 'integracoes'].includes(tab) && (
+      {dirty && !['equipe', 'fiscal', 'dados', 'integracoes', 'modulos'].includes(tab) && (
         <div className="action-bar">
           <div className="mx-auto flex max-w-[1400px] items-center justify-end gap-3 px-4 py-3 sm:px-8">
             <span className="mr-auto text-sm text-ink-soft">Você tem alterações não salvas.</span>

@@ -21,8 +21,22 @@ const fake = http.createServer((req, res) => {
       const b = JSON.parse(body); calls.wa.push({ to: b.to, text: b.text?.body });
       return send(200, { messages: [{ id: `wamid.${calls.wa.length}` }] });
     }
+    if (u.pathname.startsWith('/cnpj/')) {
+      calls.cnpj = (calls.cnpj || 0) + 1;
+      if (u.pathname === '/cnpj/11222333000181') return send(200, { cnpj: '11222333000181', razao_social: 'AUTO PECAS EXEMPLO LTDA', nome_fantasia: 'EXEMPLO PECAS',
+        descricao_situacao_cadastral: 'ATIVA', ddd_telefone_1: '1932321111', cep: '13010000', descricao_tipo_de_logradouro: 'RUA', logradouro: 'DAS FLORES',
+        numero: '100', bairro: 'CENTRO', municipio: 'CAMPINAS', uf: 'SP', codigo_municipio_ibge: 3509502, cnae_fiscal_descricao: 'Comércio de peças' });
+      return send(404, { message: 'não encontrado' });
+    }
     if (u.pathname === '/anthropic') {
       calls.ai += 1;
+      if (body.includes('"type":"image"') || body.includes('"type":"document"')) {
+        calls.aiNota = JSON.parse(body).model;
+        return send(200, { content: [{ type: 'text', text: JSON.stringify({ legible: true, supplier: { document: '98.765.432/0001-10', name: 'DISTRIBUIDORA FOTO LTDA' },
+          invoice_number: '000777', invoice_series: '1', issue_date: '2026-10-01', invoice_key: '1234',
+          items: [{ code: 'X1', description: 'FILTRO DE AR FOTO', unit: 'PC', qty: 2, unit_price: 30, total: 60 }, { code: 'X2', description: 'VELA FOTO', unit: 'UN', qty: 4, unit_price: 10, total: 45 }],
+          totals: { products: 100, freight: 0, discount: 0, invoice_total: 100 }, installments: [] }) }] });
+      }
       return send(200, { content: [{ type: 'text', text: JSON.stringify({ intent: 'status', plate: null, date: null, time: null, problem: null, name: null }) }] });
     }
     // Tabela FIPE (v2)
@@ -76,7 +90,7 @@ const fake = http.createServer((req, res) => {
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
 const FAKE = `http://127.0.0.1:${fake.address().port}`;
 process.env.APIPLACAS_URL = FAKE; process.env.FIPE_URL = `${FAKE}/fipe`; process.env.MERCADOPAGO_API_URL = FAKE; process.env.INFINITEPAY_API_URL = FAKE;
-process.env.WHATSAPP_GRAPH_URL = `${FAKE}/graph`; process.env.ANTHROPIC_URL = `${FAKE}/anthropic`;
+process.env.WHATSAPP_GRAPH_URL = `${FAKE}/graph`; process.env.ANTHROPIC_URL = `${FAKE}/anthropic`; process.env.CNPJ_API_URL = `${FAKE}/cnpj`;
 
 const { pool } = await import('../src/db.js');
 await pool.query('drop schema public cascade; create schema public;');
@@ -895,6 +909,129 @@ await check('importar de outro sistema: código antigo, veículos, OS com itens 
   assert.deepEqual(items.map((x) => x.kind), ['material', 'servico']);
   const { rows: [o2] } = await pool.query("select * from orders where legacy_number = '7002'");
   assert.equal(o2.status, 'em_execucao'); assert.equal(Number(o2.total), 1234.5); assert.equal(o2.customer_id, cc.id);
+});
+await check('tabela de serviços: importar do sistema antigo, atualizar preço, exportar para reimportar e desfazer', async () => {
+  const rows = [
+    { id_servico: '67', servico: 'ALINHAMENTO TESTE', preco_venda: '30', preco_custo: '0', horas_trabalhadas: '0,5' },
+    { id_servico: '68', servico: 'BALANCEAR TESTE', preco_venda: '7,5', preco_custo: '0', horas_trabalhadas: '0' },
+    { id_servico: '69', servico: '', preco_venda: '10' },
+  ];
+  const im = await api('POST', '/data/servicos/import', { rows, filename: 'servicos.csv' }, T2);
+  assert.equal(im.status, 201, JSON.stringify(im.data)); assert.equal(im.data.created, 2); assert.equal(im.data.errors, 1);
+  const { rows: [sv] } = await pool.query("select * from services where name = 'ALINHAMENTO TESTE'");
+  assert.equal(Number(sv.price), 30); assert.equal(sv.est_minutes, 30); assert.equal(sv.legacy_code, '67');
+  // planilha ajustada: acha pelo código antigo e atualiza o preço
+  const up = await api('POST', '/data/servicos/preview', { rows: [{ 'Codigo antigo': '67', Nome: 'Alinhamento', Preco: '150,00' }] }, T2);
+  assert.equal(up.data.updated, 1); assert.match(up.data.rows[0].message, /30,00 → R\$ 150,00/);
+  // exportação no formato de importar
+  const ex = await fetch(`${base}/api/export/tabela_servicos.csv`, { headers: { authorization: `Bearer ${T2}` } });
+  const csv = await ex.text();
+  assert.match(csv, /"Codigo antigo";"Nome";"Categoria"/); assert.match(csv, /"67";"ALINHAMENTO TESTE"/);
+  // sem permissão de serviços não importa
+  const TA = (await api('POST', '/auth/login', { email: 'atend@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('POST', '/data/servicos/import', { rows }, TA)).status, 403);
+  const un = await api('POST', `/data/imports/${im.data.batch_id}/undo`, {}, T2);
+  assert.equal(un.data.services, 2, JSON.stringify(un.data));
+});
+await check('tabela de materiais: importar com estoque inicial, atualizar por inventário, exportar e desfazer', async () => {
+  const rows = [
+    { codigo: '1201', descricao: 'PASTILHA TESTE IMP', referencia: 'PD-1', ean: '7891234567895', unidade: 'JG', preco_custo: '95,00', preco_venda: '180', estoque: '4', estoque_minimo: '2', ncm: '6813.81.90' },
+    { codigo: '1202', descricao: 'OLEO TESTE IMP', preco_venda: '45,5', estoque: '-2' },
+    { codigo: '1203', descricao: 'NCM RUIM', ncm: '123' },
+  ];
+  const im = await api('POST', '/data/produtos/import', { rows, filename: 'produtos.csv' }, T2);
+  assert.equal(im.status, 201, JSON.stringify(im.data)); assert.equal(im.data.created, 2); assert.equal(im.data.errors, 1);
+  const { rows: [p] } = await pool.query("select * from products where name = 'PASTILHA TESTE IMP'");
+  assert.equal(Number(p.stock), 4); assert.equal(p.legacy_code, '1201'); assert.equal(p.unit, 'jg'); assert.equal(p.ncm, '68138190'); assert.equal(p.sku, 'PD-1');
+  const { rows: mv } = await pool.query('select * from stock_movements where product_id = $1', [p.id]);
+  assert.equal(mv.length, 1); assert.match(mv[0].reason, /Estoque inicial/);
+  // planilha ajustada: acha pelo código de barras e faz inventário
+  const up = await api('POST', '/data/produtos/import', { rows: [{ 'Codigo de barras': '7891234567895', Nome: 'Pastilha', Preco: '190,00', Estoque: '6' }] }, T2);
+  assert.equal(up.data.updated, 1); assert.equal(Number((await pool.query('select stock from products where id = $1', [p.id])).rows[0].stock), 6);
+  const ex = await fetch(`${base}/api/export/tabela_materiais.csv`, { headers: { authorization: `Bearer ${T2}` } });
+  const csv = await ex.text();
+  assert.match(csv, /"Codigo antigo";"Nome";"Referencia";"Codigo de barras"/); assert.match(csv, /"1201";"Pastilha";"PD-1"/);
+  const TA = (await api('POST', '/auth/login', { email: 'atend@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('POST', '/data/produtos/import', { rows }, TA)).status, 403);
+  const un = await api('POST', `/data/imports/${im.data.batch_id}/undo`, {}, T2);
+  assert.equal(un.data.products, 2, JSON.stringify(un.data));
+});
+await check('nota do fornecedor: ler XML, cadastrar fornecedor, dar entrada, reconhecer na próxima nota; foto pela IA', async () => {
+  const xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\" versao=\"4.00\"><NFe><infNFe Id=\"NFe35241012345678000190550010000123451000123459\" versao=\"4.00\">\n<ide><cUF>35</cUF><mod>55</mod><serie>1</serie><nNF>12345</nNF><dhEmi>2026-10-08T10:15:00-03:00</dhEmi><tpNF>1</tpNF></ide>\n<emit><CNPJ>12345678000190</CNPJ><xNome>AUTO PECAS TESTE LTDA</xNome><xFant>Auto Pecas</xFant><enderEmit><xLgr>Rua A</xLgr><nro>10</nro><xBairro>Centro</xBairro><xMun>Campinas</xMun><UF>SP</UF><CEP>13010000</CEP><fone>1932321111</fone></enderEmit><IE>123456789</IE></emit>\n<dest><CNPJ>11222333000181</CNPJ><xNome>OFICINA</xNome></dest>\n<det nItem=\"1\"><prod><cProd>PD-998</cProd><cEAN>7891234567895</cEAN><xProd>PASTILHA FREIO DIANT &amp; KIT</xProd><NCM>68138190</NCM><CFOP>5405</CFOP><uCom>JG</uCom><qCom>2.0000</qCom><vUnCom>95.5000000000</vUnCom><vProd>191.00</vProd><cEANTrib>7891234567895</cEANTrib></prod><imposto><IPI><IPITrib><vIPI>9.55</vIPI></IPITrib></IPI></imposto></det>\n<det nItem=\"2\"><prod><cProd>OL-5W30</cProd><cEAN>SEM GTIN</cEAN><xProd>OLEO 5W30 SINTETICO</xProd><NCM>27101932</NCM><CFOP>5405</CFOP><uCom>LT</uCom><qCom>4.0000</qCom><vUnCom>42.25</vUnCom><vProd>169.00</vProd></prod><imposto></imposto></det>\n<total><ICMSTot><vProd>360.00</vProd><vFrete>15.00</vFrete><vSeg>0.00</vSeg><vDesc>10.00</vDesc><vIPI>9.55</vIPI><vST>0.00</vST><vOutro>0.00</vOutro><vNF>374.55</vNF></ICMSTot></total>\n<cobr><dup><nDup>001</nDup><dVenc>2026-11-07</dVenc><vDup>187.28</vDup></dup><dup><nDup>002</nDup><dVenc>2026-12-07</dVenc><vDup>187.27</vDup></dup></cobr>\n</infNFe></NFe><protNFe><infProt><chNFe>35241012345678000190550010000123451000123459</chNFe><cStat>100</cStat></infProt></protNFe></nfeProc>";
+  const b64 = (t) => Buffer.from(t).toString('base64');
+  const r1 = await api('POST', '/purchases/read-invoice', { mime: 'text/xml', data: b64(xml), filename: 'nota.xml' }, T2);
+  assert.equal(r1.status, 200, JSON.stringify(r1.data));
+  assert.equal(r1.data.source, 'xml'); assert.equal(r1.data.invoice_number, '12345'); assert.equal(r1.data.items.length, 2);
+  assert.equal(r1.data.total, 374.55); assert.equal(r1.data.other, 9.55); assert.equal(r1.data.items[0].unit, 'jg'); assert.equal(r1.data.items[1].unit, 'L');
+  assert.equal(r1.data.supplier.id, null); assert.equal(r1.data.installments.length, 2);
+  const { rows: [co2] } = await pool.query("select c.document from companies c join users u on u.company_id = c.id where u.email = (select email from users where company_id = (select company_id from import_batches where kind = 'produtos' limit 1) limit 1) limit 1");
+  if (co2?.document) assert.ok(r1.data.warnings.some((w) => /destinatário/.test(w)), 'avisa que a nota é de outro CNPJ');
+  // XML que não é NF-e
+  assert.equal((await api('POST', '/purchases/read-invoice', { mime: 'text/xml', data: b64('<CompNfse><Nfse/></CompNfse>') }, T2)).status, 400);
+  const sup = (await api('POST', '/suppliers', { name: r1.data.supplier.name, document: '12.345.678/0001-90' }, T2)).data;
+  const body = {
+    supplier_id: sup.id, invoice_number: r1.data.invoice_number, invoice_series: '1', invoice_key: r1.data.invoice_key, issue_date: r1.data.issue_date,
+    freight: r1.data.freight, other: r1.data.other, discount: r1.data.discount, source: 'xml', receive: true,
+    items: r1.data.items.map((i) => ({ description: i.description, unit: i.unit, qty: i.qty, unit_cost: i.unit_cost, supplier_code: i.code, barcode: i.barcode, ncm: i.ncm })),
+    installments: r1.data.installments.map((d) => ({ due_date: d.due_date, amount: d.amount, method: 'boleto' })),
+  };
+  const sv = await api('POST', '/purchases', body, T2);
+  assert.equal(sv.status, 201, JSON.stringify(sv.data)); assert.equal(Number(sv.data.total), 374.55); assert.equal(sv.data.source, 'xml');
+  const { rows: [np] } = await pool.query('select * from products where id = $1', [sv.data.items[0].product_id]);
+  assert.equal(np.barcode, '7891234567895'); assert.equal(np.ncm, '68138190');
+  // mesma nota de novo: avisa e não deixa lançar duas vezes
+  const r2 = await api('POST', '/purchases/read-invoice', { mime: 'text/xml', data: b64(xml) }, T2);
+  assert.equal(r2.data.supplier.id, sup.id);
+  assert.ok(r2.data.warnings.some((w) => /já foi lançada/.test(w)));
+  assert.equal(r2.data.items[1].product_id, sv.data.items[1].product_id); assert.equal(r2.data.items[1].matched_by, 'código do fornecedor');
+  assert.equal(r2.data.items[0].matched_by, 'código do fornecedor');
+  assert.equal((await api('POST', '/purchases', body, T2)).status, 400);
+  // foto/PDF: sem IA ligada explica como ligar
+  const off = await api('POST', '/purchases/read-invoice', { mime: 'image/jpeg', data: b64('jpeg-falso-1234') }, T2);
+  assert.equal(off.status, 400); assert.equal(off.data.code, 'ia_off');
+  assert.equal((await api('PUT', '/whatsapp/ai', { enabled: true, secrets: { api_key: 'sk-ant-teste-0123456789abcdefghij' } }, T2)).status, 200);
+  const foto = await api('POST', '/purchases/read-invoice', { mime: 'image/jpeg', data: b64('jpeg-falso-1234') }, T2);
+  assert.equal(foto.status, 200, JSON.stringify(foto.data)); assert.equal(foto.data.source, 'ia'); assert.equal(foto.data.invoice_number, '777');
+  assert.ok(foto.data.warnings.some((w) => /Item 2/.test(w)), 'confere quantidade × valor');
+  assert.ok(foto.data.warnings.some((w) => /chave de acesso não foi lida/.test(w)));
+  assert.equal(foto.data.items[0].unit, 'pç');
+  // a IA pode ser desligada só para notas
+  await api('PUT', '/whatsapp/ai', { enabled: true, config: { invoices: false } }, T2);
+  assert.equal((await api('POST', '/purchases/read-invoice', { mime: 'application/pdf', data: b64('%PDF-falso') }, T2)).status, 400);
+  await api('PUT', '/whatsapp/ai', { enabled: false }, T2);
+  // atendente (sem permissão de compras) não lê nota
+  const TA = (await api('POST', '/auth/login', { email: 'atend@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('POST', '/purchases/read-invoice', { mime: 'text/xml', data: b64(xml) }, TA)).status, 403);
+});
+await check('módulos e extensões: empresa desliga, rota responde 403, menu some; consulta de CNPJ', async () => {
+  const m = await api('GET', '/modules', null, T2);
+  assert.equal(m.status, 200, JSON.stringify(m.data));
+  assert.ok(m.data.keys.find((k) => k.key === 'leitura_nota').enabled);
+  assert.equal(m.data.status.leitura_nota.configured, true);
+  // CNPJ
+  const c = await api('GET', '/lookup/cnpj/11222333000181', null, T2);
+  assert.equal(c.status, 200, JSON.stringify(c.data)); assert.equal(c.data.name, 'AUTO PECAS EXEMPLO LTDA'); assert.equal(c.data.city, 'Campinas'); assert.equal(c.data.street, 'Rua das Flores');
+  assert.equal(c.data.cep, '13010-000'); assert.equal(c.data.active, true);
+  assert.equal((await api('GET', '/lookup/cnpj/11222333000180', null, T2)).status, 400, 'dígito inválido não consulta');
+  // desliga a consulta de CNPJ e a leitura de nota
+  assert.equal((await api('PUT', '/modules/consulta_cnpj', { enabled: false }, T2)).status, 200);
+  assert.equal((await api('PUT', '/modules/leitura_nota', { enabled: false }, T2)).status, 200);
+  const off = await api('GET', '/lookup/cnpj/11222333000181', null, T2);
+  assert.equal(off.status, 403); assert.equal(off.data.code, 'MODULE_OFF');
+  assert.equal((await api('POST', '/purchases/read-invoice', { mime: 'text/xml', data: 'PGEvPg==' }, T2)).status, 403);
+  assert.equal((await api('GET', '/purchases', null, T2)).status, 200, 'o resto das compras continua');
+  const me = await api('GET', '/company', null, T2);
+  assert.equal(me.data.settings.modules.consulta_cnpj, false);
+  // módulo de plano desligado pela empresa: relatórios
+  assert.equal((await api('PUT', '/modules/relatorios', { enabled: false }, T2)).status, 200);
+  assert.equal((await api('GET', '/reports/finance', null, T2)).status, 403);
+  for (const k of ['consulta_cnpj', 'leitura_nota', 'relatorios']) await api('PUT', `/modules/${k}`, { enabled: true }, T2);
+  assert.equal((await api('GET', '/lookup/cnpj/11222333000181', null, T2)).status, 200);
+  assert.equal((await api('PUT', '/modules/inexistente', { enabled: false }, T2)).status, 400);
+  const TA = (await api('POST', '/auth/login', { email: 'atend@int.dev', password: 'Oficina2026xy' })).data.token;
+  assert.equal((await api('PUT', '/modules/relatorios', { enabled: false }, TA)).status, 403, 'só quem configura a empresa');
+  const au = await pool.query("select summary from audit_log where summary like 'Módulo %'");
+  assert.ok(au.rows.length >= 6);
 });
 await check('vários proprietários: só proprietário promove, a empresa nunca fica sem proprietário ativo', async () => {
   const users = (await api('GET', '/users', null, T)).data;

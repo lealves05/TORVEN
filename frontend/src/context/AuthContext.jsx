@@ -76,8 +76,10 @@ export function AuthProvider({ children }) {
       if (state.user.role === 'owner') return true;
       return keys.some((k) => { const v = state.permissions?.[k]; return v === true || v === 'all' || v === 'own'; });
     },
-    /** Módulo liberado pela central da plataforma (sem central configurada, tudo liberado). */
-    feature(key) { return state.access?.features ? state.access.features[key] !== false : true; },
+    /** Módulo liberado pela central (plano) e ligado pela empresa em Configurações › Módulos e extensões. */
+    feature(key) { return (state.access?.features ? state.access.features[key] !== false : true) && state.company?.settings?.modules?.[key] !== false; },
+    /** Só o plano (para a tela de módulos mostrar "fora do plano"). */
+    inPlan(key) { return state.access?.features ? state.access.features[key] !== false : true; },
     scope(key) { return state.user?.role === 'owner' ? 'all' : state.permissions?.[key] || 'none'; },
   }), [state, load]);
 

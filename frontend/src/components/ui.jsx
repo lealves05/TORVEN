@@ -53,14 +53,14 @@ export function MoneyInput({ label, value, onChange, className, ...p }) {
   );
 }
 
-export function Toggle({ checked, onChange, label, hint }) {
+export function Toggle({ checked, onChange, label, hint, disabled }) {
   return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 py-1">
+    <label className={cx('flex items-start justify-between gap-4 py-1', disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer')}>
       <span>
         <span className="block text-sm font-medium">{label}</span>
         {hint && <span className="block text-xs text-ink-faint">{hint}</span>}
       </span>
-      <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
+      <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => !disabled && onChange(!checked)}
         className={cx('relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition', checked ? 'bg-primary' : 'bg-line')}>
         <span className={cx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition', checked ? 'left-[22px]' : 'left-0.5')} />
       </button>

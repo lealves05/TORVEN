@@ -48,8 +48,10 @@ const CORE_ROUTES = [
   'GET /quality/types',             // a OS pode ter tipo mesmo sem o módulo de checklists
   'PUT /quality/orders/:id/type',
   '/procurement/picking',           // separação de materiais para a OS
+  'GET /whatsapp/config',           // a IA da empresa (Anthropic) é configurada ali e serve também à leitura de notas
+  'PUT /whatsapp/ai',
 ];
-const MODULE_RULES = compileModuleRules(FEATURES, CORE_ROUTES);
+export const MODULE_RULES = compileModuleRules(FEATURES, CORE_ROUTES);
 /** Rotas liberadas mesmo com a empresa bloqueada (regularização e leitura mínima). */
 const BLOCKED_ALLOWED = ['/billing'];
 

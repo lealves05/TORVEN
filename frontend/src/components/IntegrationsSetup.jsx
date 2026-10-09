@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import { useUI } from '../context/UIContext';
 import { useAuth } from '../context/AuthContext';
 import { Input, Select, Toggle, Modal, Loading, useAction, FAIL, cx } from './ui';
-import WhatsAppSetup from './WhatsAppSetup';
+import WhatsAppSetup, { AiSetup } from './WhatsAppSetup';
 
 const OPTION_LABEL = {
   no_ticket: 'Não imprimir', ticket: 'Imprimir', seller: 'Por conta da empresa', buyer: 'Por conta do cliente',
@@ -268,6 +268,7 @@ export default function IntegrationsSetup() {
       {feature('whatsapp') && <WhatsAppSetup />}
       {feature('consulta_placa') && <PlateService />}
       {feature('maquininha') && <Terminals />}
+      <AiSetup />
     </div>
   );
 }

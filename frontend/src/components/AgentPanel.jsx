@@ -73,7 +73,7 @@ function Bubble({ m, onConfirmed, onExample, close }) {
 }
 
 export default function AgentPanel({ light }) {
-  const { agent, user } = useAuth();
+  const { agent, user, feature } = useAuth();
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState([]);
   const [text, setText] = useState('');
@@ -92,7 +92,7 @@ export default function AgentPanel({ light }) {
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   }, [open]);
-  if (!agent?.length) return null;
+  if (!agent?.length || !feature('assistente')) return null;
 
   async function send(raw) {
     const t = String(raw ?? text).trim();

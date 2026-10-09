@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Package, Pencil, ArrowDownUp, History, Trash2, Download, AlertTriangle } from 'lucide-react';
-import { api, qs } from '../lib/api';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Search, Package, Pencil, ArrowDownUp, History, Trash2, Download, Upload, AlertTriangle } from 'lucide-react';
+import { api, qs, downloadFile } from '../lib/api';
 import { money, qty, fmtDateTime, downloadCSV } from '../lib/format';
 import { useAuth, useSettings } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
@@ -10,8 +10,8 @@ import { PageHeader, Input, Select, MoneyInput, Modal, Loading, Empty, Stat, use
 export default function Materials() {
   const [params] = useSearchParams();
   const settings = useSettings();
-  const { can } = useAuth();
-  const { confirm } = useUI();
+  const { can, feature } = useAuth();
+  const { confirm, toast } = useUI();
   const [run] = useAction();
   const [f, setF] = useState({ search: '', category: '', low: params.get('low') || '' });
   const [list, setList] = useState(null);
@@ -33,9 +33,13 @@ export default function Materials() {
     <div>
       <PageHeader title="Materiais e estoque" subtitle="Eletrodos, varetas, gases, chapas, perfis e peças de reposição"
         actions={<>
-          <button className="btn-outline" disabled={!list?.length} onClick={() => downloadCSV('estoque.csv', list.map((p) => ({
+          {can('data_export') && feature('exportacao') ? (
+            <button className="btn-outline" title="Planilha no formato para importar de novo (ajuste preços e estoque no Excel)"
+              onClick={() => downloadFile('/export/tabela_materiais.csv', 'tabela-de-materiais.csv').catch((e) => toast(e.message, 'error'))}><Download className="h-4 w-4" /> Exportar</button>
+          ) : <button className="btn-outline" disabled={!list?.length} onClick={() => downloadCSV('estoque.csv', list.map((p) => ({
             Material: p.name, Codigo: p.sku, Categoria: p.category, Unidade: p.unit, Estoque: p.stock, Minimo: p.min_stock, Custo: p.cost, Preco: p.price, NCM: p.ncm, Local: p.location,
-          })))}><Download className="h-4 w-4" /> Exportar</button>
+          })))}><Download className="h-4 w-4" /> Exportar</button>}
+          {can('data_import') && feature('importacao_planilhas') && manage && <Link className="btn-outline" to="/dados#importar-produtos"><Upload className="h-4 w-4" /> Importar</Link>}
           {manage && <button className="btn-primary" onClick={() => setEdit({ unit: 'un', origin: 0, category: settings.materialCategories?.[0] })}><Plus className="h-4 w-4" /> Novo material</button>}
         </>} />
       {list && (

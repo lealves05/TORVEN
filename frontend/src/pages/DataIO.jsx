@@ -1,7 +1,7 @@
 // Importar e exportar dados: clientes (com veículo/objeto) e OS antigas por planilha; exportação em planilha.
 // Antes de importar o sistema mostra a prévia linha a linha (o que será criado, atualizado ou tem erro). Dá para desfazer.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileUp, Download, Users, Car, ClipboardList, Undo2, CheckCircle2, AlertTriangle, MinusCircle, PlusCircle, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import { FileUp, Download, Users, Car, ClipboardList, Wrench, Package, Undo2, CheckCircle2, AlertTriangle, MinusCircle, PlusCircle, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { api, apiBase, getToken } from '../lib/api';
 import { fmtDateTime, downloadCSV } from '../lib/format';
 import { readTable } from '../lib/sheet';
@@ -33,6 +33,18 @@ const KINDS = {
         Marca: 'Fiat', Modelo: 'Strada', Km: '62000', Tecnico: 'João', Situacao: 'Entregue', Problema: 'Barulho no freio', 'Item descricao': 'Mão de obra troca de pastilhas',
         'Item tipo': 'Serviço', 'Item quantidade': '1', 'Item valor unitario': '120,00', 'Item desconto': '', Desconto: '', 'Valor total': '' },
     ],
+  },
+  servicos: {
+    title: 'Tabela de serviços', icon: Wrench, step: null,
+    text: 'Nome, preço, custo, tempo e categoria de cada serviço. Serve para trazer a tabela do sistema antigo ou atualizar os preços pelo Excel (exporte, ajuste e importe de novo).',
+    template: [{ 'Codigo antigo': '67', Nome: 'Alinhamento', Categoria: 'Mecânica automotiva', Unidade: 'serv', Preco: '150,00', Custo: '0,00', 'Tempo (min)': '40',
+      'Comissao (%)': '', 'Codigo fiscal': '14.01', Ativo: 'Sim', Descricao: '' }],
+  },
+  produtos: {
+    title: 'Tabela de materiais (peças e produtos)', icon: Package, step: null,
+    text: 'Nome, referência, código de barras, custo, preço e estoque de cada peça ou produto. Serve para trazer o cadastro do sistema antigo ou atualizar preços e estoque pelo Excel (exporte, ajuste e importe de novo).',
+    template: [{ 'Codigo antigo': '1201', Nome: 'Pastilha de freio dianteira', Referencia: 'PD-1234', 'Codigo de barras': '7891234567895', Categoria: 'Freios',
+      Unidade: 'jg', Custo: '95,00', Preco: '180,00', Estoque: '4', 'Estoque minimo': '2', Local: 'Prateleira A2', NCM: '68138190', CFOP: '5405', Origem: '0', Ativo: 'Sim' }],
   },
 };
 // linhas por envio (arquivos grandes vão em partes; as linhas da mesma OS ficam juntas)
@@ -111,11 +123,11 @@ function Importer({ kind, onImported }) {
   const Icon = cfg.icon;
   const list = (preview?.rows || []).filter((x) => !only || x.status === only);
   return (
-    <section className="card space-y-3 p-5" aria-label={`Importar ${cfg.title}`}>
+    <section id={`importar-${kind}`} className="card scroll-mt-20 space-y-3 p-5" aria-label={`Importar ${cfg.title}`}>
       <div className="flex flex-wrap items-start gap-3">
         <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
         <div className="min-w-0 flex-1 basis-60">
-          <h3 className="font-semibold"><span className="mr-1.5 inline-grid h-5 w-5 place-items-center rounded-full bg-primary text-[11px] text-primary-fg">{cfg.step}</span>Importar {cfg.title.toLowerCase()}</h3>
+          <h3 className="font-semibold">{cfg.step && <span className="mr-1.5 inline-grid h-5 w-5 place-items-center rounded-full bg-primary text-[11px] text-primary-fg">{cfg.step}</span>}Importar {cfg.title.toLowerCase()}</h3>
           <p className="text-sm text-ink-faint">{cfg.text}</p>
         </div>
         <button className="btn-outline h-9 text-sm" onClick={() => downloadCSV(`modelo-${kind}.csv`, cfg.template)}><Download className="h-4 w-4" /> Baixar modelo</button>
@@ -134,6 +146,14 @@ function Importer({ kind, onImported }) {
       {kind === 'clientes' && (
         <Toggle checked={update} onChange={repreview} label="Atualizar clientes que já estão cadastrados"
           hint="O cliente é encontrado pelo CPF/CNPJ, pelo telefone ou pelo nome. Desligado, os já cadastrados ficam como estão." />
+      )}
+      {kind === 'servicos' && (
+        <Toggle checked={update} onChange={repreview} label="Atualizar preços dos serviços que já estão cadastrados"
+          hint="O serviço é encontrado pelo código antigo ou pelo nome. Desligado, os já cadastrados ficam como estão." />
+      )}
+      {kind === 'produtos' && (
+        <Toggle checked={update} onChange={repreview} label="Atualizar preço e estoque dos materiais que já estão cadastrados"
+          hint="O material é encontrado pelo código antigo, código de barras, referência ou nome. Se o estoque da planilha for diferente, o sistema faz um acerto de inventário (fica no histórico do material). Desligado, os já cadastrados ficam como estão." />
       )}
       {busy && !preview && (progress ? <p className="text-sm text-ink-soft">{progress}</p> : <Loading />)}
       {busy && preview && progress && <p className="text-sm text-ink-soft">{progress}</p>}
@@ -194,7 +214,7 @@ function Exporter() {
       URL.revokeObjectURL(a.href);
     } catch (e) { toast(e.message, 'error'); } finally { setBusy(''); }
   };
-  const main = ['clientes', 'objetos', 'os', 'os_itens', 'lancamentos'];
+  const main = ['clientes', 'objetos', 'os', 'os_itens', 'tabela_servicos', 'tabela_materiais', 'lancamentos'];
   const sorted = [...list.filter((x) => main.includes(x.key)).sort((a, b) => main.indexOf(a.key) - main.indexOf(b.key)), ...list.filter((x) => !main.includes(x.key))];
   return (
     <section className="card space-y-3 p-5" aria-label="Exportar dados">
@@ -220,7 +240,7 @@ function History({ reloadKey }) {
   const load = useCallback(() => api.get('/data/imports').then(setList).catch(() => setList([])), []);
   useEffect(() => { load(); }, [load, reloadKey]);
   const undo = async (b) => {
-    if (!(await confirm({ title: 'Desfazer esta importação?', message: `Apaga o que ela criou e ainda não foi usado (OS sem pagamento, clientes sem outras OS). Dados atualizados em clientes que já existiam não voltam ao que eram.`, confirmText: 'Desfazer' }))) return;
+    if (!(await confirm({ title: 'Desfazer esta importação?', message: `Apaga o que ela criou e ainda não foi usado (OS sem pagamento, clientes sem outras OS, serviços e materiais que não estão em nenhuma OS). Dados atualizados em cadastros que já existiam não voltam ao que eram.`, confirmText: 'Desfazer' }))) return;
     const r = await run(() => api.post(`/data/imports/${b.id}/undo`), null);
     if (r !== FAIL) load();
   };
@@ -246,7 +266,10 @@ function History({ reloadKey }) {
 }
 
 export default function DataIO() {
-  const { can } = useAuth();
+  useEffect(() => { const id = window.location.hash.slice(1); if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }), 400); }, []);
+  const { can: canRaw, feature } = useAuth();
+  // importar depende da extensão "Importar planilhas"; exportar, do módulo de exportação
+  const can = (k) => canRaw(k) && (k !== 'data_import' || feature('importacao_planilhas')) && (k !== 'data_export' || feature('exportacao'));
   const [done, setDone] = useState(null);
   const [n, setN] = useState(0);
   return (
@@ -256,6 +279,8 @@ export default function DataIO() {
       {can('data_import') && <Importer kind="clientes" onImported={(r) => { setDone(r); setN((x) => x + 1); }} />}
       {can('data_import') && <Importer kind="veiculos" onImported={(r) => { setDone(r); setN((x) => x + 1); }} />}
       {can('data_import') && can('orders_create') && <Importer kind="os" onImported={(r) => { setDone(r); setN((x) => x + 1); }} />}
+      {can('data_import') && can('services_manage') && <Importer kind="servicos" onImported={(r) => { setDone(r); setN((x) => x + 1); }} />}
+      {can('data_import') && can('materials_manage') && <Importer kind="produtos" onImported={(r) => { setDone(r); setN((x) => x + 1); }} />}
       {can('data_export') && <Exporter />}
       {can('data_import') && <History reloadKey={n} />}
       {done && (

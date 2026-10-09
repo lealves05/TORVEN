@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
-import { Plus, PackagePlus, Search, Trash2, Save, PackageCheck, XCircle, CalendarClock } from 'lucide-react';
+import { Plus, PackagePlus, Search, Trash2, Save, PackageCheck, XCircle, CalendarClock, AlertTriangle, Sparkles, Link2, Building2 } from 'lucide-react';
+import InvoiceReader from '../components/InvoiceReader';
 import { api, qs } from '../lib/api';
 import { money, qty, fmt, fmtDateTime, methodName } from '../lib/format';
-import { useSettings } from '../context/AuthContext';
+import { useAuth, useSettings } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Input, Select, MoneyInput, Textarea, Toggle, Loading, Empty, useAction, FAIL, cx } from '../components/ui';
 
@@ -59,6 +60,7 @@ export function PurchaseEditor() {
   const { id } = useParams();
   const nav = useNavigate();
   const settings = useSettings();
+  const { feature } = useAuth();
   const { confirm } = useUI();
   const [run, busy] = useAction();
   const [suppliers, setSuppliers] = useState([]);
@@ -71,6 +73,7 @@ export function PurchaseEditor() {
   const [inst, setInst] = useState({ n: 1, first: format(addDays(new Date(), 28), 'yyyy-MM-dd'), every: 30, method: 'boleto', firstPaid: false });
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
+  const [nf, setNf] = useState(null); // resultado da leitura da nota (avisos, fornecedor não cadastrado)
   const ref = useRef(null);
 
   useEffect(() => {
@@ -100,13 +103,39 @@ export function PurchaseEditor() {
   const setI = (k, patch) => setF({ ...f, items: f.items.map((x, i) => (i === k ? { ...x, ...patch } : x)) });
   const found = products.filter((x) => !search || x.name.toLowerCase().includes(search.toLowerCase())).slice(0, 30);
 
+  const daysBetween = (a, b) => Math.round((new Date(`${b}T12:00`) - new Date(`${a}T12:00`)) / 86400000);
+  const applyInvoice = async (r) => {
+    if (f.items.length && !(await confirm({ title: 'Trocar os itens pelos da nota?', message: 'Os itens que já estão na tela serão substituídos pelos itens lidos da nota.', confirmText: 'Trocar' }))) return;
+    setNf(r);
+    setF({
+      ...f, supplier_id: r.supplier.id || '', invoice_number: r.invoice_number || '', invoice_series: r.invoice_series || '', invoice_key: r.invoice_key || '',
+      issue_date: r.issue_date || f.issue_date, freight: r.freight || 0, other: r.other || 0, discount: r.discount || 0, source: r.source,
+      notes: [f.notes, r.other_detail && `Despesas da nota: ${r.other_detail}`].filter(Boolean).join('\n'),
+      items: r.items.map((i) => ({
+        product_id: i.product_id, description: i.product_name || i.description, unit: i.unit, qty: i.qty, unit_cost: i.unit_cost,
+        category: i.product_id ? undefined : settings.materialCategories?.[0], supplier_code: i.code, barcode: i.barcode, ncm: i.ncm,
+        _price: i.product_price, _nf: i.description, _by: i.matched_by,
+      })),
+    });
+    const d = r.installments || [];
+    if (d.length) setInst({ ...inst, n: d.length, first: d[0].due_date, every: d.length > 1 ? Math.max(1, daysBetween(d[0].due_date, d[1].due_date)) : 30, firstPaid: false });
+  };
+  const createSupplier = async () => {
+    const x = nf.supplier;
+    const doc = x.document?.length === 14 ? x.document.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : x.document?.length === 11 ? x.document.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : x.document;
+    const r = await run(() => api.post('/suppliers', { name: x.name || x.trade_name || 'Fornecedor', document: doc || null, phone: x.phone || null, address: x.address || null,
+      contact: x.trade_name || null, notes: x.ie ? `IE ${x.ie}` : null }), 'Fornecedor cadastrado');
+    if (r !== FAIL) { setSuppliers((l) => [...l, r].sort((a, b) => a.name.localeCompare(b.name))); setF((v) => ({ ...v, supplier_id: r.id })); setNf({ ...nf, supplier: { ...x, id: r.id } }); }
+  };
   const save = async (receive) => {
     const body = {
       supplier_id: f.supplier_id || null, invoice_number: f.invoice_number || null, invoice_series: f.invoice_series || null,
       invoice_key: f.invoice_key || null, issue_date: f.issue_date || null, notes: f.notes || null,
       freight: Number(f.freight) || 0, other: Number(f.other) || 0, discount: Number(f.discount) || 0,
       items: f.items.map((i) => ({ product_id: i.product_id || null, description: i.description, unit: i.unit, category: i.category || null,
-        qty: Number(String(i.qty).replace(',', '.')), unit_cost: Number(i.unit_cost) || 0, ...(i.sale_price ? { sale_price: Number(i.sale_price) } : {}) })),
+        qty: Number(String(i.qty).replace(',', '.')), unit_cost: Number(i.unit_cost) || 0, ...(i.sale_price ? { sale_price: Number(i.sale_price) } : {}),
+        supplier_code: i.supplier_code || null, barcode: i.barcode || null, ncm: i.ncm || null })),
+      ...(f.source !== undefined ? { source: f.source || null } : {}),
       receive, installments: receive && total > 0 ? installments : [],
     };
     const r = await run(() => (p ? api.put(`/purchases/${p.id}`, body) : api.post('/purchases', body)), receive ? 'Entrada registrada — estoque atualizado' : 'Rascunho salvo');
@@ -132,6 +161,28 @@ export function PurchaseEditor() {
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {!readOnly && feature('leitura_nota') && <InvoiceReader onRead={applyInvoice} compact={!!nf} />}
+          {nf && !readOnly && (
+            <section className="space-y-2" aria-label="Conferência da nota">
+              {nf.source === 'ia' && (
+                <div className="flex gap-2 rounded-app-sm bg-violet-500/10 p-3 text-sm text-violet-800 dark:text-violet-200">
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0" /><span>Nota lida pela <b>inteligência artificial</b>. Confira fornecedor, cada item, quantidade e valor com a nota em mãos antes de dar entrada.</span>
+                </div>
+              )}
+              {!nf.supplier.id && (
+                <div className="flex flex-wrap items-center gap-3 rounded-app-sm bg-sky-500/10 p-3 text-sm text-sky-800 dark:text-sky-200">
+                  <Building2 className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1">Fornecedor da nota não está cadastrado: <b>{nf.supplier.name || '—'}</b>{nf.supplier.document ? ` · ${nf.supplier.document}` : ''}</span>
+                  <button className="btn-outline h-8 text-xs" disabled={busy} onClick={createSupplier}><Plus className="h-3.5 w-3.5" /> Cadastrar fornecedor</button>
+                </div>
+              )}
+              {nf.warnings?.length > 0 && (
+                <ul className="space-y-1 rounded-app-sm bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+                  {nf.warnings.map((w) => <li key={w} className="flex gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{w}</li>)}
+                </ul>
+              )}
+            </section>
+          )}
           <section className="card grid gap-4 p-5 sm:grid-cols-6">
             <Select label="Fornecedor" value={f.supplier_id} onChange={(e) => setF({ ...f, supplier_id: e.target.value })} className="sm:col-span-3" disabled={readOnly}>
               <option value="">—</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -176,9 +227,17 @@ export function PurchaseEditor() {
                       <tr key={k}>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-2">{!i.product_id && <span className="chip bg-primary/10 text-primary">novo</span>}{i.description}</div>
+                          {i._nf && i._nf !== i.description && <div className="text-xs text-ink-faint">Na nota: {i._nf}{i._by ? ` · reconhecido pelo ${i._by}` : ''}</div>}
+                          {i._nf && i._nf === i.description && i._by && <div className="text-xs text-ink-faint">Reconhecido pelo {i._by}</div>}
+                          {!i.product_id && !readOnly && products.length > 0 && (
+                            <label className="mt-1 flex items-center gap-1 text-xs text-ink-faint"><Link2 className="h-3 w-3" />
+                              <input className="input h-7 flex-1 text-xs" list="materiais-cadastrados" placeholder="É um material já cadastrado? Escolha aqui"
+                                onChange={(e) => { const m = products.find((x) => x.name === e.target.value); if (m) setI(k, { product_id: m.id, description: m.name, unit: m.unit, _price: m.price, _nf: i._nf || i.description, _by: undefined }); }} />
+                            </label>
+                          )}
                           {!i.product_id && !readOnly && (
                             <div className="mt-1 flex gap-2">
-                              <select className="input h-7 w-auto text-xs" value={i.unit} onChange={(e) => setI(k, { unit: e.target.value })}>{['un', 'kg', 'm', 'm²', 'm³', 'br', 'pç', 'cx', 'rl', 'L'].map((u) => <option key={u}>{u}</option>)}</select>
+                              <select className="input h-7 w-auto text-xs" value={i.unit} onChange={(e) => setI(k, { unit: e.target.value })}>{[...new Set(['un', 'pç', 'jg', 'kit', 'par', 'kg', 'L', 'gl', 'm', 'm²', 'm³', 'br', 'cx', 'rl', i.unit].filter(Boolean))].map((u) => <option key={u}>{u}</option>)}</select>
                               <select className="input h-7 w-auto text-xs" value={i.category || ''} onChange={(e) => setI(k, { category: e.target.value })}>{settings.materialCategories?.map((c) => <option key={c}>{c}</option>)}</select>
                             </div>
                           )}
@@ -194,6 +253,7 @@ export function PurchaseEditor() {
                 </table>
               </div>
             )}
+            <datalist id="materiais-cadastrados">{products.map((x) => <option key={x.id} value={x.name} />)}</datalist>
             <Textarea label="Observações" rows={2} value={f.notes || ''} onChange={(e) => setF({ ...f, notes: e.target.value })} disabled={readOnly} />
           </section>
         </div>

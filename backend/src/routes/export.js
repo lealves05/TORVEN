@@ -35,11 +35,23 @@ export const EXPORTS = {
       verification_code, amount, description, customer, items, pdf_url, xml_url, message, issued_at, cancelled_at, created_at
       from invoices where company_id = $1 order by created_at`],
   servicos: ['Serviços', 'select * from services where company_id = $1'],
+  tabela_servicos: ['Tabela de serviços (para importar de novo)', `select legacy_code as "Codigo antigo", name as "Nome", category as "Categoria", unit as "Unidade",
+      replace(price::text, '.', ',') as "Preco", replace(cost::text, '.', ',') as "Custo", est_minutes as "Tempo (min)",
+      replace(coalesce(commission_rate, 0)::text, '.', ',') as "Comissao (%)", service_code as "Codigo fiscal",
+      case when active then 'Sim' else 'Não' end as "Ativo", description as "Descricao" from services where company_id = $1 order by category nulls last, lower(name)`],
+  tabela_materiais: ['Tabela de materiais (para importar de novo)', `select legacy_code as "Codigo antigo", name as "Nome", sku as "Referencia",
+      barcode as "Codigo de barras", category as "Categoria", unit as "Unidade", replace(round(cost, 2)::text, '.', ',') as "Custo",
+      replace(price::text, '.', ',') as "Preco", replace((stock::numeric(12,3))::float8::text, '.', ',') as "Estoque",
+      replace((min_stock::numeric(12,3))::float8::text, '.', ',') as "Estoque minimo", location as "Local", ncm as "NCM", cfop as "CFOP",
+      origin as "Origem", case when active then 'Sim' else 'Não' end as "Ativo" from products where company_id = $1 order by category nulls last, lower(name)`],
   tecnicos: ['Técnicos', 'select * from technicians where company_id = $1'],
   usuarios: ['Usuários', 'select id, name, email, role, technician_id, unit_id, active, created_at from users where company_id = $1'],
   retornos: ['Relacionamento (retornos)', 'select * from followups where company_id = $1'],
   auditoria: ['Auditoria', 'select * from audit_log where company_id = $1 order by created_at'],
 };
+
+// planilhas montadas para a pessoa ler/reimportar (a cópia completa já leva a tabela original)
+const READABLE_ONLY = new Set(['tabela_servicos', 'tabela_materiais']);
 
 const cell = (v) => {
   if (v == null) return '';
@@ -55,7 +67,7 @@ r.get('/backup.json', async (req, res) => {
     `select id, name, trade_name, slug, document, state_registration, municipal_registration, phone, email, cep, street, number,
             complement, district, city, uf, city_code, settings, created_at from companies where id = $1`, [req.companyId]);
   out.company = company;
-  for (const [key, [, sql]] of Object.entries(EXPORTS)) out.tables[key] = (await q(sql, [req.companyId])).rows;
+  for (const [key, [, sql]] of Object.entries(EXPORTS)) if (!READABLE_ONLY.has(key)) out.tables[key] = (await q(sql, [req.companyId])).rows;
   await audit(null, req, { entity: 'settings', entityId: req.companyId, action: 'export_backup', summary: 'Cópia completa dos dados exportada (JSON)' });
   res.setHeader('Content-Disposition', `attachment; filename="torven-backup-${new Date().toISOString().slice(0, 10)}.json"`);
   res.json(out);

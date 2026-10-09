@@ -1,14 +1,16 @@
 // Cadastros simples: serviços, técnicos e fornecedores.
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Search, Pencil, Trash2, Wrench, HardHat, Truck } from 'lucide-react';
-import { api, qs } from '../lib/api';
+import { Link } from 'react-router-dom';
+import { Plus, Search, Pencil, Trash2, Wrench, HardHat, Truck, Download, Upload } from 'lucide-react';
+import { api, qs, downloadFile } from '../lib/api';
 import { money, maskPhone, maskDoc } from '../lib/format';
-import { useSettings } from '../context/AuthContext';
+import { lookupCnpj, fillEmpty, cnpjHint } from '../lib/cnpj';
+import { useAuth, useSettings } from '../context/AuthContext';
 import { useCatalog } from '../context/CatalogContext';
 import { useUI } from '../context/UIContext';
 import { PageHeader, Input, Select, MoneyInput, Textarea, Modal, Loading, Empty, Avatar, useAction, FAIL, cx } from '../components/ui';
 
-function CrudPage({ title, subtitle, endpoint, icon, columns, Form, blank, onChanged }) {
+function CrudPage({ title, subtitle, endpoint, icon, columns, Form, blank, onChanged, extraActions }) {
   const { confirm } = useUI();
   const [run] = useAction();
   const [search, setSearch] = useState('');
@@ -22,7 +24,7 @@ function CrudPage({ title, subtitle, endpoint, icon, columns, Form, blank, onCha
   };
   return (
     <div>
-      <PageHeader title={title} subtitle={subtitle} actions={<button className="btn-primary" onClick={() => setEdit(blank)}><Plus className="h-4 w-4" /> Novo</button>} />
+      <PageHeader title={title} subtitle={subtitle} actions={<>{extraActions}<button className="btn-primary" onClick={() => setEdit(blank)}><Plus className="h-4 w-4" /> Novo</button></>} />
       <div className="card mb-4 p-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
@@ -70,12 +72,30 @@ function FormModal({ endpoint, item, Form, onClose, onSaved }) {
   );
 }
 
+/** Exportar a tabela para o Excel (já no formato de importar) e abrir a importação. */
+function ServiceSheetActions() {
+  const { can, feature } = useAuth();
+  const { toast } = useUI();
+  const [busy, setBusy] = useState(false);
+  const exportSheet = async () => {
+    setBusy(true);
+    try { await downloadFile('/export/tabela_servicos.csv', 'tabela-de-servicos.csv'); } catch (e) { toast(e.message, 'error'); }
+    setBusy(false);
+  };
+  return (
+    <>
+      {can('data_export') && feature('exportacao') && <button className="btn-outline" disabled={busy} onClick={exportSheet}><Download className="h-4 w-4" /> Exportar</button>}
+      {can('data_import') && feature('importacao_planilhas') && <Link className="btn-outline" to="/dados#importar-servicos"><Upload className="h-4 w-4" /> Importar</Link>}
+    </>
+  );
+}
+
 export function Services() {
   const settings = useSettings();
   const { reload } = useCatalog();
   return (
     <CrudPage title="Tabela de serviços" subtitle="Serviços de solda, serralheria e mecânica com preço e código fiscal" endpoint="/services" icon={Wrench}
-      onChanged={reload} blank={{ name: '', unit: 'serv', price: 0, cost: 0, est_minutes: 60, category: settings.serviceCategories?.[0], service_code: '14.01' }}
+      onChanged={reload} extraActions={<ServiceSheetActions />} blank={{ name: '', unit: 'serv', price: 0, cost: 0, est_minutes: 60, category: settings.serviceCategories?.[0], service_code: '14.01' }}
       columns={[
         { label: 'Serviço', render: (s) => <><div className="font-medium">{s.name}</div><div className="text-xs text-ink-faint">{s.category}</div></> },
         { label: 'Unidade', th: 'hidden md:table-cell', td: 'hidden md:table-cell text-ink-soft', render: (s) => s.unit },
@@ -137,6 +157,35 @@ export function Technicians() {
   );
 }
 
+/** Cadastro do fornecedor: com o CNPJ digitado, busca razão social, telefone e endereço na Receita. */
+function SupplierForm({ f, setF }) {
+  const { feature } = useAuth();
+  const [info, setInfo] = useState(null);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const doc = async (v) => {
+    const m = maskDoc(v);
+    setF({ ...f, document: m });
+    if (!feature('consulta_cnpj') || m.replace(/\D/g, '').length !== 14) { setInfo(null); return; }
+    const r = await lookupCnpj(m);
+    setInfo(r);
+    if (r && !r.error) {
+      const address = [r.street, r.number, r.complement, r.district, r.city && `${r.city}/${r.uf}`, r.cep && `CEP ${r.cep}`].filter(Boolean).join(', ');
+      setF(fillEmpty({ ...f, document: m }, { ...r, address }, { name: 'name', contact: 'trade_name', email: 'email', phone: (d) => d.phone && maskPhone(d.phone), address: 'address' }));
+    }
+  };
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Input label="Razão social / nome" value={f.name} onChange={set('name')} className="sm:col-span-2" autoFocus />
+      <Input label="CNPJ / CPF" value={f.document || ''} onChange={(e) => doc(e.target.value)} hint={cnpjHint(info)} />
+      <Input label="Contato" value={f.contact || ''} onChange={set('contact')} />
+      <Input label="Telefone" value={f.phone || ''} onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} />
+      <Input label="E-mail" value={f.email || ''} onChange={set('email')} />
+      <Input label="Endereço" value={f.address || ''} onChange={set('address')} className="sm:col-span-2" />
+      <Textarea label="Observações" value={f.notes || ''} onChange={set('notes')} rows={2} className="sm:col-span-2" />
+    </div>
+  );
+}
+
 export function Suppliers() {
   return (
     <CrudPage title="Fornecedores" subtitle="Distribuidoras de gases, aço, consumíveis e peças" endpoint="/suppliers" icon={Truck} blank={{ name: '' }}
@@ -145,19 +194,6 @@ export function Suppliers() {
         { label: 'Contato', th: 'hidden md:table-cell', td: 'hidden md:table-cell text-ink-soft', render: (s) => [s.contact, s.phone].filter(Boolean).join(' · ') || '—' },
         { label: 'E-mail', th: 'hidden lg:table-cell', td: 'hidden lg:table-cell text-ink-soft', render: (s) => s.email || '—' },
       ]}
-      Form={({ f, setF }) => {
-        const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-        return (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Razão social / nome" value={f.name} onChange={set('name')} className="sm:col-span-2" autoFocus />
-            <Input label="CNPJ / CPF" value={f.document || ''} onChange={(e) => setF({ ...f, document: maskDoc(e.target.value) })} />
-            <Input label="Contato" value={f.contact || ''} onChange={set('contact')} />
-            <Input label="Telefone" value={f.phone || ''} onChange={(e) => setF({ ...f, phone: maskPhone(e.target.value) })} />
-            <Input label="E-mail" value={f.email || ''} onChange={set('email')} />
-            <Input label="Endereço" value={f.address || ''} onChange={set('address')} className="sm:col-span-2" />
-            <Textarea label="Observações" value={f.notes || ''} onChange={set('notes')} rows={2} className="sm:col-span-2" />
-          </div>
-        );
-      }} />
+      Form={SupplierForm} />
   );
 }

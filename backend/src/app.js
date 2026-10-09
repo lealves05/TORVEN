@@ -37,6 +37,9 @@ import relationshipRoutes from './routes/relationship.js';
 import exportRoutes from './routes/export.js';
 import { platformApi, billing } from './routes/platform.js';
 import { platformGate } from './platform.js';
+import { companyModuleGate } from './companyModules.js';
+import moduleRoutes from './routes/modules.js';
+import lookupRoutes from './routes/lookup.js';
 import { edgeProxyIp } from './edgeProxy.js';
 import integrationRoutes from './routes/integrations.js';
 import vehicleRoutes from './routes/vehicles.js';
@@ -70,6 +73,8 @@ export function createApp() {
   app.use((_req, res, next) => { res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); next(); }); // respostas da API (o site define as suas)
   // webhooks externos: limite pequeno e corpo bruto para conferir a assinatura (antes do leitor geral)
   app.use('/api/webhooks', express.json({ limit: '256kb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
+  // leitura da nota do fornecedor (PDF ou foto em base64): limite maior só nesta rota
+  app.use('/api/purchases/read-invoice', express.json({ limit: '12mb' }));
   // corpo bruto para conferir a assinatura das chamadas da central da plataforma
   app.use(express.json({ limit: '3mb', verify: (req, _res, buf) => { if (req.originalUrl?.includes('/api/platform/') || req.originalUrl?.includes('/api/webhooks/')) req.rawBody = buf; } }));
 
@@ -84,6 +89,7 @@ export function createApp() {
   const api = express.Router();
   api.use(requireAuth);
   api.use(platformGate); // assinatura, bloqueio e módulos definidos pela central
+  api.use(companyModuleGate); // módulos que a própria empresa desligou (Configurações › Módulos e extensões)
   api.use(autoAudit);
   api.use('/billing', billing);
   api.use('/company/fiscal', fiscalSetupRoutes);
@@ -120,6 +126,8 @@ export function createApp() {
   api.use('/whatsapp', whatsappRoutes);          // atendimento e agente do WhatsApp
   api.use('/agent', agentRoutes);                // assistente interno (texto/voz), com liberação por usuário
   api.use('/reminders', reminderRoutes);         // lembretes e alertas do financeiro
+  api.use('/modules', moduleRoutes);             // ligar/desligar módulos e extensões da empresa
+  api.use('/lookup', lookupRoutes);              // consulta de CNPJ (dados abertos da Receita)
   api.use('/data', dataRoutes);                  // importar clientes e OS de planilha
   api.use('/', workspaceRoutes);
   app.use('/api', api);

@@ -107,7 +107,7 @@ export function useNav() {
       can('services_manage') && { to: '/servicos', label: 'Serviços e preços', icon: Wrench },
       can('technicians_manage') && { to: '/tecnicos', label: 'Técnicos', icon: HardHat },
       can('audit_view') && { to: '/auditoria', label: 'Histórico de alterações', icon: ShieldCheck },
-      can('data_import', 'data_export') && { to: '/dados', label: 'Importar e exportar dados', icon: DatabaseZap },
+      can('data_import', 'data_export') && (feature('importacao_planilhas') || can('data_export')) && { to: '/dados', label: 'Importar e exportar dados', icon: DatabaseZap },
       access && ['owner', 'admin'].includes(user?.role) && { to: '/assinatura', label: 'Assinatura e plano', icon: CreditCard },
     ] },
     { label: 'Minha conta e ajuda', icon: UserRound, children: [

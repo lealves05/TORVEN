@@ -91,7 +91,7 @@ r.put('/config', need('integrations'), async (req, res) => {
 r.put('/ai', need('integrations'), async (req, res) => {
   const d = parse(z.object({
     enabled: z.boolean().default(false),
-    config: z.object({ model: z.enum(AI_MODELS.map((m) => m.id)).default(AI_MODELS[0].id) }).default({}),
+    config: z.object({ model: z.enum(AI_MODELS.map((m) => m.id)).default(AI_MODELS[0].id), invoices: z.boolean().default(true) }).default({}),
     secrets: z.object({ api_key: z.string().max(300).nullable().optional() }).default({}),
   }), req.body);
   if (d.secrets.api_key && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(d.secrets.api_key.trim())) throw bad('A chave da Anthropic começa com "sk-ant-".');

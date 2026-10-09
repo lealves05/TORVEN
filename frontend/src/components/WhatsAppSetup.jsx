@@ -41,12 +41,10 @@ export default function WhatsAppSetup() {
   const [run, busy] = useAction();
   const [data, setData] = useState(null);
   const [form, setForm] = useState(null);
-  const [ai, setAi] = useState(null);
   const load = () => api.get('/whatsapp/config').then((d) => {
     setData(d);
     const c = d.whatsapp?.config || {};
     setForm({ enabled: !!d.whatsapp?.enabled, config: { ...d.defaults, site_url: window.location.origin, ...c }, secrets: {} });
-    setAi({ enabled: !!d.ai?.enabled, config: { model: d.ai?.config?.model || d.models[0].id }, secrets: {} });
   }).catch((e) => toast(e.message, 'error'));
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!data || !form) return <div className="card p-6 lg:col-span-2"><Loading /></div>;
@@ -60,10 +58,6 @@ export default function WhatsAppSetup() {
     delete config.verify_token;
     const body = { enabled: form.enabled, config: { ...config, slot_minutes: Number(config.slot_minutes) || 60 }, secrets: clean(form.secrets) };
     const r = await run(() => api.put('/whatsapp/config', body), 'WhatsApp salvo');
-    if (r !== FAIL) load();
-  };
-  const saveAi = async () => {
-    const r = await run(() => api.put('/whatsapp/ai', { ...ai, secrets: clean(ai.secrets) }), 'IA salva');
     if (r !== FAIL) load();
   };
   const webhook = `${window.location.origin}/api/webhooks/whatsapp`;
@@ -139,20 +133,6 @@ export default function WhatsAppSetup() {
         <div className="border-t border-line pt-4"><button className="btn-primary" disabled={busy} onClick={save}><Save className="h-4 w-4" /> Salvar WhatsApp</button></div>
       </div>
 
-      <div className="card space-y-4 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 font-semibold"><Sparkles className="h-4 w-4 text-primary" /> IA do agente (opcional)</h3>
-          <p className="text-xs text-ink-faint">Serviço pago da Anthropic (Claude), cobrado por uso. A IA só lê o texto que o cliente escreveu, para entender o pedido; ela não recebe telefone, cadastro nem dados das OS, e as respostas são sempre montadas pelo sistema.</p>
-        </div>
-        <Select label="Modelo" value={ai.config.model} onChange={(e) => setAi({ ...ai, config: { model: e.target.value } })}>
-          {data.models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </Select>
-        <Secret label="Chave da API (começa com sk-ant-)" saved={data.ai?.secrets?.api_key} value={ai.secrets.api_key}
-          onChange={(v) => { const s = { ...ai.secrets }; if (v === undefined) delete s.api_key; else s.api_key = v; setAi({ ...ai, secrets: s }); }} />
-        <Toggle checked={ai.enabled} onChange={(v) => setAi({ ...ai, enabled: v })} label="Ligar a IA" />
-        <div className="border-t border-line pt-4"><button className="btn-primary" disabled={busy} onClick={saveAi}><Save className="h-4 w-4" /> Salvar IA</button></div>
-      </div>
-
       <AgentTester />
     </>
   );
@@ -201,5 +181,42 @@ function AgentTester() {
         <button className="btn-ghost" disabled={busy || !log.length} onClick={reset} title="Apagar a conversa de teste" aria-label="Apagar a conversa de teste"><Trash2 className="h-4 w-4" /></button>
       </div>
     </div>
+  );
+}
+
+/** Inteligência artificial da empresa (Anthropic): agente do WhatsApp e leitura de nota do fornecedor. Independe do módulo WhatsApp. */
+export function AiSetup() {
+  const { toast } = useUI();
+  const [run, busy] = useAction();
+  const [data, setData] = useState(null);
+  const [ai, setAi] = useState(null);
+  const load = () => api.get('/whatsapp/config').then((d) => {
+    setData(d);
+    setAi({ enabled: !!d.ai?.enabled, config: { model: d.ai?.config?.model || d.models[0].id, invoices: d.ai?.config?.invoices !== false }, secrets: {} });
+  }).catch((e) => toast(e.message, 'error'));
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const ready = !!data;
+  useEffect(() => { if (ready && window.location.hash === '#ia') setTimeout(() => document.getElementById('ia')?.scrollIntoView({ behavior: 'smooth' }), 200); }, [ready]);
+  if (!data || !ai) return <div className="card p-6"><Loading /></div>;
+  const saveAi = async () => {
+    const r = await run(() => api.put('/whatsapp/ai', { ...ai, secrets: clean(ai.secrets) }), 'IA salva');
+    if (r !== FAIL) load();
+  };
+  return (
+      <div className="card scroll-mt-20 space-y-4 p-6" id="ia">
+        <div>
+          <h3 className="flex items-center gap-2 font-semibold"><Sparkles className="h-4 w-4 text-primary" /> Inteligência artificial (opcional)</h3>
+          <p className="text-xs text-ink-faint">Serviço pago da Anthropic (Claude), cobrado por uso na sua conta. No WhatsApp, a IA só lê o texto que o cliente escreveu, para entender o pedido; ela não recebe telefone, cadastro nem dados das OS, e as respostas são sempre montadas pelo sistema. Na entrada de materiais, quando você escolhe "PDF" ou "Foto da nota", o arquivo da nota do fornecedor vai para a IA ler — e o resultado volta para você conferir antes de lançar.</p>
+        </div>
+        <Select label="Modelo" value={ai.config.model} onChange={(e) => setAi({ ...ai, config: { ...ai.config, model: e.target.value } })}>
+          {data.models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </Select>
+        <Secret label="Chave da API (começa com sk-ant-)" saved={data.ai?.secrets?.api_key} value={ai.secrets.api_key}
+          onChange={(v) => { const s = { ...ai.secrets }; if (v === undefined) delete s.api_key; else s.api_key = v; setAi({ ...ai, secrets: s }); }} />
+        <Toggle checked={ai.enabled} onChange={(v) => setAi({ ...ai, enabled: v })} label="Ligar a IA" />
+        <Toggle checked={ai.config.invoices !== false} onChange={(v) => setAi({ ...ai, config: { ...ai.config, invoices: v } })} label="Usar a IA para ler PDF e foto de notas de fornecedor"
+          hint="Na entrada de materiais. O arquivo XML da nota é lido sem IA. A leitura de nota usa o modelo Sonnet (mais preciso)." />
+        <div className="border-t border-line pt-4"><button className="btn-primary" disabled={busy} onClick={saveAi}><Save className="h-4 w-4" /> Salvar IA</button></div>
+      </div>
   );
 }

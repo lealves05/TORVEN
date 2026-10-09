@@ -10,7 +10,7 @@ import { q, pool } from '../db.js';
 import { need } from '../auth.js';
 import { parse, notFound, bad, round2, onlyDigits, publicToken } from '../util.js';
 import { audit } from '../audit.js';
-import { nextNumber, logEvent } from '../domain.js';
+import { nextNumber, logEvent, moveStock } from '../domain.js';
 import { normalizePlate, formatPlate } from '../integrations/plates.js';
 import { uniqueVehicleOn } from '../vehicleRules.js';
 
@@ -18,8 +18,8 @@ const r = Router();
 r.use(need('data_import'));
 
 const MAX_ROWS = 5000;
-const KINDS = ['clientes', 'veiculos', 'os'];
-const LABEL = { clientes: 'clientes', veiculos: 'veículos', os: 'OS' };
+const KINDS = ['clientes', 'veiculos', 'os', 'servicos', 'produtos'];
+const LABEL = { clientes: 'clientes', veiculos: 'veículos', os: 'OS', servicos: 'serviços', produtos: 'materiais' };
 const key = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 // nomes de coluna aceitos (o primeiro é o oficial do modelo do TORVEN)
@@ -66,6 +66,35 @@ const ALIASES = {
   data_entrega: ['data_entrega', 'entrega', 'entregue_em', 'data_saida', 'saida'],
   km: ['km', 'quilometragem', 'odometro'],
   tecnico: ['tecnico', 'funcionario', 'mecanico', 'responsavel'],
+  // tabela de serviços
+  servico_codigo: ['codigo_antigo', 'id_servico', 'codigo_servico', 'cod_servico', 'codigo'],
+  servico_nome: ['nome', 'servico', 'nome_do_servico', 'descricao_servico', 'servico_nome'],
+  servico_preco: ['preco', 'preco_venda', 'valor', 'preco_de_venda', 'valor_venda'],
+  servico_custo: ['custo', 'preco_custo', 'valor_custo', 'preco_de_custo'],
+  servico_horas: ['horas_trabalhadas', 'horas', 'tempo_horas'],
+  servico_minutos: ['tempo_min', 'tempo_minutos', 'minutos', 'tempo_estimado_min'],
+  servico_categoria: ['categoria', 'grupo', 'especialidade'],
+  servico_unidade: ['unidade', 'un'],
+  servico_comissao: ['comissao', 'comissao_percent', 'comissao_'],
+  servico_codigo_fiscal: ['codigo_fiscal', 'item_lc116', 'codigo_servico_fiscal', 'lc116'],
+  servico_ativo: ['ativo', 'situacao_servico'],
+  servico_descricao: ['descricao', 'observacao_servico', 'detalhes'],
+  // tabela de materiais / produtos (peças)
+  produto_codigo: ['codigo_antigo', 'id_produto', 'codigo_produto', 'cod_produto', 'id_material', 'codigo'],
+  produto_nome: ['nome', 'produto', 'nome_produto', 'descricao_produto', 'material', 'descricao', 'peca'],
+  produto_sku: ['sku', 'referencia', 'ref', 'codigo_interno', 'codigo_fabricante', 'cod_fabricante', 'part_number'],
+  produto_barras: ['codigo_de_barras', 'codigo_barras', 'cod_barras', 'ean', 'gtin', 'barcode'],
+  produto_categoria: ['categoria', 'grupo', 'familia', 'linha'],
+  produto_unidade: ['unidade', 'un', 'unid', 'und'],
+  produto_custo: ['custo', 'preco_custo', 'valor_custo', 'preco_de_custo', 'custo_medio'],
+  produto_preco: ['preco', 'preco_venda', 'valor', 'preco_de_venda', 'valor_venda'],
+  produto_estoque: ['estoque', 'estoque_atual', 'saldo', 'quantidade', 'qtd', 'qtde', 'qtd_estoque', 'quantidade_estoque'],
+  produto_minimo: ['estoque_minimo', 'minimo', 'qtd_minima', 'estoque_min'],
+  produto_local: ['local', 'localizacao', 'prateleira', 'endereco_estoque'],
+  produto_ncm: ['ncm'],
+  produto_cfop: ['cfop'],
+  produto_origem: ['origem', 'origem_mercadoria'],
+  produto_ativo: ['ativo', 'situacao_produto'],
   // itens da OS (uma linha por item; as linhas da mesma OS repetem o número antigo)
   item_descricao: ['item_descricao', 'descricao_produtos_servicos', 'descricao_item', 'produto_servico', 'item_nome'],
   item_tipo: ['item_tipo', 'tipo_item'],
@@ -113,6 +142,14 @@ export function parseMoneyCell(v) {
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
   const n = Number(s);
   return Number.isFinite(n) && n >= 0 ? round2(n) : undefined;
+}
+/** Quantidade com sinal (estoque negativo do sistema antigo): -3 · 1.234,5 · 2,000 */
+function parseQtyCell(v) {
+  if (v == null || v === '') return null;
+  let t = String(v).replace(/\s/g, '');
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = Number(t);
+  return Number.isFinite(n) ? Math.round(n * 1000) / 1000 : undefined;
 }
 const STATUS_MAP = [
   [/cancel/, 'cancelada'], [/pront/, 'pronta'], [/entreg|finaliz|conclu|fechad|pago|retirad/, 'entregue'],
@@ -358,6 +395,106 @@ const bodySchema = z.object({
   total: z.number().int().min(1).optional(), // total de linhas do arquivo inteiro
 });
 
+/** Tabela de serviços: acha pelo código antigo ou pelo nome; atualiza preço/custo/tempo se pedido. */
+async function importServiceRow(db, ctx, f, { update }) {
+  const name = (f.servico_nome || '').replace(/\s+/g, ' ').trim();
+  if (name.length < 2) fail('falta o nome do serviço');
+  const price = parseMoneyCell(f.servico_preco);
+  if (price === undefined) fail(`preço "${f.servico_preco}" inválido`);
+  const cost = parseMoneyCell(f.servico_custo);
+  if (cost === undefined) fail(`custo "${f.servico_custo}" inválido`);
+  const hours = parseMoneyCell(f.servico_horas);
+  const mins = parseMoneyCell(f.servico_minutos);
+  const est = mins != null && mins !== undefined ? Math.round(mins) : hours ? Math.round(hours * 60) : null;
+  const commission = parseMoneyCell(String(f.servico_comissao || '').replace('%', ''));
+  if (commission !== undefined && commission != null && commission > 100) fail('comissão acima de 100%');
+  const active = f.servico_ativo ? !/^(n|nao|não|inativo|0|false)$/i.test(f.servico_ativo.trim()) : true;
+  const vals = { name: name.slice(0, 160), category: f.servico_categoria || null, unit: f.servico_unidade || null, price, cost,
+    est_minutes: est, commission_rate: commission ?? null, service_code: f.servico_codigo_fiscal || null, description: f.servico_descricao || null,
+    active, legacy_code: f.servico_codigo || null };
+  let cur = null;
+  if (vals.legacy_code) ({ rows: [cur] } = await db.query('select * from services where company_id = $1 and legacy_code = $2 limit 1', [ctx.companyId, vals.legacy_code]));
+  if (!cur) ({ rows: [cur] } = await db.query('select * from services where company_id = $1 and lower(name) = lower($2) order by active desc limit 1', [ctx.companyId, vals.name]));
+  if (cur) {
+    if (!update) {
+      if (vals.legacy_code && !cur.legacy_code) await db.query('update services set legacy_code = $3 where id = $1 and company_id = $2', [cur.id, ctx.companyId, vals.legacy_code]);
+      return { status: 'ignorado', name: cur.name, message: 'serviço já cadastrado' };
+    }
+    const keys = Object.keys(vals).filter((k) => vals[k] != null && String(vals[k]) !== String(cur[k] ?? '') && !(typeof vals[k] === 'number' && Number(cur[k]) === vals[k]));
+    if (!keys.length) return { status: 'sem_mudanca', name: cur.name, message: 'sem mudança' };
+    await db.query(`update services set ${keys.map((k, i) => `${k} = $${i + 3}`).join(', ')} where id = $1 and company_id = $2`, [cur.id, ctx.companyId, ...keys.map((k) => vals[k])]);
+    const money = (n) => `R$ ${Number(n).toFixed(2).replace('.', ',')}`;
+    return { status: 'atualizado', name: cur.name, message: keys.includes('price') ? `preço ${money(cur.price)} → ${money(price)}` : `atualiza: ${keys.join(', ')}` };
+  }
+  const cols = Object.keys(vals).filter((k) => vals[k] != null);
+  await db.query(`insert into services (company_id, import_batch_id, ${cols.join(',')}) values ($1, $2, ${cols.map((_, i) => `$${i + 3}`).join(',')})`,
+    [ctx.companyId, ctx.batchId, ...cols.map((k) => vals[k])]);
+  return { status: 'criado', name: vals.name, message: `serviço novo · ${price ? `R$ ${price.toFixed(2).replace('.', ',')}` : 'sem preço'}${active ? '' : ' · inativo'}` };
+}
+
+/** Tabela de materiais: acha pelo código antigo, código de barras, referência ou nome.
+ *  Estoque: na criação vira "Estoque inicial"; ao atualizar, um acerto de inventário (fica no histórico do material). */
+async function importProductRow(db, ctx, f, { update }) {
+  const name = (f.produto_nome || '').replace(/\s+/g, ' ').trim();
+  if (name.length < 2) fail('falta o nome do material');
+  const price = parseMoneyCell(f.produto_preco);
+  if (price === undefined) fail(`preço "${f.produto_preco}" inválido`);
+  const cost = parseMoneyCell(f.produto_custo);
+  if (cost === undefined) fail(`custo "${f.produto_custo}" inválido`);
+  const stock = parseQtyCell(f.produto_estoque);
+  if (stock === undefined) fail(`estoque "${f.produto_estoque}" inválido`);
+  const minStock = parseQtyCell(f.produto_minimo);
+  if (minStock === undefined || (minStock != null && minStock < 0)) fail(`estoque mínimo "${f.produto_minimo}" inválido`);
+  const origin = f.produto_origem ? Number(String(f.produto_origem).trim().slice(0, 1)) : null;
+  if (origin != null && !(origin >= 0 && origin <= 8)) fail(`origem "${f.produto_origem}" inválida (use 0 a 8)`);
+  const ncm = f.produto_ncm ? f.produto_ncm.replace(/\D/g, '') : null;
+  if (ncm && ncm.length !== 8) fail(`NCM "${f.produto_ncm}" deve ter 8 números`);
+  const cfop = f.produto_cfop ? f.produto_cfop.replace(/\D/g, '') : null;
+  if (cfop && cfop.length !== 4) fail(`CFOP "${f.produto_cfop}" deve ter 4 números`);
+  const active = f.produto_ativo ? !/^(n|nao|não|inativo|0|false)$/i.test(f.produto_ativo.trim()) : true;
+  const legacy = f.produto_codigo || null;
+  const unit = (f.produto_unidade || '').trim().toLowerCase().slice(0, 10) || null;
+  const vals = { name: name.slice(0, 160), sku: f.produto_sku || legacy, barcode: f.produto_barras ? f.produto_barras.replace(/\s/g, '') : null,
+    category: f.produto_categoria || null, unit, cost, price, min_stock: minStock, location: f.produto_local || null,
+    ncm, cfop, origin, active, legacy_code: legacy };
+  let cur = null;
+  const find = async (where, v) => { if (!cur && v) ({ rows: [cur] } = await db.query(`select * from products where company_id = $1 and ${where} order by active desc limit 1`, [ctx.companyId, v])); };
+  await find('legacy_code = $2', legacy);
+  await find('barcode = $2', vals.barcode);
+  await find('lower(sku) = lower($2)', f.produto_sku);
+  await find('lower(name) = lower($2)', vals.name);
+  const qtyTxt = (n) => String(n).replace('.', ',');
+  if (cur) {
+    if (!update) {
+      if (legacy && !cur.legacy_code) await db.query('update products set legacy_code = $3 where id = $1 and company_id = $2', [cur.id, ctx.companyId, legacy]);
+      return { status: 'ignorado', name: cur.name, message: 'material já cadastrado' };
+    }
+    const keys = Object.keys(vals).filter((k) => vals[k] != null && String(vals[k]) !== String(cur[k] ?? '') && !(typeof vals[k] === 'number' && Number(cur[k]) === vals[k]));
+    const changes = [];
+    if (keys.length) {
+      await db.query(`update products set ${keys.map((k, i) => `${k} = $${i + 3}`).join(', ')} where id = $1 and company_id = $2`, [cur.id, ctx.companyId, ...keys.map((k) => vals[k])]);
+      const money = (n) => `R$ ${Number(n).toFixed(2).replace('.', ',')}`;
+      if (keys.includes('price')) changes.push(`preço ${money(cur.price)} → ${money(price)}`);
+      if (keys.includes('cost')) changes.push(`custo ${money(cur.cost)} → ${money(cost)}`);
+      const rest = keys.filter((k) => !['price', 'cost'].includes(k));
+      if (rest.length) changes.push(`atualiza: ${rest.join(', ')}`);
+    }
+    if (stock != null && stock !== Number(cur.stock)) {
+      await moveStock(db, { companyId: ctx.companyId, productId: cur.id, qty: Math.round((stock - Number(cur.stock)) * 1000) / 1000, type: 'ajuste',
+        reason: 'Inventário pela importação da planilha', unitCost: cost ?? null, userId: ctx.userId });
+      changes.push(`estoque ${qtyTxt(Number(cur.stock))} → ${qtyTxt(stock)}`);
+    }
+    if (!changes.length) return { status: 'sem_mudanca', name: cur.name, message: 'sem mudança' };
+    return { status: 'atualizado', name: cur.name, message: changes.join(' · ') };
+  }
+  if (!vals.unit) vals.unit = 'un';
+  const cols = Object.keys(vals).filter((k) => vals[k] != null);
+  const { rows: [p] } = await db.query(`insert into products (company_id, import_batch_id, ${cols.join(',')}) values ($1, $2, ${cols.map((_, i) => `$${i + 3}`).join(',')}) returning id`,
+    [ctx.companyId, ctx.batchId, ...cols.map((k) => vals[k])]);
+  if (stock) await moveStock(db, { companyId: ctx.companyId, productId: p.id, qty: stock, type: 'ajuste', reason: 'Estoque inicial (importação)', unitCost: cost ?? null, userId: ctx.userId });
+  return { status: 'criado', name: vals.name, message: `material novo · ${price ? `R$ ${price.toFixed(2).replace('.', ',')}` : 'sem preço'} · estoque ${qtyTxt(stock || 0)}${stock < 0 ? ' (negativo, confira)' : ''}${active ? '' : ' · inativo'}` };
+}
+
 /** OS: linhas seguidas com o mesmo número antigo formam uma OS (cabeçalho + itens). */
 function groupRows(kind, rows) {
   const picked = rows.map((x, i) => ({ f: pick(x), i }));
@@ -392,7 +529,9 @@ async function runImport(req, kind, d, { commit }) {
       await client.query('savepoint linha');
       try {
         const res = kind === 'clientes' ? await importCustomerRow(client, ctx, g.fs[0], { update: d.update })
-          : kind === 'veiculos' ? await importVehicleRow(client, ctx, g.fs[0]) : await importOrderRow(client, ctx, g.fs);
+          : kind === 'veiculos' ? await importVehicleRow(client, ctx, g.fs[0])
+            : kind === 'servicos' ? await importServiceRow(client, ctx, g.fs[0], { update: d.update })
+              : kind === 'produtos' ? await importProductRow(client, ctx, g.fs[0], { update: d.update }) : await importOrderRow(client, ctx, g.fs);
         await client.query('release savepoint linha');
         if (res.status === 'criado') out.created += 1; else if (res.status === 'atualizado') out.updated += 1;
         else if (res.status === 'ignorado') out.skipped += 1; else out.unchanged += 1;
@@ -401,7 +540,7 @@ async function runImport(req, kind, d, { commit }) {
         await client.query('rollback to savepoint linha');
         if (!(e instanceof RowError) && !e.status && !e.code) throw e;
         out.errors += 1;
-        out.rows.push({ line, status: 'erro', name: g.fs[0].nome || g.fs[0].placa || '', message: e instanceof RowError ? e.message : (e.code === '23505' ? 'registro repetido' : e.message || 'erro nesta linha') });
+        out.rows.push({ line, status: 'erro', name: g.fs[0].nome || g.fs[0].placa || g.fs[0].produto_nome || g.fs[0].servico_nome || '', message: e instanceof RowError ? e.message : (e.code === '23505' ? 'registro repetido' : e.message || 'erro nesta linha') });
       }
     }
     const errs = JSON.stringify(out.rows.filter((x) => x.status === 'erro').slice(0, 200));
@@ -422,6 +561,8 @@ async function runImport(req, kind, d, { commit }) {
 
 for (const kind of KINDS) {
   if (kind === 'os') r.use(`/${kind}`, need('orders_create'));
+  if (kind === 'servicos') r.use(`/${kind}`, need('services_manage'));
+  if (kind === 'produtos') r.use(`/${kind}`, need('materials_manage'));
   r.post(`/${kind}/preview`, async (req, res) => {
     const d = parse(bodySchema, req.body);
     const out = await runImport(req, kind, d, { commit: false });
@@ -464,15 +605,29 @@ r.post('/imports/:id/undo', async (req, res) => {
           and not exists (select 1 from quotes x where x.customer_id = c.id)
           and not exists (select 1 from transactions t where t.customer_id = c.id)
           and not exists (select 1 from equipment e where e.customer_id = c.id and (e.import_batch_id is distinct from $1))`, [b.id, req.companyId]);
+    // serviços criados pela importação e ainda não usados em OS ou orçamento
+    const { rowCount: services } = await client.query(
+      `delete from services s where s.import_batch_id = $1 and s.company_id = $2
+          and not exists (select 1 from order_items i where i.service_id = s.id)
+          and not exists (select 1 from quote_items i where i.service_id = s.id)`, [b.id, req.companyId]);
+    // materiais criados pela importação e ainda não usados (OS, orçamento, compra, cotação)
+    const { rowCount: products } = await client.query(
+      `delete from products p where p.import_batch_id = $1 and p.company_id = $2
+          and not exists (select 1 from order_items i where i.product_id = p.id)
+          and not exists (select 1 from quote_items i where i.product_id = p.id)
+          and not exists (select 1 from purchase_items i where i.product_id = p.id)
+          and not exists (select 1 from purchase_order_items i where i.product_id = p.id)
+          and not exists (select 1 from quotation_items i where i.product_id = p.id)
+          and not exists (select 1 from stock_movements m where m.product_id = p.id and (m.order_id is not null or m.purchase_id is not null))`, [b.id, req.companyId]);
     await client.query('update import_batches set undone_at = now() where id = $1', [b.id]);
     await client.query('commit');
-    out = { orders, equipment, customers };
+    out = { orders, equipment, customers, services, products };
   } catch (e) {
     await client.query('rollback').catch(() => {});
     throw e;
   } finally { client.release(); }
   await audit(null, req, { entity: 'import', entityId: req.params.id, action: 'undo',
-    summary: `Importação desfeita: ${out.orders} OS, ${out.customers} cliente(s) e ${out.equipment} veículo(s)/objeto(s) removidos` });
+    summary: `Importação desfeita: ${out.orders} OS, ${out.customers} cliente(s), ${out.equipment} veículo(s)/objeto(s) ${out.services} serviço(s) e ${out.products} material(is) removidos` });
   res.json(out);
 });
 

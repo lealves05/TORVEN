@@ -6,6 +6,7 @@ import { normalizePlate, formatPlate } from '../lib/plate';
 import { useAuth } from '../context/AuthContext';
 import { Modal, Input, Select, Textarea, useAction, FAIL, cx } from './ui';
 import FipePicker from './FipePicker';
+import { lookupCnpj, fillEmpty, cnpjHint } from '../lib/cnpj';
 
 /** Busca de cliente com cadastro rápido. value = objeto do cliente (ou null). */
 export default function CustomerPicker({ value, onChange, label = 'Cliente', optional, autoFocus, initialText }) {
@@ -141,7 +142,7 @@ function VehiclesEditor({ rows, setRows, customerId, unique }) {
 
 export function CustomerForm({ customer, onClose, onSaved }) {
   const [run, busy] = useAction();
-  const { company } = useAuth();
+  const { company, feature } = useAuth();
   const unique = company?.settings?.orders?.uniqueVehicle !== false;
   const [f, setF] = useState({ kind: 'pf', ...customer });
   const [vehicles, setVehicles] = useState([]);
@@ -155,6 +156,19 @@ export function CustomerForm({ customer, onClose, onSaved }) {
     && (!unique || new Set(vehicles.filter((v) => !v.remove).map((v) => normalizePlate(v.plate))).size === vehicles.filter((v) => !v.remove).length);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e?.target ? e.target.value : e }));
   const pj = f.kind === 'pj';
+  const [cnpj, setCnpj] = useState(null);
+  const doc = async (v) => {
+    const m = maskDoc(v);
+    setF((x) => ({ ...x, document: m }));
+    if (!pj || !feature('consulta_cnpj') || m.replace(/\D/g, '').length !== 14) { setCnpj(null); return; }
+    setCnpj({ situation: 'consultando…', active: true });
+    const r = await lookupCnpj(m);
+    setCnpj(r);
+    if (r && !r.error) {
+      setF((x) => fillEmpty(x, r, { name: 'name', trade_name: 'trade_name', email: 'email', phone: (d) => d.phone && maskPhone(d.phone), cep: 'cep', street: 'street',
+        number: 'number', complement: 'complement', district: 'district', city: 'city', uf: 'uf', city_code: 'city_code' }));
+    }
+  };
   const cep = async (v) => {
     const m = maskCep(v);
     setF((x) => ({ ...x, cep: m }));
@@ -183,7 +197,8 @@ export function CustomerForm({ customer, onClose, onSaved }) {
           ))}
         </div>
         <Input label={pj ? 'Razão social' : 'Nome completo'} value={f.name} onChange={set('name')} className="sm:col-span-4" autoFocus />
-        <Input label={pj ? 'CNPJ' : 'CPF'} value={f.document} onChange={(e) => setF({ ...f, document: maskDoc(e.target.value) })} className="sm:col-span-2" />
+        <Input label={pj ? 'CNPJ' : 'CPF'} value={f.document} onChange={(e) => doc(e.target.value)} className="sm:col-span-2"
+          hint={pj ? cnpjHint(cnpj) || (feature('consulta_cnpj') ? 'Digite o CNPJ: o cadastro é preenchido pela Receita' : undefined) : undefined} />
         {pj && <Input label="Nome fantasia" value={f.trade_name} onChange={set('trade_name')} className="sm:col-span-2" />}
         {pj && <Input label="Inscrição estadual" value={f.state_registration} onChange={set('state_registration')} className="sm:col-span-2" hint="Deixe vazio se isento" />}
         {pj && <Input label="Inscrição municipal" value={f.municipal_registration} onChange={set('municipal_registration')} className="sm:col-span-2" />}
