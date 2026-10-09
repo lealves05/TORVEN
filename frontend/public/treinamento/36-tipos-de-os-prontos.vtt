@@ -1,53 +1,57 @@
 WEBVTT
 
 1
-00:00:00.154 --> 00:00:12.393
+00:00:00.157 --> 00:00:12.396
 Aula 36: Tipos de OS prontos: exibir ou ocultar. Nesta aula você vai aprender: Os tipos prontos e seus checklists; Exibir ou ocultar um tipo ou um ramo inteiro; Restaurar os tipos padrão.
 
 2
-00:00:14.097 --> 00:00:23.517
+00:00:14.087 --> 00:00:23.510
 O TORVEN já vem com tipos de ordem de serviço prontos para oficina mecânica, autoelétrica, oficina de motos, serralheria e soldas especiais.
 
 3
-00:00:23.537 --> 00:00:28.843
+00:00:23.530 --> 00:00:28.833
 Cada tipo já tem três checklists: o de chegada, o de inspeção final e o de entrega.
 
 4
-00:00:31.284 --> 00:00:36.291
-Em Configurações, na aba Tipos de OS, eles aparecem separados por ramo.
+00:00:28.853 --> 00:00:36.612
+Eles chegam ocultos. Você exibe só os do ramo da sua oficina, no quadro Ramo da oficina. A aula trinta e sete mostra como.
 
 5
-00:00:38.163 --> 00:00:46.328
-Em cada cartão você vê os checklists daquele tipo. Para mudar os itens ou deixar um checklist obrigatório, use a aba Checklists.
+00:00:38.994 --> 00:00:49.079
+Em Configurações, na aba Tipos de OS, eles aparecem separados por ramo. Nesta oficina de demonstração, mecânica, serralheria e soldas já estão exibidos.
 
 6
-00:00:50.670 --> 00:00:58.042
-Não usa algum tipo? Desmarque a caixa Exibido na abertura da OS. Ele fica oculto e não aparece mais para escolher.
+00:00:50.809 --> 00:00:58.974
+Em cada cartão você vê os checklists daquele tipo. Para mudar os itens ou deixar um checklist obrigatório, use a aba Checklists.
 
 7
-00:00:58.062 --> 00:01:02.365
-As ordens de serviço antigas daquele tipo continuam normais.
+00:01:03.708 --> 00:01:11.082
+Não usa algum tipo? Desmarque a caixa Exibido na abertura da OS. Ele fica oculto e não aparece mais para escolher.
 
 8
-00:01:05.434 --> 00:01:14.239
-Se a sua oficina não trabalha com serralheria, por exemplo, clique em Ocultar todos, ao lado do nome do ramo. Para voltar, clique em Exibir todos.
+00:01:11.102 --> 00:01:15.405
+As ordens de serviço antigas daquele tipo continuam normais.
 
 9
-00:01:16.984 --> 00:01:21.373
-Use os filtros Todos, Exibidos e Ocultos para ver só o que interessa.
+00:01:18.228 --> 00:01:27.033
+Se a sua oficina não trabalha com serralheria, por exemplo, clique em Ocultar todos, ao lado do nome do ramo. Para voltar, clique em Exibir todos.
 
 10
-00:01:25.764 --> 00:01:34.206
-Na abertura da OS, a lista de tipos mostra só os exibidos, separados por ramo. Ao escolher o tipo, os checklists dele já aparecem.
+00:01:29.746 --> 00:01:34.135
+Use os filtros Todos, Exibidos e Ocultos para ver só o que interessa.
 
 11
-00:01:37.799 --> 00:01:45.388
-Apagou um tipo padrão sem querer? Clique em Restaurar tipos padrão. Ele volta com os checklists, sem mexer nos que já existem.
+00:01:38.461 --> 00:01:46.903
+Na abertura da OS, a lista de tipos mostra só os exibidos, separados por ramo. Ao escolher o tipo, os checklists dele já aparecem.
 
 12
-00:01:45.865 --> 00:01:51.598
-Exiba só o que a sua oficina faz, ajuste os checklists e crie tipos novos quando precisar.
+00:01:50.306 --> 00:01:57.895
+Apagou um tipo padrão sem querer? Clique em Restaurar tipos padrão. Ele volta com os checklists, sem mexer nos que já existem.
 
 13
-00:01:52.139 --> 00:02:03.781
+00:01:58.392 --> 00:02:04.125
+Exiba só o que a sua oficina faz, ajuste os checklists e crie tipos novos quando precisar.
+
+14
+00:02:04.687 --> 00:02:16.329
 Recapitulando: Os tipos prontos e seus checklists; Exibir ou ocultar um tipo ou um ramo inteiro; Restaurar os tipos padrão. Se precisar, assista de novo quando quiser. Até a próxima aula!

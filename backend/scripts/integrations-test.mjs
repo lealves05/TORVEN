@@ -471,73 +471,103 @@ await check('um checklist em vários tipos; vincular pelo tipo; geral vale para 
   const after = (await api('GET', '/quality/templates?all=1', null, T)).data.find((x) => x.id === c.data.id);
   assert.equal(after.active, true); assert.equal(after.order_type_ids.length, 2);
 });
-await check('tipos de OS padrão por ramo, com checklists, e exibir/ocultar', async () => {
+await check('tipos de OS padrão por ramo chegam OCULTOS (com checklists desativados) e a oficina habilita o seu', async () => {
   const all = (await api('GET', '/quality/types?all=1', null, T)).data;
   const std = all.filter((t) => t.segment);
   assert.equal(std.length, 35, `padrão: ${std.length}`);
   for (const seg of ['mecanica', 'autoeletrica', 'motos', 'serralheria', 'soldas']) assert.ok(std.some((t) => t.segment === seg), seg);
   assert.ok(std.every((t) => t.checklist_ids.length === 3), 'cada tipo com recebimento, inspeção e entrega');
+  assert.ok(std.every((t) => !t.active), 'tipos padrão chegam ocultos');
+  assert.equal((await api('GET', '/quality/types', null, T)).data.filter((t) => t.segment).length, 0);
+  const tplsAll = (await api('GET', '/quality/templates?all=1', null, T)).data;
+  const catTpl = tplsAll.filter((c) => c.template_key);
+  assert.ok(catTpl.length >= 45 && catTpl.every((c) => !c.active), 'checklists padrão chegam desativados');
+  assert.ok(tplsAll.some((c) => !c.template_key && c.active), 'checklists gerais continuam ativos');
+  // habilita o ramo mecânica: tipos e checklists dele
+  const on = await api('POST', '/quality/types/segment-visible', { segment: 'mecanica', visible: true }, T);
+  assert.equal(on.data.updated, 7);
   const oleo = std.find((t) => t.template_key === 'mec-oleo');
   const tpl = (await api('GET', `/quality/templates?order_type_id=${oleo.id}`, null, T)).data;
   assert.ok(tpl.some((c) => c.kind === 'recebimento') && tpl.some((c) => c.kind === 'inspecao' && c.name.includes('Troca de óleo')));
-  // ocultar um tipo: some da abertura da OS
+  const act = (await api('GET', '/quality/templates', null, T)).data.filter((c) => c.template_key);
+  assert.equal(act.length, 7 + 2, 'só os checklists da mecânica ativos');
+  // ocultar um tipo: some da abertura da OS e a inspeção dele desativa; recebimento/entrega do ramo continuam
   assert.equal((await api('POST', `/quality/types/${oleo.id}/visible`, { visible: false }, T)).status, 200);
   assert.ok(!(await api('GET', '/quality/types', null, T)).data.some((t) => t.id === oleo.id));
   assert.equal((await api('POST', '/orders', { customer_id: quick.customer_id, order_type_id: oleo.id, items: [] }, T)).status, 404);
-  // ocultar/exibir um ramo inteiro
-  const h = await api('POST', '/quality/types/segment-visible', { segment: 'serralheria', visible: false }, T);
-  assert.equal(h.data.updated, 6);
+  const act2 = (await api('GET', '/quality/templates', null, T)).data.filter((c) => c.template_key);
+  assert.ok(!act2.some((c) => c.template_key === 'mec-oleo-inspecao') && act2.some((c) => c.template_key === 'mecanica-recebimento'));
+  // exibir/ocultar um ramo inteiro
+  assert.equal((await api('POST', '/quality/types/segment-visible', { segment: 'serralheria', visible: true }, T)).data.updated, 6);
+  assert.equal((await api('POST', '/quality/types/segment-visible', { segment: 'serralheria', visible: false }, T)).data.updated, 6);
   assert.ok(!(await api('GET', '/quality/types', null, T)).data.some((t) => t.segment === 'serralheria'));
-  await api('POST', '/quality/types/segment-visible', { segment: 'serralheria', visible: true }, T);
+  assert.ok(!(await api('GET', '/quality/templates', null, T)).data.some((c) => c.template_key === 'serralheria-recebimento'));
+  // tipo com OS em andamento: ocultar não desativa os checklists dele (a OS aberta continua com eles)
+  const freio = std.find((t) => t.template_key === 'mec-freios');
+  const of = await api('POST', '/orders', { customer_id: quick.customer_id, order_type_id: freio.id, items: [] }, T);
+  assert.equal(of.status, 201, JSON.stringify(of.data));
+  await api('POST', '/quality/types/segment-visible', { segment: 'mecanica', visible: false }, T);
+  const act3 = (await api('GET', '/quality/templates', null, T)).data.filter((c) => c.template_key);
+  assert.ok(act3.some((c) => c.template_key === 'mec-freios-inspecao') && act3.some((c) => c.template_key === 'mecanica-recebimento'));
+  assert.ok(!act3.some((c) => c.template_key === 'mec-motor-inspecao'));
   // outra empresa não mexe
   assert.equal((await api('POST', `/quality/types/${oleo.id}/visible`, { visible: true }, T2)).status, 404);
-  // restaurar o que foi apagado (sem duplicar)
+  // restaurar o que foi apagado (sem duplicar) — restaurar exibe o ramo
   const sold = std.find((t) => t.template_key === 'sol-inox');
   assert.equal((await api('DELETE', `/quality/types/${sold.id}`, null, T)).status, 204);
   const cat = (await api('GET', '/quality/catalog', null, T)).data;
   assert.equal(cat.find((c) => c.segment === 'soldas').types.find((t) => t.key === 'sol-inox').installed, false);
-  const rr = await api('POST', '/quality/catalog/install', { segments: ['soldas', 'mecanica'] }, T);
+  const rr = await api('POST', '/quality/catalog/install', { segments: ['soldas'] }, T);
   assert.equal(rr.data.created, 1);
   assert.equal((await api('GET', '/quality/types?all=1', null, T)).data.filter((t) => t.segment).length, 35);
+  assert.equal((await api('GET', '/quality/types', null, T)).data.filter((t) => t.segment === 'soldas').length, 6);
+  assert.ok((await api('GET', '/quality/templates', null, T)).data.some((c) => c.template_key === 'sol-inox-inspecao'));
 });
-await check('oficina de motos: ramo da oficina ajusta tipos, categorias e FIPE; empresa antiga recebe motos oculto', async () => {
+await check('oficina de motos: ramo da oficina ajusta tipos, checklists, categorias e FIPE; empresa antiga sem ramo tem os não usados ocultos', async () => {
   const motos = (await api('GET', '/quality/types?all=1', null, T)).data.filter((t) => t.segment === 'motos');
   assert.equal(motos.length, 9);
   const rel = motos.find((t) => t.template_key === 'moto-relacao');
-  const tpl = (await api('GET', `/quality/templates?order_type_id=${rel.id}`, null, T)).data;
-  assert.ok(tpl.some((c) => c.name === 'Recebimento da moto' && c.items.some((i) => /Capacete/.test(i))), 'recebimento da moto');
-  assert.ok(tpl.some((c) => c.kind === 'inspecao' && c.items.some((i) => /corrente/i.test(i))));
-  // só motos: exibe as motos, oculta os outros ramos padrão, não mexe nos tipos criados pela oficina
   const own = await api('POST', '/quality/types', { name: 'Lavagem da moto' }, T);
   assert.equal(own.status, 201, JSON.stringify(own.data));
   const p = await api('POST', '/quality/catalog/profile', { segments: ['motos'] }, T);
   assert.equal(p.status, 200, JSON.stringify(p.data));
-  assert.equal(p.data.hidden, 25); // 26 dos outros ramos, menos a troca de óleo que já estava oculta
+  assert.equal(p.data.shown, 9);
+  const tpl = (await api('GET', `/quality/templates?order_type_id=${rel.id}`, null, T)).data;
+  assert.ok(tpl.some((c) => c.name === 'Recebimento da moto' && c.items.some((i) => /Capacete/.test(i))), 'recebimento da moto ativo');
+  assert.ok(tpl.some((c) => c.kind === 'inspecao' && c.items.some((i) => /corrente/i.test(i))));
   const vis = (await api('GET', '/quality/types', null, T)).data;
   assert.equal(vis.filter((t) => t.segment).length, 9);
   assert.ok(vis.every((t) => !t.segment || t.segment === 'motos'));
   assert.ok(vis.some((t) => t.id === own.data.id), 'tipo próprio continua');
+  const actTpl = (await api('GET', '/quality/templates', null, T)).data.filter((c) => c.template_key);
+  assert.ok(actTpl.every((c) => c.template_key.startsWith('moto') || c.template_key.startsWith('mec-freios') || c.template_key.startsWith('mecanica')), 'só checklists de moto (e os da OS de freios em andamento)');
   const co = (await api('GET', '/company', null, T)).data;
   assert.deepEqual(co.settings.segments, ['motos']);
   assert.equal(co.settings.fipeDefaultType, 'motorcycles');
   assert.ok(co.settings.equipmentCategories.includes('Moto') && co.settings.materialCategories.includes('Kit relação'));
-  // de novo não duplica categoria
   await api('POST', '/quality/catalog/profile', { segments: ['motos', 'mecanica'] }, T);
   const co2 = (await api('GET', '/company', null, T)).data;
   assert.equal(co2.settings.equipmentCategories.filter((x) => x === 'Moto').length, 1);
   assert.equal(co2.settings.fipeDefaultType, 'cars');
   assert.equal((await api('GET', '/quality/types', null, T)).data.filter((t) => t.segment).length, 16);
-  // validação e isolamento
   assert.equal((await api('POST', '/quality/catalog/profile', { segments: [] }, T)).status, 400);
   assert.equal((await api('POST', '/quality/catalog/profile', { segments: ['padaria'] }, T)).status, 400);
-  assert.equal((await api('GET', '/quality/types', null, T2)).data.filter((t) => t.segment).length, 35, 'outra empresa intacta');
-  // empresa que já tinha o catálogo v1: recebe motos OCULTO, sem mexer no resto
+  assert.equal((await api('GET', '/quality/types', null, T2)).data.filter((t) => t.segment).length, 0, 'outra empresa intacta');
+  // empresa que já tinha o catálogo antigo (v1, tudo exibido) e ainda não escolheu o ramo:
+  // recebe motos oculto e os tipos padrão nunca usados ficam ocultos; o tipo já usado continua exibido
   const { rows: [c2] } = await pool.query("select company_id from users where email = 'outro@int.dev'");
   await pool.query("delete from order_types where company_id = $1 and segment = 'motos'", [c2.company_id]);
-  await pool.query('update companies set os_catalog_version = 1 where id = $1', [c2.company_id]);
-  const after = (await api('GET', '/quality/types?all=1', null, T2)).data.filter((t) => t.segment === 'motos');
-  assert.equal(after.length, 9);
-  assert.ok(after.every((t) => !t.active), 'motos chega oculto em empresa antiga');
+  await pool.query('update order_types set active = true where company_id = $1 and segment is not null', [c2.company_id]);
+  await pool.query('update checklist_templates set active = true where company_id = $1', [c2.company_id]);
+  const { rows: [used] } = await pool.query("select id from order_types where company_id = $1 and template_key = 'ser-portao'", [c2.company_id]);
+  const c2cust = (await api('POST', '/customers', { name: 'Cliente Portão' }, T2)).data;
+  assert.equal((await api('POST', '/orders', { customer_id: c2cust.id, order_type_id: used.id, items: [] }, T2)).status, 201);
+  await pool.query("update companies set os_catalog_version = 1, settings = settings - 'segments' where id = $1", [c2.company_id]);
+  const after = (await api('GET', '/quality/types?all=1', null, T2)).data.filter((t) => t.segment);
+  assert.equal(after.length, 35);
+  assert.deepEqual(after.filter((t) => t.active).map((t) => t.template_key), ['ser-portao']);
+  const t2act = (await api('GET', '/quality/templates', null, T2)).data.filter((c) => c.template_key).map((c) => c.template_key).sort();
+  assert.deepEqual(t2act, ['ser-portao-inspecao', 'serralheria-entrega', 'serralheria-recebimento']);
   await api('POST', '/quality/catalog/profile', { segments: ['mecanica', 'autoeletrica', 'serralheria', 'soldas'] }, T);
 });
 await check('várias fotos na OS: até 40 por OS, depois recusa', async () => {

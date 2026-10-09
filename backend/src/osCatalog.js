@@ -1,9 +1,11 @@
 // Tipos de OS e checklists padrão por ramo (mecânica, autoelétrica, motos, serralheria, soldas especiais).
-// Instalados uma vez por empresa (companies.os_catalog_version); a empresa decide o que exibir na abertura da OS
-// (order_types.active) e pode editar, apagar ou criar outros. Nada aqui é obrigatório: os checklists vêm como
+// Instalados uma vez por empresa (companies.os_catalog_version), OCULTOS: a empresa habilita o(s) ramo(s) dela
+// (Configurações › Tipos de OS › Ramo da oficina, ou exibindo tipo a tipo). Tipo oculto = order_types.active false;
+// os checklists padrão acompanham: ficam desativados enquanto nenhum tipo exibido os usa (syncCatalogChecklists).
+// A empresa pode editar, apagar ou criar outros. Nada aqui é obrigatório: os checklists vêm como
 // "não obrigatórios" — a empresa liga o Obrigatório onde quiser.
 
-export const CATALOG_VERSION = 2;
+export const CATALOG_VERSION = 3; // 3: tipos e checklists padrão chegam ocultos
 /** Versão do catálogo em que cada ramo entrou. Empresas que já tinham o catálogo recebem o ramo novo OCULTO. */
 const SEGMENT_SINCE = { motos: 2 };
 
@@ -119,9 +121,9 @@ export async function installCatalog(db, companyId, { segments = Object.keys(CAT
     for (const [kind, [name, items]] of Object.entries(c.shared)) {
       const key = `${seg}-${kind}`;
       const { rows: [t] } = await db.query(
-        `insert into checklist_templates (company_id, name, kind, items, template_key) values ($1,$2,$3,$4,$5)
+        `insert into checklist_templates (company_id, name, kind, items, template_key, active) values ($1,$2,$3,$4,$5,$6)
          on conflict (company_id, template_key) where template_key is not null do update set template_key = excluded.template_key returning id`,
-        [companyId, name, kind, JSON.stringify(items), key]);
+        [companyId, name, kind, JSON.stringify(items), key, visible]);
       shared[kind] = t.id;
     }
     for (const [key, name, description, inspection] of c.types) {
@@ -134,9 +136,9 @@ export async function installCatalog(db, companyId, { segments = Object.keys(CAT
         typeId = t.id; created += 1;
       }
       const { rows: [insp] } = await db.query(
-        `insert into checklist_templates (company_id, name, kind, items, template_key) values ($1,$2,'inspecao',$3,$4)
+        `insert into checklist_templates (company_id, name, kind, items, template_key, active) values ($1,$2,'inspecao',$3,$4,$5)
          on conflict (company_id, template_key) where template_key is not null do update set template_key = excluded.template_key returning id`,
-        [companyId, `Inspeção — ${name}`, JSON.stringify(inspection), `${key}-inspecao`]);
+        [companyId, `Inspeção — ${name}`, JSON.stringify(inspection), `${key}-inspecao`, visible]);
       for (const tid of [shared.recebimento, insp.id, shared.entrega]) {
         await db.query('insert into order_type_checklists (company_id, order_type_id, template_id) values ($1,$2,$3) on conflict do nothing', [companyId, typeId, tid]);
       }
@@ -145,14 +147,73 @@ export async function installCatalog(db, companyId, { segments = Object.keys(CAT
   return created;
 }
 
-/** Primeira vez que a empresa abre os tipos de OS: instala o catálogo (exibido). Depois disso, só pelo botão.
- *  Empresa que já tinha uma versão anterior recebe só os ramos novos, OCULTOS (para não encher a lista de quem não usa). */
+/** Checklists padrão acompanham os tipos: ativa os ligados aos tipos que acabaram de ser exibidos (`activate`) e desativa
+ *  os que não servem a nenhum tipo exibido — exceto se algum tipo ligado tem OS em andamento (para não sumir da OS aberta).
+ *  Checklists criados pela oficina (sem template_key) nunca mudam aqui. */
+export async function syncCatalogChecklists(db, companyId, { activate = [] } = {}) {
+  let on = 0;
+  if (activate.length) {
+    ({ rowCount: on } = await db.query(
+      `update checklist_templates c set active = true
+        where c.company_id = $1 and c.template_key is not null and not c.active
+          and exists (select 1 from order_type_checklists x join order_types t on t.id = x.order_type_id
+                       where x.template_id = c.id and t.active and t.id = any($2::uuid[]))`, [companyId, activate]));
+  }
+  const { rowCount: off } = await db.query(
+    `update checklist_templates c set active = false
+      where c.company_id = $1 and c.template_key is not null and c.active
+        and not exists (select 1 from order_type_checklists x join order_types t on t.id = x.order_type_id where x.template_id = c.id and t.active)
+        and not exists (select 1 from order_type_checklists x join orders o on o.order_type_id = x.order_type_id and o.company_id = $1
+                         where x.template_id = c.id and o.status not in ('entregue', 'cancelada'))`, [companyId]);
+  return { on, off };
+}
+
+/** Primeira vez que a empresa abre os tipos de OS: instala o catálogo OCULTO; a oficina habilita o ramo dela.
+ *  Empresa que já tinha uma versão anterior: recebe os ramos novos ocultos e, se ainda não escolheu o ramo, os tipos
+ *  padrão que nunca usou numa OS ficam ocultos (com os checklists deles). Os já usados não mudam. */
 export async function ensureCatalog(db, companyId) {
-  const { rows: [c] } = await db.query('select os_catalog_version from companies where id = $1 for update', [companyId]);
+  const { rows: [c] } = await db.query('select os_catalog_version, settings from companies where id = $1 for update', [companyId]);
   if (!c || c.os_catalog_version >= CATALOG_VERSION) return 0;
   const v = c.os_catalog_version;
-  const n = v === 0 ? await installCatalog(db, companyId)
-    : await installCatalog(db, companyId, { segments: Object.keys(CATALOG).filter((k) => (SEGMENT_SINCE[k] || 1) > v), visible: false });
+  let n = 0;
+  if (v === 0) n = await installCatalog(db, companyId, { visible: false });
+  else {
+    n = await installCatalog(db, companyId, { segments: Object.keys(CATALOG).filter((k) => (SEGMENT_SINCE[k] || 1) > v), visible: false });
+    if (v < 3 && !(c.settings?.segments || []).length) {
+      await db.query(
+        `update order_types t set active = false, updated_at = now()
+          where t.company_id = $1 and t.template_key is not null and t.active
+            and not exists (select 1 from orders o where o.company_id = $1 and o.order_type_id = t.id)`, [companyId]);
+    }
+    await syncCatalogChecklists(db, companyId);
+  }
   await db.query('update companies set os_catalog_version = $2 where id = $1', [companyId, CATALOG_VERSION]);
   return n;
+}
+
+/** Ramo da oficina: exibe os tipos padrão (e checklists) dos ramos escolhidos, oculta os dos outros ramos (os criados
+ *  pela oficina não mudam), completa as listas de categorias e, se só trabalha com motos, a FIPE já abre em "Moto". */
+export async function applyProfile(db, companyId, segments) {
+  const segs = [...new Set(segments)].filter((k) => CATALOG[k]);
+  await ensureCatalog(db, companyId);
+  const created = await installCatalog(db, companyId, { segments: segs, visible: true });
+  const { rows } = await db.query(
+    `update order_types set active = (segment = any($2::text[])), updated_at = now()
+      where company_id = $1 and segment is not null and active is distinct from (segment = any($2::text[])) returning active`,
+    [companyId, segs]);
+  const { rows: on } = await db.query('select id from order_types where company_id = $1 and active and segment = any($2::text[])', [companyId, segs]);
+  await syncCatalogChecklists(db, companyId, { activate: on.map((x) => x.id) });
+  const { rows: [co] } = await db.query('select settings from companies where id = $1 for update', [companyId]);
+  const s = { ...(co.settings || {}), segments: segs };
+  for (const seg of segs) {
+    for (const [k, add] of Object.entries(SEGMENT_SETTINGS[seg] || {})) {
+      const cur = Array.isArray(s[k]) ? s[k] : [];
+      s[k] = [...cur, ...add.filter((x) => !cur.some((y) => String(y).toLowerCase() === x.toLowerCase()))];
+    }
+  }
+  const carros = segs.some((x) => x === 'mecanica' || x === 'autoeletrica');
+  s.fipeDefaultType = segs.includes('motos') && !carros ? 'motorcycles' : 'cars';
+  await db.query('update companies set settings = $2 where id = $1', [companyId, s]);
+  const shown = rows.filter((x) => x.active).length;
+  return { segments: segs, shown, hidden: rows.length - shown, created };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
 import { Save, Wrench, MapPin, RotateCcw, Car } from 'lucide-react';
 import { api } from '../lib/api';
@@ -136,6 +136,12 @@ export default function OrderNew() {
                   </p>
                 )}
               </div>
+            )}
+            {orderTypes?.length === 0 && can('settings') && (
+              <p className="rounded-app-sm bg-sky-500/10 p-3 text-sm text-sky-800 dark:text-sky-200" data-testid="sem-tipos-os">
+                Os tipos de OS prontos (com checklists) ficam ocultos até você escolher o ramo da oficina.{' '}
+                <Link className="font-medium underline" to="/configuracoes?tab=tipos-os">Escolher o ramo da oficina</Link>
+              </p>
             )}
             <VoiceTextarea label="Problema relatado / serviço solicitado" rows={3} value={f.problem} onChange={set('problem')}
               placeholder="Ex.: trinca na longarina, portão arrastando, máquina não abre arco…" />

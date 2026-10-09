@@ -380,7 +380,7 @@ export const LESSONS = [
     "n": 36,
     "file": "36-tipos-de-os-prontos",
     "mod": "producao",
-    "s": 125,
+    "s": 137,
     "title": "Tipos de OS prontos: exibir ou ocultar",
     "routes": [],
     "desc": "Os tipos de OS que já vêm prontos para mecânica, autoelétrica, motos, serralheria e soldas especiais, e como escolher quais aparecem.",
@@ -389,13 +389,13 @@ export const LESSONS = [
       "Exibir ou ocultar um tipo ou um ramo inteiro",
       "Restaurar os tipos padrão"
     ],
-    "text": "O TORVEN já vem com tipos de ordem de serviço prontos para oficina mecânica, autoelétrica, oficina de motos, serralheria e soldas especiais. Cada tipo já tem três checklists: o de chegada, o de inspeção final e o de entrega. Em Configurações, na aba Tipos de OS, eles aparecem separados por ramo. Em cada cartão você vê os checklists daquele tipo. Para mudar os itens ou deixar um checklist obrigatório, use a aba Checklists. Não usa algum tipo? Desmarque a caixa Exibido na abertura da OS. Ele fica oculto e não aparece mais para escolher. As ordens de serviço antigas daquele tipo continuam normais. Se a sua oficina não trabalha com serralheria, por exemplo, clique em Ocultar todos, ao lado do nome do ramo. Para voltar, clique em Exibir todos. Use os filtros Todos, Exibidos e Ocultos para ver só o que interessa. Na abertura da OS, a lista de tipos mostra só os exibidos, separados por ramo. Ao escolher o tipo, os checklists dele já aparecem. Apagou um tipo padrão sem querer? Clique em Restaurar tipos padrão. Ele volta com os checklists, sem mexer nos que já existem. Exiba só o que a sua oficina faz, ajuste os checklists e crie tipos novos quando precisar."
+    "text": "O TORVEN já vem com tipos de ordem de serviço prontos para oficina mecânica, autoelétrica, oficina de motos, serralheria e soldas especiais. Cada tipo já tem três checklists: o de chegada, o de inspeção final e o de entrega. Eles chegam ocultos. Você exibe só os do ramo da sua oficina, no quadro Ramo da oficina. A aula trinta e sete mostra como. Em Configurações, na aba Tipos de OS, eles aparecem separados por ramo. Nesta oficina de demonstração, mecânica, serralheria e soldas já estão exibidos. Em cada cartão você vê os checklists daquele tipo. Para mudar os itens ou deixar um checklist obrigatório, use a aba Checklists. Não usa algum tipo? Desmarque a caixa Exibido na abertura da OS. Ele fica oculto e não aparece mais para escolher. As ordens de serviço antigas daquele tipo continuam normais. Se a sua oficina não trabalha com serralheria, por exemplo, clique em Ocultar todos, ao lado do nome do ramo. Para voltar, clique em Exibir todos. Use os filtros Todos, Exibidos e Ocultos para ver só o que interessa. Na abertura da OS, a lista de tipos mostra só os exibidos, separados por ramo. Ao escolher o tipo, os checklists dele já aparecem. Apagou um tipo padrão sem querer? Clique em Restaurar tipos padrão. Ele volta com os checklists, sem mexer nos que já existem. Exiba só o que a sua oficina faz, ajuste os checklists e crie tipos novos quando precisar."
   },
   {
     "n": 37,
     "file": "37-oficina-de-motos",
     "mod": "producao",
-    "s": 110,
+    "s": 121,
     "title": "Sistema pronto para oficina de motos",
     "routes": [],
     "desc": "Ajustar o TORVEN ao ramo da oficina: tipos de OS e checklists de moto, categorias e Tabela FIPE já em Moto.",
@@ -404,7 +404,7 @@ export const LESSONS = [
       "Os tipos de OS e checklists de moto",
       "Abrir a OS da moto"
     ],
-    "text": "Nesta aula você vai deixar o TORVEN pronto para uma oficina de motos, em poucos cliques. Em Configurações, na aba Tipos de OS, fica o quadro Ramo da oficina. Nele você marca o que a sua oficina faz. Marque Oficina de motos. Se a oficina também atende carros, marque Oficina mecânica junto. Clique em Ajustar ao ramo. O sistema avisa o que vai acontecer: os tipos de moto ficam exibidos, e os dos outros ramos ficam ocultos. Nada é apagado. Clique em Ajustar. Pronto: agora aparecem os tipos de OS de moto, cada um com os seus checklists. Veja a troca da relação: chegada da moto, inspeção da relação e entrega da moto. Os itens falam de corrente, coroa, pinhão e alinhamento da roda. Na abertura da OS, a lista de tipos já mostra só os serviços de moto. Ao escolher o tipo, os checklists dele aparecem sozinhos. E, ao cadastrar a moto do cliente, a Tabela FIPE já abre na opção Moto. Se a oficina passar a atender outro ramo, é só marcar e ajustar de novo. Os tipos que você criou continuam do jeito que estão."
+    "text": "Nesta aula você vai deixar o TORVEN pronto para uma oficina de motos, em poucos cliques. Os tipos de OS prontos e os checklists deles chegam ocultos. Em Configurações, na aba Tipos de OS, fica o quadro Ramo da oficina. Nele você marca o que a sua oficina faz. Desmarque o que a oficina não faz e marque Oficina de motos. Se a oficina também atende carros, deixe Oficina mecânica marcada junto. Clique em Ajustar ao ramo. O sistema avisa o que vai acontecer: os tipos de moto e os checklists deles ficam exibidos, e os dos outros ramos ficam ocultos. Nada é apagado. Clique em Ajustar. Pronto: agora aparecem os tipos de OS de moto, cada um com os seus checklists. Veja a troca da relação: chegada da moto, inspeção da relação e entrega da moto. Os itens falam de corrente, coroa, pinhão e alinhamento da roda. Na abertura da OS, a lista de tipos já mostra só os serviços de moto. Ao escolher o tipo, os checklists dele aparecem sozinhos. E, ao cadastrar a moto do cliente, a Tabela FIPE já abre na opção Moto. Se a oficina passar a atender outro ramo, é só marcar e ajustar de novo. Os tipos que você criou continuam do jeito que estão."
   },
   {
     "n": 28,
@@ -662,7 +662,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 3630;
+export const TOTAL_SECONDS = 3653;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

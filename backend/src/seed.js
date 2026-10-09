@@ -251,6 +251,9 @@ export async function seedDemo(db, companyId, userId) {
 
   // Operação técnica: agenda, apontamentos, inspeção e garantia
   await ensureCompanyDefaults(db, companyId);
+  // a oficina de demonstração já vem com os ramos dela habilitados (numa empresa real, os tipos prontos chegam ocultos)
+  const { applyProfile } = await import('./osCatalog.js');
+  await applyProfile(db, companyId, ['mecanica', 'serralheria', 'soldas']);
   const byStatus = async (st) => (await db.query('select * from orders where company_id = $1 and status = $2 and kind = $3 order by number', [companyId, st, 'os'])).rows;
   const hourAt = brAt;
   const sched = (kind, title, o, tech, start, hours, status = 'agendado', extra = {}) => db.query(

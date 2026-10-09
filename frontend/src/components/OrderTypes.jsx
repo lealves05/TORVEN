@@ -67,10 +67,12 @@ export function ChecklistsSettings() {
   const [edit, setEdit] = useState(null);
   const [kind, setKind] = useState('');
   const [text, setText] = useState('');
+  const [showOff, setShowOff] = useState(false);
   if (!types || !tpls) return <Loading />;
+  const off = tpls.filter((c) => !c.active).length;
   const typeName = (id) => types.find((t) => t.id === id)?.name || 'tipo';
   const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const list = tpls.filter((c) => (!kind || c.kind === kind) && (!text || norm(`${c.name} ${(c.order_type_ids || []).map(typeName).join(' ')}`).includes(norm(text))));
+  const list = tpls.filter((c) => (showOff || c.active) && (!kind || c.kind === kind) && (!text || norm(`${c.name} ${(c.order_type_ids || []).map(typeName).join(' ')}`).includes(norm(text))));
   const save = async () => { if ((await saveTemplate(run, edit)) !== FAIL) { setEdit(null); load(); } };
   return (
     <div className="max-w-5xl space-y-4" id="checklists">
@@ -91,10 +93,16 @@ export function ChecklistsSettings() {
           {[['', 'Todas as etapas'], ...Object.entries(CHECK_KIND)].map(([k, l]) => (
             <button key={k} onClick={() => setKind(k)} className={cx('chip border', kind === k ? 'border-primary bg-primary/10 text-primary' : 'border-line')}>{l}</button>
           ))}
+          {off > 0 && (
+            <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
+              <input type="checkbox" checked={showOff} onChange={(e) => setShowOff(e.target.checked)} /> Mostrar desativados ({off})
+            </label>
+          )}
         </div>
+        {off > 0 && !showOff && <p className="text-xs text-ink-faint">Os checklists dos ramos que a oficina não usa ficam desativados. Eles ativam sozinhos quando você exibe o tipo de OS deles em <b>Tipos de OS</b>.</p>}
       </div>
       {!list.length ? (
-        <div className="card p-8 text-center text-sm text-ink-soft"><ClipboardList className="mx-auto mb-2 h-8 w-8 text-ink-faint" />Nenhum checklist ainda. Clique em <b>Novo checklist</b>.</div>
+        <div className="card p-8 text-center text-sm text-ink-soft"><ClipboardList className="mx-auto mb-2 h-8 w-8 text-ink-faint" />{off && !showOff ? <>Nenhum checklist ativo neste filtro. Escolha o ramo da oficina em <b>Tipos de OS</b> ou marque <b>Mostrar desativados</b>.</> : <>Nenhum checklist ainda. Clique em <b>Novo checklist</b>.</>}</div>
       ) : (
         <div className="card divide-y divide-line">
           {list.map((c) => (
@@ -292,7 +300,7 @@ function BusinessProfile({ onDone }) {
   const apply = async () => {
     const names = sel.map((k) => SEGMENT_LABEL[k]).join(', ');
     if (!(await confirm({ title: 'Ajustar o sistema ao ramo da oficina?',
-      message: `Ficam exibidos os tipos de OS de: ${names}. Os tipos padrão dos outros ramos ficam ocultos (não são apagados). Os tipos criados pela oficina não mudam.`,
+      message: `Ficam exibidos os tipos de OS de: ${names}, com os checklists deles. Os tipos e checklists padrão dos outros ramos ficam ocultos (não são apagados). Os criados pela oficina não mudam.`,
       confirmText: 'Ajustar', danger: false }))) return;
     const r = await run(() => api.post('/quality/catalog/profile', { segments: sel }));
     if (r === FAIL) return;
@@ -300,12 +308,12 @@ function BusinessProfile({ onDone }) {
     onDone();
   };
   return (
-    <section className="card space-y-3 p-5" aria-label="Ramo da oficina">
+    <section className={cx('card space-y-3 p-5', !saved.length && 'ring-2 ring-primary/40')} aria-label="Ramo da oficina">
       <div className="flex items-start gap-2">
         <Store className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold">Ramo da oficina</h3>
-          <p className="text-sm text-ink-faint">Marque o que a sua oficina faz e clique em <b>Ajustar</b>. O sistema mostra só os tipos de OS e checklists desses ramos.</p>
+          <p className="text-sm text-ink-faint">Os tipos de OS prontos e os checklists deles vêm <b>ocultos</b>. Marque o que a sua oficina faz e clique em <b>Ajustar ao ramo</b> para exibir só o que é seu.</p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -318,7 +326,7 @@ function BusinessProfile({ onDone }) {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary h-9 text-sm" disabled={busy || !sel.length || !changed} onClick={apply}>Ajustar ao ramo</button>
-        {!sel.length ? <span className="text-xs text-ink-faint">Marque pelo menos um ramo.</span>
+        {!sel.length ? <span className="text-xs text-ink-faint">{saved.length ? 'Marque pelo menos um ramo.' : 'Nenhum ramo escolhido ainda: os tipos prontos estão ocultos.'}</span>
           : !changed && saved.length ? <span className="text-xs text-emerald-700">Sistema ajustado para: {saved.map((k) => SEGMENT_LABEL[k]).join(', ')}.</span> : null}
       </div>
       {sel.includes('motos') && <p className="text-xs text-ink-faint">Oficina de motos: os checklists falam de carenagem, capacete, relação e calibragem; na Tabela FIPE a escolha já abre em <b>Moto</b> (se a oficina não atende carros) e entram as categorias Moto, Peças de moto, Pneus e câmaras e Kit relação.</p>}
