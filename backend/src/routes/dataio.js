@@ -458,7 +458,11 @@ async function importProductRow(db, ctx, f, { update }) {
     category: f.produto_categoria || null, unit, cost, price, min_stock: minStock, location: f.produto_local || null,
     ncm, cfop, origin, active, legacy_code: legacy };
   let cur = null;
-  const find = async (where, v) => { if (!cur && v) ({ rows: [cur] } = await db.query(`select * from products where company_id = $1 and ${where} order by active desc limit 1`, [ctx.companyId, v])); };
+  // com código antigo na linha, um material de OUTRO código antigo não é o mesmo (ex.: dois "Fluido de freio" de marcas diferentes)
+  const other = legacy ? ' and (legacy_code is null or legacy_code = $3)' : '';
+  const find = async (where, v) => {
+    if (!cur && v) ({ rows: [cur] } = await db.query(`select * from products where company_id = $1 and ${where}${other} order by active desc limit 1`, legacy ? [ctx.companyId, v, legacy] : [ctx.companyId, v]));
+  };
   await find('legacy_code = $2', legacy);
   await find('barcode = $2', vals.barcode);
   await find('lower(sku) = lower($2)', f.produto_sku);

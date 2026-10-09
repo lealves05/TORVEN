@@ -953,6 +953,10 @@ await check('tabela de materiais: importar com estoque inicial, atualizar por in
   assert.match(csv, /"Codigo antigo";"Nome";"Referencia";"Codigo de barras"/); assert.match(csv, /"1201";"Pastilha";"PD-1"/);
   const TA = (await api('POST', '/auth/login', { email: 'atend@int.dev', password: 'Oficina2026xy' })).data.token;
   assert.equal((await api('POST', '/data/produtos/import', { rows }, TA)).status, 403);
+  // mesmo nome, códigos antigos diferentes: dois materiais (não junta marcas diferentes)
+  const dup = await api('POST', '/data/produtos/import', { rows: [{ codigo: '93', descricao: 'FLUIDO TESTE', preco_venda: '120' }, { codigo: '299', descricao: 'FLUIDO TESTE', preco_venda: '38' }] }, T2);
+  assert.equal(dup.data.created, 2, JSON.stringify(dup.data.rows));
+  await api('POST', `/data/imports/${dup.data.batch_id}/undo`, {}, T2);
   const un = await api('POST', `/data/imports/${im.data.batch_id}/undo`, {}, T2);
   assert.equal(un.data.products, 2, JSON.stringify(un.data));
 });
