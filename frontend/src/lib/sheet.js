@@ -34,7 +34,9 @@ export async function readTable(file) {
     const { readSheet } = await import('read-excel-file/universal');
     grid = await readSheet(await file.arrayBuffer());
   } else if (name.endsWith('.csv') || name.endsWith('.txt')) {
-    const buf = await file.arrayBuffer();
+    let buf = new Uint8Array(await file.arrayBuffer());
+    // marca de UTF-8 no começo (alguns sistemas a colocam mesmo gravando o resto no padrão do Windows)
+    if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) buf = buf.subarray(3);
     let text;
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { text = new TextDecoder('windows-1252').decode(buf); }
     grid = parseCSV(text);
@@ -44,8 +46,17 @@ export async function readTable(file) {
     throw new Error('Escolha uma planilha do Excel (.xlsx) ou um arquivo CSV.');
   }
   const cellText = (v) => (v instanceof Date ? ymd(v) : v == null ? '' : typeof v === 'number' ? String(v) : String(v).trim());
-  const [head = [], ...body] = grid;
+  let [head = [], ...body] = grid;
+  // cabeçalho terminado em ";" (coluna vazia no fim) não vira coluna
+  while (head.length && cellText(head[head.length - 1]) === '' && body.every((r) => r.length <= head.length && cellText(r[head.length - 1]) === '')) head = head.slice(0, -1);
   const headers = head.map((h, i) => cellText(h) || `Coluna ${i + 1}`);
+  // linha com ";" solto dentro de um texto (ex.: "M;O") tem colunas a mais: junta o excesso na coluna de descrição
+  const desc = headers.findIndex((h) => /descri/i.test(h));
+  body = body.map((r) => {
+    const extra = r.length - headers.length - (r.length > headers.length && cellText(r[r.length - 1]) === '' && grid[0].length > headers.length ? 1 : 0);
+    if (extra <= 0 || desc < 0) return r;
+    return [...r.slice(0, desc), r.slice(desc, desc + extra + 1).join(';'), ...r.slice(desc + extra + 1)];
+  });
   const rows = body
     .map((r) => Object.fromEntries(headers.map((h, i) => [h, cellText(r[i])])))
     .filter((o) => Object.values(o).some((v) => v !== ''));

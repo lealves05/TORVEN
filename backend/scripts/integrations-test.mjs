@@ -831,7 +831,7 @@ await check('importar clientes: prévia não grava, linha com erro não derruba 
   assert.equal(im.data.created, 2);
   assert.ok(im.data.rows.every((x) => x.status === 'erro'));
   const { rows: [c1] } = await pool.query("select c.*, e.plate from customers c join equipment e on e.customer_id = c.id where c.name = 'Importado Um'");
-  assert.equal(c1.document, '52998224725'); assert.equal(c1.plate, 'IMP1A23');
+  assert.equal(c1.document, '529.982.247-25'); assert.equal(c1.plate, 'IMP1A23');
   // de novo: acha pelo CPF e atualiza o que mudou
   const again = await api('POST', '/data/clientes/import', { rows: [{ Nome: 'Importado Um', CPF: '52998224725', Email: 'um@x.dev' }] }, T);
   assert.equal(again.data.updated, 1); assert.equal(again.data.created, 0);
@@ -866,6 +866,36 @@ await check('importar OS antigas: cria cliente, veículo e OS com nº antigo, n�
   assert.equal(un.data.orders, 2); assert.equal(un.data.customers, 1);
 });
 
+await check('importar de outro sistema: código antigo, veículos, OS com itens e número antigo mantido', async () => {
+  const cli = [
+    { id_cliente: '900', nome: 'Cliente Legado', cpf: '390.533.447-05', celular: '(19) 95555-1000', pessoa: '1', obs: '', rg: '12.345', datanascimento: '01/02/1980' },
+    { id_cliente: '901', nome: 'Cliente Legado', cpf: '39053344705', celular: '(19) 95555-1000', pessoa: '1' },
+  ];
+  const c = await api('POST', '/data/clientes/import', { rows: cli, update: false }, T2);
+  assert.equal(c.status, 201, JSON.stringify(c.data)); assert.equal(c.data.created, 1);
+  const { rows: [cc] } = await pool.query("select * from customers where name = 'Cliente Legado'");
+  assert.equal(cc.legacy_code, '900,901'); assert.equal(cc.document, '390.533.447-05'); assert.match(cc.notes, /RG: 12.345/);
+  const v = await api('POST', '/data/veiculos/import', { rows: [{ id_veiculo: '1', Placa: 'LEG1A00', Marca: 'FIAT', Modelo: 'UNO', ano: '14|15', id_cliente: '901' }, { Placa: 'LEG2B00', id_cliente: '999' }] }, T2);
+  assert.equal(v.data.created, 1); assert.equal(v.data.errors, 1);
+  const { rows: [eq] } = await pool.query("select * from equipment where plate = 'LEG1A00'");
+  assert.equal(eq.customer_id, cc.id); assert.equal(eq.year, '2014/2015');
+  const base = { 'Ordem de servico': '7001', 'Codigo Cliente': '900', Cliente: 'Cliente Legado', Placa: 'LEG1A00', 'Data Inclusao': '02/01/2025', Saida: '03/01/2025', Situacao: 'VEICULO ENTREGUE PARA O CLIENTE', Km: '1000' };
+  const os = [
+    { ...base, 'Descricao Produtos Servicos': 'FILTRO DE OLEO', Quantidade: '1', 'Valor Unitario': '50', Aprovado: 'Aprovado' },
+    { ...base, 'Descricao Produtos Servicos': 'MAO DE OBRA', Quantidade: '1', 'Valor Unitario': '100', Aprovado: 'Aprovado' },
+    { ...base, 'Descricao Produtos Servicos': 'PASTILHA', Quantidade: '1', 'Valor Unitario': '200', Aprovado: 'Negado' },
+    { 'Ordem de servico': '7002', Cliente: '901 - CLIENTE LEGADO', 'Data Inclusao': '05/01/2025', Situacao: 'SERVICO SENDO FEITO PELA OFICINA', Total: 'R$ 1.234,50' },
+  ];
+  const o = await api('POST', '/data/os/import', { rows: os }, T2);
+  assert.equal(o.status, 201, JSON.stringify(o.data)); assert.equal(o.data.created, 2);
+  const { rows: [o1] } = await pool.query("select * from orders where legacy_number = '7001'");
+  assert.equal(o1.number, 7001, 'mantém o número antigo'); assert.equal(Number(o1.total), 150); assert.equal(o1.status, 'entregue');
+  assert.match(o1.internal_notes, /PASTILHA/); assert.equal(o1.equipment_id, eq.id);
+  const { rows: items } = await pool.query('select kind from order_items where order_id = $1 order by position', [o1.id]);
+  assert.deepEqual(items.map((x) => x.kind), ['material', 'servico']);
+  const { rows: [o2] } = await pool.query("select * from orders where legacy_number = '7002'");
+  assert.equal(o2.status, 'em_execucao'); assert.equal(Number(o2.total), 1234.5); assert.equal(o2.customer_id, cc.id);
+});
 await check('vários proprietários: só proprietário promove, a empresa nunca fica sem proprietário ativo', async () => {
   const users = (await api('GET', '/users', null, T)).data;
   const me = users.find((u) => u.email === 'dono@int.dev');

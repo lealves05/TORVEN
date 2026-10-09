@@ -699,29 +699,49 @@ export const LESSONS = [
     ],
   },
   {
-    n: 40, file: '40-importar-e-exportar-dados', mod: 'config', title: 'Importar e exportar clientes e OS', routes: ['/dados'], start: '/dados',
-    desc: 'Trazer clientes e OS de outro sistema ou de uma planilha do Excel, conferir a prévia, importar, desfazer e exportar.',
-    learn: ['Baixar o modelo da planilha', 'Conferir a prévia e importar', 'Desfazer e exportar'],
+    n: 40, file: '40-importar-e-exportar-dados', mod: 'config', title: 'Trazer clientes, veículos e OS de outro sistema', routes: ['/dados'], start: '/dados',
+    desc: 'Importar os arquivos exportados do sistema antigo (clientes, veículos e ordens de serviço com peças e mão de obra), conferir a prévia, desfazer e exportar.',
+    learn: ['Exportar do sistema antigo', 'Importar na ordem: clientes, veículos e OS', 'Conferir a prévia, desfazer e exportar'],
     setup: async () => {
       const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
-      const csv = ['Nome;CPF/CNPJ;Telefone;Cidade;UF;Placa;Marca;Modelo',
-        'Roberto Almeida;529.982.247-25;(19) 98111-2233;Campinas;SP;RBA2C34;Volkswagen;Gol',
-        'Serralheria Boa Vista;;(19) 3222-4455;Valinhos;SP;;;',
-        'Carla Mendes;123;(19) 97777-6655;Campinas;SP;;;',
-        'Paulo Henrique;;(19) 96666-1122;Sumaré;SP;PHX9A87;Honda;CG 160'].join('\n');
-      const file = path.join(os.tmpdir(), 'clientes-antigos.csv');
-      fs.writeFileSync(file, csv);
-      return { file };
+      const w = (n, lines) => { const f = path.join(os.tmpdir(), n); fs.writeFileSync(f, `\ufeff${lines.join('\r\n')}`); return f; };
+      return {
+        cli: w('EXPORTAR_CSV-Clientes.csv', ['id_cliente;nome;razaosocial;nomefantasia;endereco;bairro;cidade;cep;celular;cpf;pessoa;cnpj;uf;email;numero',
+          '501;ROBERTO ALMEIDA;;;RUA DAS PALMEIRAS;CENTRO;CAMPINAS;13010-000;(19) 98111-2233;529.982.247-25;1;;SP;;120',
+          '502;;AUTO PECAS BOA VISTA LTDA;BOA VISTA PECAS;AV BRASIL;VILA NOVA;VALINHOS;13270-000;(19) 3222-4455;;2;11.222.333/0001-81;SP;contato@boavista.com.br;900',
+          '503;CARLA MENDES;;;RUA SETE;JARDIM;SUMARE;13170-000;(19) 97777-6655;123;1;;SP;;15']),
+        vei: w('EXPORTAR_CSV-Veiculos.csv', ['id_veiculo;Placa;Marca;Modelo;ano;Cor;Chassi;Versao;id_cliente',
+          '1;RBA2C34;VW;GOL 1.0;18|19;PRATA;9BWAA05U8KP000001;TRENDLINE;501', '2;PHX9A87;FORD;RANGER;20|21;BRANCA;;XLS 2.2;502']),
+        os: w('Relatorio_Ordem_de_servico_detalhado.csv', ['Ordem de servico;Codigo Cliente;Cliente;Placa;Data Inclusao;Saida;Situacao;Km;Descricao Produtos Servicos;Quantidade;Valor Unitario;Total;Aprovado',
+          '1520;501;ROBERTO ALMEIDA;RBA2C34;10/09/2026;11/09/2026;VEICULO ENTREGUE;62000;PASTILHA DE FREIO DIANTEIRA;1;180;180;Aprovado',
+          '1520;501;ROBERTO ALMEIDA;RBA2C34;10/09/2026;11/09/2026;VEICULO ENTREGUE;62000;MAO DE OBRA TROCA DE PASTILHAS;1;120;120;Aprovado',
+          '1521;502;AUTO PECAS BOA VISTA LTDA;PHX9A87;02/10/2026;;REALIZANDO SERVICO;88000;OLEO 5W30;5;45;225;Aprovado']),
+      };
     },
     steps: [
-      { act: (h) => h.card(slide('Importar e exportar', 'Traga seus dados de outro sistema', list(['Clientes com veículo ou objeto', 'Ordens de serviço antigas', 'Planilha do Excel (.xlsx) ou CSV', 'Prévia antes de gravar e botão Desfazer']))), say: ['Mudando de sistema? Dá para trazer os clientes e as ordens de serviço antigas de uma planilha do Excel.'] },
-      { tag: 'Modelo', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('region', { name: 'Importar clientes e veículos' }).getByRole('button', { name: /Baixar modelo/ })); }, say: ['Em Configurações, Importar e exportar dados, clique em Baixar modelo. Ele já vem com as colunas certas e um exemplo.', 'Preencha no Excel, uma linha por cliente. Se já tiver uma planilha, basta que a primeira linha tenha os nomes das colunas.'] },
-      { tag: 'Escolher', act: async (h, st) => { await h.unspot(); await h.page.locator('[data-testid=arquivo-clientes]').setInputFiles(st.file); await h.sleep(1500); await h.spot(h.page.getByLabel('Prévia da importação')); }, say: ['Clique em Escolher planilha e selecione o arquivo. Antes de gravar, o sistema mostra a prévia, linha por linha.', 'Novo é cliente que vai ser criado. Erro mostra o que está errado, como um CPF incompleto.'] },
-      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('button', { name: /^Importar \d+ linha/ }), { wait: 1500 }); }, say: ['Está tudo certo? Clique em Importar. As linhas com erro ficam de fora, e você pode corrigir e importar só elas depois.'] },
-      { tag: 'Desfazer', act: async (h) => { await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Ok' }), { wait: 600 }); await h.spot(h.page.getByRole('region', { name: 'Importações feitas' })); }, say: ['Cada importação fica guardada. Importou o arquivo errado? Clique em Desfazer, e o que foi criado é apagado.'] },
-      { tag: 'OS antigas', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('region', { name: 'Importar ordens de serviço antigas' })); }, say: ['As OS antigas entram do mesmo jeito: número antigo, datas, cliente, veículo, serviço, valor e situação. Elas não mexem no seu financeiro.'] },
-      { tag: 'Exportar', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('region', { name: 'Exportar dados' })); }, say: ['Para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais.'] },
-      { act: async (h) => { await h.unspot(); await h.card(slide('Lembre', 'Com calma e conferindo', list(['Comece pelo modelo.', 'Leia a prévia antes de importar.', 'Errou? Desfazer.', 'Quem pode importar: perfil com “Importar clientes e OS”.']))); }, say: ['Comece pelo modelo, confira a prévia e, se precisar, desfaça. Só quem tem a permissão de importar vê essa opção.'] },
+      { act: (h) => h.card(slide('Mudando de sistema', 'Traga tudo do sistema antigo', list(['1º Clientes', '2º Veículos', '3º Ordens de serviço, com peças e mão de obra', 'Prévia antes de gravar e botão Desfazer']))), say: ['Mudando de sistema? Dá para trazer os clientes, os veículos e as ordens de serviço antigas, com as peças e a mão de obra.'] },
+      { tag: 'No sistema antigo', act: (h) => h.card(slide('Antes', 'Exporte do sistema antigo', list(['Clientes e Veículos: Exportar CSV.', 'Ordens de serviço: relatório detalhado, em CSV.', 'Pode ser também planilha do Excel.']))), say: ['No sistema antigo, exporte os clientes e os veículos em CSV, e o relatório detalhado de ordens de serviço. Não precisa mexer nos arquivos.'] },
+      { tag: 'Onde fica', act: async (h) => { await h.card(null); await h.spot(h.page.getByRole('region', { name: 'Importar Clientes' })); }, say: ['Aqui, em Configurações, Importar e exportar dados, os quadros estão numerados: um, dois e três. Siga essa ordem.'] },
+      { tag: '1 · Clientes', act: async (h, st) => { await h.unspot(); await h.page.locator('[data-testid=arquivo-clientes]').setInputFiles(st.cli); await h.sleep(1500); await h.spot(h.page.getByRole('region', { name: 'Importar Clientes' }).getByLabel('Prévia da importação')); }, say: ['Escolha o arquivo de clientes. O TORVEN entende as colunas do outro sistema e mostra a prévia de cada linha.', 'Erro mostra o que está errado, como um CPF incompleto. Essa linha fica de fora.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('region', { name: 'Importar Clientes' }).getByRole('button', { name: /^Importar \d+ linha/ }), { wait: 1500 }); await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Ok' }), { wait: 500 }); }, say: ['Clique em Importar. O código do cliente no sistema antigo fica guardado, para ligar os veículos e as OS.'] },
+      { tag: '2 · Veículos', act: async (h, st) => { await h.page.locator('[data-testid=arquivo-veiculos]').setInputFiles(st.vei); await h.sleep(1500); await h.spot(h.page.getByRole('region', { name: 'Importar Veículos' }).getByLabel('Prévia da importação')); }, say: ['Depois, o arquivo de veículos. Cada veículo vai para o cliente certo pelo código antigo.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('region', { name: 'Importar Veículos' }).getByRole('button', { name: /^Importar \d+ linha/ }), { wait: 1500 }); await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Ok' }), { wait: 500 }); }, say: ['Clique em Importar.'] },
+      { tag: '3 · OS', act: async (h, st) => { await h.page.locator('[data-testid=arquivo-os]').setInputFiles(st.os); await h.sleep(1500); await h.spot(h.page.getByRole('region', { name: 'Importar Ordens de serviço antigas' }).getByLabel('Prévia da importação')); }, say: ['Por fim, o relatório de ordens de serviço. Cada OS entra uma vez só, com as peças e a mão de obra como itens, e mantém o mesmo número do sistema antigo.'] },
+      { act: async (h) => { await h.unspot(); await h.click(h.page.getByRole('region', { name: 'Importar Ordens de serviço antigas' }).getByRole('button', { name: /^Importar \d+ linha/ }), { wait: 1500 }); await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Ok' }), { wait: 500 }); await h.spot(h.page.getByRole('region', { name: 'Importações feitas' })); }, say: ['Clique em Importar. As OS antigas não mexem no seu financeiro.', 'Cada importação fica guardada aqui. Importou o arquivo errado? Clique em Desfazer.'] },
+      { tag: 'Exportar', act: async (h) => { await h.unspot(); await h.spot(h.page.getByRole('region', { name: 'Exportar dados' })); }, say: ['E para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais.'] },
+      { act: async (h) => { await h.unspot(); await h.card(slide('Lembre', 'Sem pressa e conferindo', list(['Ordem: clientes, veículos, OS.', 'Leia a prévia antes de importar.', 'Errou? Desfazer.', 'Só quem tem a permissão de importar vê esta tela.']))); }, say: ['Importe na ordem, clientes, veículos e OS, confira a prévia e, se precisar, desfaça.'] },
+    ],
+  },
+  {
+    n: 41, file: '41-socios-varios-proprietarios', mod: 'config', title: 'Sócios: mais de um proprietário', routes: [], start: '/configuracoes?tab=equipe',
+    desc: 'Dar o perfil de Proprietário a um sócio, o que ele pode fazer e as regras para tirar esse perfil.',
+    learn: ['Criar o acesso do sócio como Proprietário', 'O que o proprietário pode fazer', 'As regras de segurança'],
+    steps: [
+      { act: (h) => h.card(slide('Sócios', 'A oficina pode ter mais de um dono', list(['Cada sócio com o próprio login.', 'Perfil Proprietário: acesso total.', 'Só um proprietário dá ou tira esse perfil.']))), say: ['A oficina tem sócios? Cada um pode ter o próprio login com o perfil de Proprietário, com acesso total ao sistema.'] },
+      { tag: 'Novo acesso', act: async (h) => { await h.card(null); await h.click(btn(h, 'Novo acesso'), { wait: 800 }); }, say: ['Em Configurações, Usuários, clique em Novo acesso.'] },
+      { act: async (h) => { await h.type('Nome', 'Paulo Sócio', { delay: 60 }); await h.type('E-mail (login)', `socio${Date.now()}@demo.torven.app`, { delay: 20 }); await h.select('Perfil', 'Proprietário'); await h.spot(h.page.getByRole('dialog').last().getByText(/Proprietário tem acesso total/)); }, say: ['Escreva o nome e o e-mail do sócio, e no Perfil escolha Proprietário. O sistema avisa o que isso significa.'] },
+      { act: async (h) => { await h.unspot(); await h.type('Senha', 'Socio2026xyz', { delay: 40 }); await h.click(h.page.getByRole('dialog').last().getByRole('button', { name: 'Salvar' }), { wait: 1500 }); await h.spot(h.page.getByText('Paulo Sócio').first()); }, say: ['Crie uma senha inicial e clique em Salvar. Peça para o sócio trocar a senha no primeiro acesso.', 'Pronto: agora a oficina tem dois proprietários.'] },
+      { tag: 'Regras', act: async (h) => { await h.unspot(); await h.card(slide('Segurança', 'As regras dos proprietários', list(['Só um proprietário cria outro ou tira o perfil.', 'Sempre fica pelo menos um proprietário ativo.', 'Mudou o perfil? A pessoa entra de novo.', 'Tudo fica no histórico de alterações.']))); }, say: ['Só um proprietário pode dar ou tirar esse perfil, e o sistema nunca deixa a oficina sem nenhum proprietário. Tudo fica registrado no histórico.'] },
     ],
   },
   {

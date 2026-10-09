@@ -1,49 +1,61 @@
 WEBVTT
 
 1
-00:00:00.157 --> 00:00:10.242
-Aula 40: Importar e exportar clientes e OS. Nesta aula você vai aprender: Baixar o modelo da planilha; Conferir a prévia e importar; Desfazer e exportar.
+00:00:00.155 --> 00:00:13.504
+Aula 40: Trazer clientes, veículos e OS de outro sistema. Nesta aula você vai aprender: Exportar do sistema antigo; Importar na ordem: clientes, veículos e OS; Conferir a prévia, desfazer e exportar.
 
 2
-00:00:11.926 --> 00:00:18.491
-Mudando de sistema? Dá para trazer os clientes e as ordens de serviço antigas de uma planilha do Excel.
+00:00:15.153 --> 00:00:22.912
+Mudando de sistema? Dá para trazer os clientes, os veículos e as ordens de serviço antigas, com as peças e a mão de obra.
 
 3
-00:00:20.589 --> 00:00:27.921
-Em Configurações, Importar e exportar dados, clique em Baixar modelo. Ele já vem com as colunas certas e um exemplo.
+00:00:23.401 --> 00:00:32.974
+No sistema antigo, exporte os clientes e os veículos em CSV, e o relatório detalhado de ordens de serviço. Não precisa mexer nos arquivos.
 
 4
-00:00:27.941 --> 00:00:35.252
-Preencha no Excel, uma linha por cliente. Se já tiver uma planilha, basta que a primeira linha tenha os nomes das colunas.
+00:00:35.336 --> 00:00:42.754
+Aqui, em Configurações, Importar e exportar dados, os quadros estão numerados: um, dois e três. Siga essa ordem.
 
 5
-00:00:38.545 --> 00:00:45.257
-Clique em Escolher planilha e selecione o arquivo. Antes de gravar, o sistema mostra a prévia, linha por linha.
+00:00:45.870 --> 00:00:52.645
+Escolha o arquivo de clientes. O TORVEN entende as colunas do outro sistema e mostra a prévia de cada linha.
 
 6
-00:00:45.277 --> 00:00:51.031
-Novo é cliente que vai ser criado. Erro mostra o que está errado, como um CPF incompleto.
+00:00:52.665 --> 00:00:57.822
+Erro mostra o que está errado, como um CPF incompleto. Essa linha fica de fora.
 
 7
-00:00:54.553 --> 00:01:02.291
-Está tudo certo? Clique em Importar. As linhas com erro ficam de fora, e você pode corrigir e importar só elas depois.
+00:01:02.751 --> 00:01:09.529
+Clique em Importar. O código do cliente no sistema antigo fica guardado, para ligar os veículos e as OS.
 
 8
-00:01:05.537 --> 00:01:12.208
-Cada importação fica guardada. Importou o arquivo errado? Clique em Desfazer, e o que foi criado é apagado.
+00:01:12.638 --> 00:01:18.563
+Depois, o arquivo de veículos. Cada veículo vai para o cliente certo pelo código antigo.
 
 9
-00:01:13.792 --> 00:01:23.151
-As OS antigas entram do mesmo jeito: número antigo, datas, cliente, veículo, serviço, valor e situação. Elas não mexem no seu financeiro.
+00:01:22.825 --> 00:01:24.440
+Clique em Importar.
 
 10
-00:01:24.759 --> 00:01:32.604
-Para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais.
+00:01:27.543 --> 00:01:37.350
+Por fim, o relatório de ordens de serviço. Cada OS entra uma vez só, com as peças e a mão de obra como itens, e mantém o mesmo número do sistema antigo.
 
 11
-00:01:33.081 --> 00:01:40.243
-Comece pelo modelo, confira a prévia e, se precisar, desfaça. Só quem tem a permissão de importar vê essa opção.
+00:01:42.985 --> 00:01:47.282
+Clique em Importar. As OS antigas não mexem no seu financeiro.
 
 12
-00:01:40.781 --> 00:01:50.375
-Recapitulando: Baixar o modelo da planilha; Conferir a prévia e importar; Desfazer e exportar. Se precisar, assista de novo quando quiser. Até a próxima aula!
+00:01:47.302 --> 00:01:52.587
+Cada importação fica guardada aqui. Importou o arquivo errado? Clique em Desfazer.
+
+13
+00:01:54.245 --> 00:02:02.239
+E para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais.
+
+14
+00:02:02.729 --> 00:02:08.547
+Importe na ordem, clientes, veículos e OS, confira a prévia e, se precisar, desfaça.
+
+15
+00:02:09.081 --> 00:02:21.128
+Recapitulando: Exportar do sistema antigo; Importar na ordem: clientes, veículos e OS; Conferir a prévia, desfazer e exportar. Se precisar, assista de novo quando quiser. Até a próxima aula!

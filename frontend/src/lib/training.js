@@ -680,24 +680,39 @@ export const LESSONS = [
     "n": 40,
     "file": "40-importar-e-exportar-dados",
     "mod": "config",
-    "s": 111,
-    "title": "Importar e exportar clientes e OS",
+    "s": 142,
+    "title": "Trazer clientes, veículos e OS de outro sistema",
     "routes": [
       "/dados"
     ],
-    "desc": "Trazer clientes e OS de outro sistema ou de uma planilha do Excel, conferir a prévia, importar, desfazer e exportar.",
+    "desc": "Importar os arquivos exportados do sistema antigo (clientes, veículos e ordens de serviço com peças e mão de obra), conferir a prévia, desfazer e exportar.",
     "learn": [
-      "Baixar o modelo da planilha",
-      "Conferir a prévia e importar",
-      "Desfazer e exportar"
+      "Exportar do sistema antigo",
+      "Importar na ordem: clientes, veículos e OS",
+      "Conferir a prévia, desfazer e exportar"
     ],
-    "text": "Mudando de sistema? Dá para trazer os clientes e as ordens de serviço antigas de uma planilha do Excel. Em Configurações, Importar e exportar dados, clique em Baixar modelo. Ele já vem com as colunas certas e um exemplo. Preencha no Excel, uma linha por cliente. Se já tiver uma planilha, basta que a primeira linha tenha os nomes das colunas. Clique em Escolher planilha e selecione o arquivo. Antes de gravar, o sistema mostra a prévia, linha por linha. Novo é cliente que vai ser criado. Erro mostra o que está errado, como um CPF incompleto. Está tudo certo? Clique em Importar. As linhas com erro ficam de fora, e você pode corrigir e importar só elas depois. Cada importação fica guardada. Importou o arquivo errado? Clique em Desfazer, e o que foi criado é apagado. As OS antigas entram do mesmo jeito: número antigo, datas, cliente, veículo, serviço, valor e situação. Elas não mexem no seu financeiro. Para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais. Comece pelo modelo, confira a prévia e, se precisar, desfaça. Só quem tem a permissão de importar vê essa opção."
+    "text": "Mudando de sistema? Dá para trazer os clientes, os veículos e as ordens de serviço antigas, com as peças e a mão de obra. No sistema antigo, exporte os clientes e os veículos em CSV, e o relatório detalhado de ordens de serviço. Não precisa mexer nos arquivos. Aqui, em Configurações, Importar e exportar dados, os quadros estão numerados: um, dois e três. Siga essa ordem. Escolha o arquivo de clientes. O TORVEN entende as colunas do outro sistema e mostra a prévia de cada linha. Erro mostra o que está errado, como um CPF incompleto. Essa linha fica de fora. Clique em Importar. O código do cliente no sistema antigo fica guardado, para ligar os veículos e as OS. Depois, o arquivo de veículos. Cada veículo vai para o cliente certo pelo código antigo. Clique em Importar. Por fim, o relatório de ordens de serviço. Cada OS entra uma vez só, com as peças e a mão de obra como itens, e mantém o mesmo número do sistema antigo. Clique em Importar. As OS antigas não mexem no seu financeiro. Cada importação fica guardada aqui. Importou o arquivo errado? Clique em Desfazer. E para levar os dados para o Excel, use Exportar dados: clientes, veículos, OS, itens das OS, lançamentos e muito mais. Importe na ordem, clientes, veículos e OS, confira a prévia e, se precisar, desfaça."
+  },
+  {
+    "n": 41,
+    "file": "41-socios-varios-proprietarios",
+    "mod": "config",
+    "s": 74,
+    "title": "Sócios: mais de um proprietário",
+    "routes": [],
+    "desc": "Dar o perfil de Proprietário a um sócio, o que ele pode fazer e as regras para tirar esse perfil.",
+    "learn": [
+      "Criar o acesso do sócio como Proprietário",
+      "O que o proprietário pode fazer",
+      "As regras de segurança"
+    ],
+    "text": "A oficina tem sócios? Cada um pode ter o próprio login com o perfil de Proprietário, com acesso total ao sistema. Em Configurações, Usuários, clique em Novo acesso. Escreva o nome e o e-mail do sócio, e no Perfil escolha Proprietário. O sistema avisa o que isso significa. Crie uma senha inicial e clique em Salvar. Peça para o sócio trocar a senha no primeiro acesso. Pronto: agora a oficina tem dois proprietários. Só um proprietário pode dar ou tirar esse perfil, e o sistema nunca deixa a oficina sem nenhum proprietário. Tudo fica registrado no histórico."
   },
   {
     "n": 26,
     "file": "26-suporte-e-treinamento",
     "mod": "config",
-    "s": 73,
+    "s": 72,
     "title": "Como usar as aulas e pedir ajuda",
     "routes": [
       "/suporte"
@@ -712,7 +727,7 @@ export const LESSONS = [
   }
 ];
 
-export const TOTAL_SECONDS = 4055;
+export const TOTAL_SECONDS = 4159;
 
 const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
 export const videoUrl = (l) => `${base}/treinamento/${l.file}.mp4`;

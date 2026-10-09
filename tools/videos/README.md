@@ -1,6 +1,6 @@
 # Vídeo-aulas do TORVEN (Suporte › treinamento)
 
-40 aulas gravadas no próprio sistema (demonstração), pensadas para quem tem pouca prática com computador:
+41 aulas gravadas no próprio sistema (demonstração), pensadas para quem tem pouca prática com computador:
 
 - **Narração:** voz feminina em português, um pouco mais lenta (Kokoro TTS, voz `pf_dora`, velocidade 0,92).
 - **Legenda grande na imagem.** Cada fala tem o próprio áudio, aparece como legenda no instante em que é narrada e vai para o `.vtt`. O `.vtt` é a legenda do player e o "Texto da aula", clicável, na tela de Suporte.
